@@ -1,0 +1,18 @@
+{
+  "name": "@web-vg/catalog",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Catalog boundary scaffold for the Cardfight!! Vanguard platform",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@web-vg/shared": "workspace:*"
+  },
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "test": "vitest run src",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  }
+}

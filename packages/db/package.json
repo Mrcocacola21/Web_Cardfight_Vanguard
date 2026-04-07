@@ -1,0 +1,14 @@
+{
+  "name": "@web-vg/db",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Database and persistence foundation scaffold for the Cardfight!! Vanguard platform",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  }
+}

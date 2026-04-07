@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "es2022"],
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@web-vg/catalog": ["../../packages/catalog/src/index.ts"],
+      "@web-vg/db": ["../../packages/db/src/index.ts"],
+      "@web-vg/decks": ["../../packages/decks/src/index.ts"],
+      "@web-vg/importer": ["../../packages/importer/src/index.ts"],
+      "@web-vg/rules-core": ["../../packages/rules-core/src/index.ts"],
+      "@web-vg/shared": ["../../packages/shared/src/index.ts"],
+      "@web-vg/ui": ["../../packages/ui/src/index.ts"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,11 @@
+node_modules
+.next
+.turbo
+.husky/_
+.git
+apps/web/next-env.d.ts
+dist
+build
+coverage
+pnpm-lock.yaml
+*.tsbuildinfo
