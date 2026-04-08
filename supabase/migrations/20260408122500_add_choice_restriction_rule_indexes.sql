@@ -1,0 +1,2 @@
+create index choice_restriction_rules_restriction_list_idx
+  on legality.choice_restriction_rules (restriction_list_id);

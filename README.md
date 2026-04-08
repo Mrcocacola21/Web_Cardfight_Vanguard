@@ -21,6 +21,13 @@ corepack enable
 corepack pnpm install
 ```
 
+If you want to use the Supabase integration foundation later, copy
+`apps/web/.env.example` to `apps/web/.env.local` and set:
+
+- `NEXT_PUBLIC_APP_ORIGIN`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
 ## Run Locally
 
 Start the current web app shell:
@@ -63,6 +70,14 @@ corepack pnpm test
 
 # Run Playwright e2e
 corepack pnpm test:e2e
+
+# Seed a local dev dataset
+# requires DATABASE_URL or SUPABASE_DB_URL
+corepack pnpm db:seed
+
+# Generate DB types from the current schema
+# uses local Supabase DB when running, otherwise DATABASE_URL / SUPABASE_DB_URL
+corepack pnpm db:types:generate
 ```
 
 ## Repository Layout
@@ -117,12 +132,20 @@ Available now:
 - monorepo/workspace foundation
 - `apps/web` app shell
 - Tailwind + shadcn/ui baseline
+- app-local Supabase browser/server client foundation
+- SSR-friendly auth/session foundation in `apps/web`
+- SSR-aware public/protected route protection baseline
+- server-side auth callback flow at `/auth/callback`
+- profile auto-creation after registration
+- protected own-profile page with read/update foundation
+- public profile page foundation at `/users/[profileId]`
+- profile visibility control with `public` / `private` enforcement
 - linting, formatting, typecheck, and pre-commit checks
 
 Not implemented yet:
 
-- catalog features
-- deck builder flows
-- legality features
+- importer and write-heavy catalog flows
+- deck builder writes
+- legality engine features
 - gameplay features
-- auth and social product flows
+- fine-grained authorization, social features, and broader account management

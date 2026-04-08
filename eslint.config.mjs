@@ -125,7 +125,6 @@ export default defineConfig([
     rules: {
       '@next/next/no-html-link-for-pages': 'off',
       'no-restricted-imports': restrictWorkspaceImports([
-        '@web-vg/db',
         '@web-vg/importer',
         '@web-vg/web',
       ]),

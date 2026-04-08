@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { ArrowRight, Layers3, Palette, Route } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -82,6 +83,36 @@ export function FoundationHome() {
                   Next step
                   <ArrowRight className="size-4" />
                 </Button>
+                <Link
+                  href="/catalog"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Open catalog
+                </Link>
+                <Link
+                  href="/profile"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Profile (protected)
+                </Link>
+                <Link
+                  href="/decks"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Decks (protected)
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Register
+                </Link>
                 <Badge variant="outline">Button</Badge>
                 <Badge variant="secondary">Input</Badge>
                 <Badge>Card</Badge>

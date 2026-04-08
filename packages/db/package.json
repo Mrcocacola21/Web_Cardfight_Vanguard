@@ -9,6 +9,14 @@
   "types": "./src/index.ts",
   "scripts": {
     "lint": "eslint src --max-warnings=0",
+    "seed": "node ./scripts/seed.mjs",
+    "test": "vitest run",
+    "test:db": "node ./scripts/test-db.mjs",
+    "types:generate": "node ./scripts/generate-types.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.102.1",
+    "pg": "^8.20.0"
   }
 }

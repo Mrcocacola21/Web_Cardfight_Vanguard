@@ -11,6 +11,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(rootDir, './src'),
+      '@web-vg/db': path.resolve(rootDir, '../../packages/db/src/index.ts'),
     },
   },
   test: {
