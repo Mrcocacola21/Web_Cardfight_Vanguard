@@ -1,0 +1,42 @@
+{
+  "source": {
+    "key": "dev-json.sample-raw-only",
+    "displayName": "Dev JSON sample: raw only",
+    "providerName": "local-dev",
+    "snapshotKey": "sample-raw-v1"
+  },
+  "options": {
+    "runNormalization": false
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-v-pr-2026",
+      "name": "V-PR Sample Promo Pack",
+      "code": "V-PR-2026",
+      "productCategory": "promo-pack",
+      "productKind": "promo",
+      "familyName": "V Promo",
+      "releaseDateText": "2026-04-09",
+      "regionCode": "en"
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-sample-pr-001",
+      "sourceProductId": "prod-v-pr-2026",
+      "sourceProductCode": "V-PR-2026",
+      "cardName": "Sample Promo Unit",
+      "printingCode": "PR-001",
+      "rarity": "PR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Dragon Empire",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "rulesText": "[AUTO]: Dev raw-only sample."
+    }
+  ]
+}

@@ -9,7 +9,14 @@ const repoRoot = path.resolve(packageRoot, '../..')
 const outputDir = path.join(packageRoot, 'src', 'generated')
 const outputFilePath = path.join(outputDir, 'database.types.ts')
 const cliVersion = '2.88.0'
-const schemaList = ['catalog', 'legality', 'user_data', 'social', 'gameplay']
+const schemaList = [
+  'catalog',
+  'legality',
+  'user_data',
+  'social',
+  'gameplay',
+  'importer',
+]
 
 const databaseUrl =
   process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL ?? null

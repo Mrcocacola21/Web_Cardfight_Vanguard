@@ -1,14 +1,19 @@
-import { ProfileStatusCard } from '@/components/profiles/profile-status-card'
+import { EmptyState } from '@/components/feedback'
+import { PageContainer } from '@/components/layout'
 
 export default function PublicProfileNotFound() {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-      <ProfileStatusCard
+    <PageContainer
+      as="main"
+      size="default"
+      className="flex min-h-screen items-center py-14"
+    >
+      <EmptyState
         title="Public profile not found"
         description="No public user profile matches this route."
         actionLabel="Back home"
         actionHref="/"
       />
-    </main>
+    </PageContainer>
   )
 }

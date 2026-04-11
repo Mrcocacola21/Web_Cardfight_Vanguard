@@ -31,6 +31,12 @@ export async function getCurrentAuthState(
     error,
   } = await client.auth.getUser()
 
+  if (!user && isMissingAuthSessionError(error?.message)) {
+    return {
+      kind: 'signed-out',
+    }
+  }
+
   if (error) {
     return {
       kind: 'error',
@@ -51,4 +57,8 @@ export async function getCurrentAuthState(
       email: user.email ?? null,
     },
   }
+}
+
+function isMissingAuthSessionError(message: string | undefined): boolean {
+  return typeof message === 'string' && /auth session missing/i.test(message)
 }

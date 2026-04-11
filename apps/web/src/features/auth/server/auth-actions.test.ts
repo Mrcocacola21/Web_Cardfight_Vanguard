@@ -157,6 +157,48 @@ describe('auth actions', () => {
     })
   })
 
+  it('redirects to profile when sign-up created a session but profile provisioning still failed', async () => {
+    const client = createSupabaseClientMock()
+    mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    mocks.buildAuthCallbackUrl.mockResolvedValueOnce(
+      'http://127.0.0.1:3000/auth/callback',
+    )
+    client.auth.signUp.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'auth-user-1',
+          email: 'pilot@example.com',
+        },
+        session: {
+          access_token: 'token',
+        },
+      },
+      error: null,
+    })
+    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'profile-failed',
+        message: 'Failed to ensure profile.',
+      },
+    })
+
+    await expect(
+      signUpAction(
+        initialAuthFormState,
+        createFormData({
+          displayName: 'Azure Pilot',
+          email: 'pilot@example.com',
+          password: 'vanguard-pass-123',
+          confirmPassword: 'vanguard-pass-123',
+        }),
+      ),
+    ).rejects.toThrow('NEXT_REDIRECT:/profile')
+
+    expect(client.auth.signOut).not.toHaveBeenCalled()
+    expect(mocks.redirect).toHaveBeenCalledWith('/profile')
+  })
+
   it('redirects to the protected profile route after a successful sign in', async () => {
     const client = createSupabaseClientMock()
     mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
@@ -201,6 +243,43 @@ describe('auth actions', () => {
       bio: null,
       visibility: 'private',
     })
+    expect(mocks.redirect).toHaveBeenCalledWith('/profile')
+  })
+
+  it('redirects to profile even when sign-in profile provisioning fails after auth succeeds', async () => {
+    const client = createSupabaseClientMock()
+    mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    client.auth.signInWithPassword.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'auth-user-1',
+          email: 'pilot@example.com',
+          user_metadata: {
+            display_name: 'Azure Pilot',
+          },
+        },
+      },
+      error: null,
+    })
+    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'profile-failed',
+        message: 'Failed to ensure profile.',
+      },
+    })
+
+    await expect(
+      signInAction(
+        initialAuthFormState,
+        createFormData({
+          email: 'pilot@example.com',
+          password: 'vanguard-pass-123',
+        }),
+      ),
+    ).rejects.toThrow('NEXT_REDIRECT:/profile')
+
+    expect(client.auth.signOut).not.toHaveBeenCalled()
     expect(mocks.redirect).toHaveBeenCalledWith('/profile')
   })
 

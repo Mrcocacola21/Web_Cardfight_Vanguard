@@ -1,0 +1,57 @@
+import {
+  BookOpenText,
+  House,
+  Layers3,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react'
+
+export interface ProtectedNavItem {
+  readonly href: string
+  readonly label: string
+  readonly description: string
+  readonly icon: LucideIcon
+}
+
+export const protectedNavItems: readonly ProtectedNavItem[] = [
+  {
+    href: '/',
+    label: 'Home',
+    description: 'Return to the public application entry surface.',
+    icon: House,
+  },
+  {
+    href: '/catalog',
+    label: 'Catalog',
+    description: 'Browse cards and printings through server-rendered reads.',
+    icon: BookOpenText,
+  },
+  {
+    href: '/decks',
+    label: 'Decks',
+    description: 'Open protected deck overview and detail screens.',
+    icon: Layers3,
+  },
+  {
+    href: '/profile',
+    label: 'Profile',
+    description: 'Manage your own profile and visibility settings.',
+    icon: UserRound,
+  },
+] as const
+
+export function isProtectedNavItemActive(pathname: string, href: string) {
+  if (href === '/') {
+    return pathname === '/'
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+export function getProtectedCurrentNavItem(pathname: string) {
+  return (
+    protectedNavItems.find((item) =>
+      isProtectedNavItemActive(pathname, item.href),
+    ) ?? null
+  )
+}

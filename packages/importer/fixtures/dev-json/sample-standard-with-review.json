@@ -1,0 +1,64 @@
+{
+  "source": {
+    "key": "dev-json.sample-standard-with-review",
+    "displayName": "Dev JSON sample: standard with review",
+    "providerName": "local-dev",
+    "snapshotKey": "sample-v1"
+  },
+  "job": {
+    "scopeMetadata": {
+      "fixture": "sample-standard-with-review"
+    }
+  },
+  "options": {
+    "runNormalization": true
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-d-bt01",
+      "name": "D-BT01 Genesis of the Five Greats",
+      "code": "D-BT01",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2021-05-14",
+      "regionCode": "jp"
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-bastion-001",
+      "sourceProductId": "prod-d-bt01",
+      "sourceProductCode": "D-BT01",
+      "cardName": "Apex Ruler, Bastion",
+      "printingCode": "001",
+      "rarity": "RRR",
+      "localeCode": "jp",
+      "regionCode": "jp",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "rulesText": "[AUTO]: When this unit attacks..."
+    },
+    {
+      "sourcePrintingId": "printing-unknown-pr-001",
+      "sourceProductId": "prod-d-bt01",
+      "sourceProductCode": "D-BT01",
+      "cardName": "Completely Unknown Unit",
+      "printingCode": "PR-001",
+      "rarity": "PR",
+      "localeCode": "jp",
+      "regionCode": "jp",
+      "cardType": "normal-unit",
+      "nation": "Dragon Empire",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "rulesText": "[CONT]: Dev-only unresolved example."
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 import type { ProfileVisibility } from '@web-vg/db'
 import { useActionState } from 'react'
 
+import { ErrorState, SuccessState } from '@/components/feedback'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -33,9 +34,20 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
     ProfileFormState,
     FormData
   >(saveCurrentProfileAction, initialProfileFormState)
+  const displayNameErrorId = state.fieldErrors.displayName
+    ? 'profile-display-name-error'
+    : undefined
+  const visibilityErrorId = state.fieldErrors.visibility
+    ? 'profile-visibility-error'
+    : undefined
+  const visibilityHelpId = 'profile-visibility-help'
+  const avatarUrlErrorId = state.fieldErrors.avatarUrl
+    ? 'profile-avatar-url-error'
+    : undefined
+  const bioErrorId = state.fieldErrors.bio ? 'profile-bio-error' : undefined
 
   return (
-    <Card className="border-white/50 bg-card/95 shadow-lg shadow-black/5">
+    <Card>
       <CardHeader>
         <CardTitle>Profile foundation</CardTitle>
         <CardDescription>
@@ -52,12 +64,14 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
             <Input
               id="displayName"
               name="displayName"
+              required
               defaultValue={initialValues.displayName}
               aria-invalid={state.fieldErrors.displayName ? 'true' : 'false'}
+              aria-describedby={displayNameErrorId}
               placeholder="Enter a display name"
             />
             {state.fieldErrors.displayName ? (
-              <p className="text-sm text-destructive">
+              <p id={displayNameErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.displayName}
               </p>
             ) : null}
@@ -70,19 +84,25 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
             <select
               id="visibility"
               name="visibility"
+              required
               defaultValue={initialValues.visibility}
               aria-invalid={state.fieldErrors.visibility ? 'true' : 'false'}
-              className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+              aria-describedby={
+                visibilityErrorId
+                  ? `${visibilityHelpId} ${visibilityErrorId}`
+                  : visibilityHelpId
+              }
+              className="flex h-11 w-full rounded-xl border border-input bg-background-elevated/75 px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
             >
               <option value="private">Private</option>
               <option value="public">Public</option>
             </select>
-            <p className="text-xs text-muted-foreground">
+            <p id={visibilityHelpId} className="text-xs text-muted-foreground">
               Private profiles stay hidden from the public user route. Public
               profiles are visible on `/users/[profileId]`.
             </p>
             {state.fieldErrors.visibility ? (
-              <p className="text-sm text-destructive">
+              <p id={visibilityErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.visibility}
               </p>
             ) : null}
@@ -98,10 +118,11 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
               type="url"
               defaultValue={initialValues.avatarUrl}
               aria-invalid={state.fieldErrors.avatarUrl ? 'true' : 'false'}
+              aria-describedby={avatarUrlErrorId}
               placeholder="https://images.example/avatar.png"
             />
             {state.fieldErrors.avatarUrl ? (
-              <p className="text-sm text-destructive">
+              <p id={avatarUrlErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.avatarUrl}
               </p>
             ) : null}
@@ -117,29 +138,34 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
               defaultValue={initialValues.bio}
               rows={5}
               aria-invalid={state.fieldErrors.bio ? 'true' : 'false'}
+              aria-describedby={bioErrorId}
               placeholder="Add a short profile note"
-              className="flex min-h-28 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+              className="flex min-h-28 w-full rounded-xl border border-input bg-background-elevated/75 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
             />
             {state.fieldErrors.bio ? (
-              <p className="text-sm text-destructive">
+              <p id={bioErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.bio}
               </p>
             ) : null}
           </div>
 
           {state.message ? (
-            <p
-              className={
-                state.status === 'success'
-                  ? 'text-sm text-emerald-700'
-                  : 'text-sm text-destructive'
-              }
-            >
-              {state.message}
-            </p>
+            state.status === 'success' ? (
+              <SuccessState
+                compact
+                title="Profile saved"
+                description={state.message}
+              />
+            ) : (
+              <ErrorState
+                compact
+                title="Save failed"
+                description={state.message}
+              />
+            )
           ) : null}
         </CardContent>
-        <CardFooter className="justify-between gap-4">
+        <CardFooter className="flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             First save creates the profile row if it does not exist yet. Saved
             visibility applies immediately to the public profile route.

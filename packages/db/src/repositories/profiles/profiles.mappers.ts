@@ -18,6 +18,11 @@ type ProfileRow = Pick<
   | 'updated_at'
 >
 
+type PublicProfileRow = Pick<
+  Tables<{ schema: 'user_data' }, 'public_profiles'>,
+  'id' | 'display_name' | 'avatar_url' | 'bio'
+>
+
 export function mapProfileRow(row: ProfileRow): ProfileRecord {
   return {
     id: row.id,
@@ -31,7 +36,9 @@ export function mapProfileRow(row: ProfileRow): ProfileRecord {
   }
 }
 
-export function mapPublicProfileRow(row: ProfileRow): PublicProfileRecord {
+export function mapPublicProfileRow(
+  row: PublicProfileRow,
+): PublicProfileRecord {
   return {
     id: row.id,
     displayName: row.display_name,

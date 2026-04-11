@@ -75,6 +75,39 @@ export type Database = {
         }
         Relationships: []
       }
+      card_entity_keyword_tags: {
+        Row: {
+          applied_at: string
+          card_entity_id: string
+          keyword_tag_id: string
+        }
+        Insert: {
+          applied_at?: string
+          card_entity_id: string
+          keyword_tag_id: string
+        }
+        Update: {
+          applied_at?: string
+          card_entity_id?: string
+          keyword_tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'card_entity_keyword_tags_card_entity_id_fkey'
+            columns: ['card_entity_id']
+            isOneToOne: false
+            referencedRelation: 'card_entities'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'card_entity_keyword_tags_keyword_tag_id_fkey'
+            columns: ['keyword_tag_id']
+            isOneToOne: false
+            referencedRelation: 'keyword_tags'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       card_printings: {
         Row: {
           art_variant: string | null
@@ -89,6 +122,10 @@ export type Database = {
           product_id: string
           rarity: string
           region_code: string | null
+          source_import_job_id: string | null
+          source_normalization_result_id: string | null
+          source_raw_card_printing_record_id: string | null
+          source_raw_product_record_id: string | null
         }
         Insert: {
           art_variant?: string | null
@@ -103,6 +140,10 @@ export type Database = {
           product_id: string
           rarity: string
           region_code?: string | null
+          source_import_job_id?: string | null
+          source_normalization_result_id?: string | null
+          source_raw_card_printing_record_id?: string | null
+          source_raw_product_record_id?: string | null
         }
         Update: {
           art_variant?: string | null
@@ -117,6 +158,10 @@ export type Database = {
           product_id?: string
           rarity?: string
           region_code?: string | null
+          source_import_job_id?: string | null
+          source_normalization_result_id?: string | null
+          source_raw_card_printing_record_id?: string | null
+          source_raw_product_record_id?: string | null
         }
         Relationships: [
           {
@@ -134,6 +179,30 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      keyword_tags: {
+        Row: {
+          category: string
+          description: string | null
+          display_name: string
+          id: string
+          sort_order: number
+        }
+        Insert: {
+          category: string
+          description?: string | null
+          display_name: string
+          id: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string
+          description?: string | null
+          display_name?: string
+          id?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       product_families: {
         Row: {
@@ -182,6 +251,8 @@ export type Database = {
           product_kind: string
           region_code: string | null
           release_date: string
+          source_import_job_id: string | null
+          source_raw_product_record_id: string | null
         }
         Insert: {
           canonical_key: string
@@ -194,6 +265,8 @@ export type Database = {
           product_kind: string
           region_code?: string | null
           release_date: string
+          source_import_job_id?: string | null
+          source_raw_product_record_id?: string | null
         }
         Update: {
           canonical_key?: string
@@ -206,6 +279,8 @@ export type Database = {
           product_kind?: string
           region_code?: string | null
           release_date?: string
+          source_import_job_id?: string | null
+          source_raw_product_record_id?: string | null
         }
         Relationships: [
           {
@@ -496,6 +571,535 @@ export type Database = {
     }
     Enums: {
       [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  importer: {
+    Tables: {
+      card_printing_normalization_results: {
+        Row: {
+          candidate_card_entity_ids: string[]
+          candidate_count: number
+          conflict_summary: string | null
+          created_at: string
+          id: string
+          import_job_id: string
+          needs_manual_review: boolean
+          normalization_status: Database['importer']['Enums']['card_printing_normalization_status']
+          normalization_version: string
+          normalized_card_type: string | null
+          normalized_clan: string | null
+          normalized_grade: number | null
+          normalized_name: string
+          normalized_nation: string | null
+          normalized_trigger_type: string | null
+          proposed_card_entity_id: string | null
+          raw_card_printing_record_id: string
+          raw_payload_fingerprint: string
+          raw_product_record_id: string | null
+          resolution_basis: string
+          resolution_evidence: Json
+          status_reason: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_card_entity_ids?: string[]
+          candidate_count?: number
+          conflict_summary?: string | null
+          created_at?: string
+          id?: string
+          import_job_id: string
+          needs_manual_review?: boolean
+          normalization_status: Database['importer']['Enums']['card_printing_normalization_status']
+          normalization_version: string
+          normalized_card_type?: string | null
+          normalized_clan?: string | null
+          normalized_grade?: number | null
+          normalized_name: string
+          normalized_nation?: string | null
+          normalized_trigger_type?: string | null
+          proposed_card_entity_id?: string | null
+          raw_card_printing_record_id: string
+          raw_payload_fingerprint: string
+          raw_product_record_id?: string | null
+          resolution_basis: string
+          resolution_evidence?: Json
+          status_reason: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_card_entity_ids?: string[]
+          candidate_count?: number
+          conflict_summary?: string | null
+          created_at?: string
+          id?: string
+          import_job_id?: string
+          needs_manual_review?: boolean
+          normalization_status?: Database['importer']['Enums']['card_printing_normalization_status']
+          normalization_version?: string
+          normalized_card_type?: string | null
+          normalized_clan?: string | null
+          normalized_grade?: number | null
+          normalized_name?: string
+          normalized_nation?: string | null
+          normalized_trigger_type?: string | null
+          proposed_card_entity_id?: string | null
+          raw_card_printing_record_id?: string
+          raw_payload_fingerprint?: string
+          raw_product_record_id?: string | null
+          resolution_basis?: string
+          resolution_evidence?: Json
+          status_reason?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'card_printing_normalization_r_raw_card_printing_record_id__fkey'
+            columns: ['raw_card_printing_record_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'raw_card_printing_records'
+            referencedColumns: ['id', 'import_job_id']
+          },
+          {
+            foreignKeyName: 'card_printing_normalization_r_raw_product_record_id_import_fkey'
+            columns: ['raw_product_record_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'raw_product_records'
+            referencedColumns: ['id', 'import_job_id']
+          },
+          {
+            foreignKeyName: 'card_printing_normalization_results_import_job_id_fkey'
+            columns: ['import_job_id']
+            isOneToOne: false
+            referencedRelation: 'import_jobs'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      import_jobs: {
+        Row: {
+          conflict_count: number
+          created_at: string
+          current_stage: Database['importer']['Enums']['import_job_stage']
+          error_code: string | null
+          finished_at: string | null
+          id: string
+          input_fingerprint: string | null
+          job_status: Database['importer']['Enums']['import_job_status']
+          normalized_candidate_count: number
+          pipeline_version: string
+          published_record_count: number
+          raw_record_count: number
+          retry_of_job_id: string | null
+          scope_metadata: Json
+          source_id: string
+          started_at: string | null
+          status_reason: string | null
+          updated_at: string
+          upstream_snapshot_key: string | null
+        }
+        Insert: {
+          conflict_count?: number
+          created_at?: string
+          current_stage?: Database['importer']['Enums']['import_job_stage']
+          error_code?: string | null
+          finished_at?: string | null
+          id?: string
+          input_fingerprint?: string | null
+          job_status?: Database['importer']['Enums']['import_job_status']
+          normalized_candidate_count?: number
+          pipeline_version?: string
+          published_record_count?: number
+          raw_record_count?: number
+          retry_of_job_id?: string | null
+          scope_metadata?: Json
+          source_id: string
+          started_at?: string | null
+          status_reason?: string | null
+          updated_at?: string
+          upstream_snapshot_key?: string | null
+        }
+        Update: {
+          conflict_count?: number
+          created_at?: string
+          current_stage?: Database['importer']['Enums']['import_job_stage']
+          error_code?: string | null
+          finished_at?: string | null
+          id?: string
+          input_fingerprint?: string | null
+          job_status?: Database['importer']['Enums']['import_job_status']
+          normalized_candidate_count?: number
+          pipeline_version?: string
+          published_record_count?: number
+          raw_record_count?: number
+          retry_of_job_id?: string | null
+          scope_metadata?: Json
+          source_id?: string
+          started_at?: string | null
+          status_reason?: string | null
+          updated_at?: string
+          upstream_snapshot_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'import_jobs_retry_of_job_id_fkey'
+            columns: ['retry_of_job_id']
+            isOneToOne: false
+            referencedRelation: 'import_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'import_jobs_source_id_fkey'
+            columns: ['source_id']
+            isOneToOne: false
+            referencedRelation: 'import_sources'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      import_sources: {
+        Row: {
+          configuration: Json
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          origin_uri: string | null
+          provider_name: string | null
+          source_key: string
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          configuration?: Json
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          origin_uri?: string | null
+          provider_name?: string | null
+          source_key: string
+          source_type: string
+          updated_at?: string
+        }
+        Update: {
+          configuration?: Json
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          origin_uri?: string | null
+          provider_name?: string | null
+          source_key?: string
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      manual_review_items: {
+        Row: {
+          candidate_card_entity_ids: string[]
+          closed_at: string | null
+          context_payload: Json
+          decision_notes: string | null
+          id: string
+          import_job_id: string
+          normalization_result_id: string
+          opened_at: string
+          proposed_card_entity_id: string | null
+          raw_card_printing_record_id: string
+          raw_product_record_id: string | null
+          resolution_kind:
+            | Database['importer']['Enums']['manual_review_resolution_kind']
+            | null
+          resolved_at: string | null
+          resolved_card_entity_id: string | null
+          review_reason: Database['importer']['Enums']['manual_review_reason']
+          review_status: Database['importer']['Enums']['manual_review_status']
+          started_review_at: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_card_entity_ids?: string[]
+          closed_at?: string | null
+          context_payload?: Json
+          decision_notes?: string | null
+          id?: string
+          import_job_id: string
+          normalization_result_id: string
+          opened_at?: string
+          proposed_card_entity_id?: string | null
+          raw_card_printing_record_id: string
+          raw_product_record_id?: string | null
+          resolution_kind?:
+            | Database['importer']['Enums']['manual_review_resolution_kind']
+            | null
+          resolved_at?: string | null
+          resolved_card_entity_id?: string | null
+          review_reason: Database['importer']['Enums']['manual_review_reason']
+          review_status?: Database['importer']['Enums']['manual_review_status']
+          started_review_at?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_card_entity_ids?: string[]
+          closed_at?: string | null
+          context_payload?: Json
+          decision_notes?: string | null
+          id?: string
+          import_job_id?: string
+          normalization_result_id?: string
+          opened_at?: string
+          proposed_card_entity_id?: string | null
+          raw_card_printing_record_id?: string
+          raw_product_record_id?: string | null
+          resolution_kind?:
+            | Database['importer']['Enums']['manual_review_resolution_kind']
+            | null
+          resolved_at?: string | null
+          resolved_card_entity_id?: string | null
+          review_reason?: Database['importer']['Enums']['manual_review_reason']
+          review_status?: Database['importer']['Enums']['manual_review_status']
+          started_review_at?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'manual_review_items_import_job_id_fkey'
+            columns: ['import_job_id']
+            isOneToOne: false
+            referencedRelation: 'import_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'manual_review_items_normalization_result_id_import_job_id_fkey'
+            columns: ['normalization_result_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'card_printing_normalization_results'
+            referencedColumns: ['id', 'import_job_id']
+          },
+          {
+            foreignKeyName: 'manual_review_items_raw_card_printing_record_id_import_job_fkey'
+            columns: ['raw_card_printing_record_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'raw_card_printing_records'
+            referencedColumns: ['id', 'import_job_id']
+          },
+          {
+            foreignKeyName: 'manual_review_items_raw_product_record_id_import_job_id_fkey'
+            columns: ['raw_product_record_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'raw_product_records'
+            referencedColumns: ['id', 'import_job_id']
+          },
+        ]
+      }
+      raw_card_printing_records: {
+        Row: {
+          created_at: string
+          id: string
+          import_job_id: string
+          payload_fingerprint: string
+          raw_card_name: string
+          raw_card_type: string | null
+          raw_clan: string | null
+          raw_critical_text: string | null
+          raw_grade_text: string | null
+          raw_locale_code: string | null
+          raw_nation: string | null
+          raw_power_text: string | null
+          raw_printing_code: string | null
+          raw_product_record_id: string | null
+          raw_rarity: string | null
+          raw_region_code: string | null
+          raw_rules_text: string | null
+          raw_shield_text: string | null
+          raw_trigger_type: string | null
+          source_payload: Json
+          source_printing_id: string
+          source_product_code: string | null
+          source_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          import_job_id: string
+          payload_fingerprint: string
+          raw_card_name: string
+          raw_card_type?: string | null
+          raw_clan?: string | null
+          raw_critical_text?: string | null
+          raw_grade_text?: string | null
+          raw_locale_code?: string | null
+          raw_nation?: string | null
+          raw_power_text?: string | null
+          raw_printing_code?: string | null
+          raw_product_record_id?: string | null
+          raw_rarity?: string | null
+          raw_region_code?: string | null
+          raw_rules_text?: string | null
+          raw_shield_text?: string | null
+          raw_trigger_type?: string | null
+          source_payload: Json
+          source_printing_id: string
+          source_product_code?: string | null
+          source_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          import_job_id?: string
+          payload_fingerprint?: string
+          raw_card_name?: string
+          raw_card_type?: string | null
+          raw_clan?: string | null
+          raw_critical_text?: string | null
+          raw_grade_text?: string | null
+          raw_locale_code?: string | null
+          raw_nation?: string | null
+          raw_power_text?: string | null
+          raw_printing_code?: string | null
+          raw_product_record_id?: string | null
+          raw_rarity?: string | null
+          raw_region_code?: string | null
+          raw_rules_text?: string | null
+          raw_shield_text?: string | null
+          raw_trigger_type?: string | null
+          source_payload?: Json
+          source_printing_id?: string
+          source_product_code?: string | null
+          source_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'raw_card_printing_records_import_job_id_fkey'
+            columns: ['import_job_id']
+            isOneToOne: false
+            referencedRelation: 'import_jobs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'raw_card_printing_records_raw_product_record_id_import_job_fkey'
+            columns: ['raw_product_record_id', 'import_job_id']
+            isOneToOne: false
+            referencedRelation: 'raw_product_records'
+            referencedColumns: ['id', 'import_job_id']
+          },
+        ]
+      }
+      raw_product_records: {
+        Row: {
+          created_at: string
+          id: string
+          import_job_id: string
+          payload_fingerprint: string
+          raw_code: string | null
+          raw_family_name: string | null
+          raw_name: string
+          raw_product_category: string | null
+          raw_product_kind: string | null
+          raw_region_code: string | null
+          raw_release_date_text: string | null
+          source_payload: Json
+          source_product_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          import_job_id: string
+          payload_fingerprint: string
+          raw_code?: string | null
+          raw_family_name?: string | null
+          raw_name: string
+          raw_product_category?: string | null
+          raw_product_kind?: string | null
+          raw_region_code?: string | null
+          raw_release_date_text?: string | null
+          source_payload: Json
+          source_product_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          import_job_id?: string
+          payload_fingerprint?: string
+          raw_code?: string | null
+          raw_family_name?: string | null
+          raw_name?: string
+          raw_product_category?: string | null
+          raw_product_kind?: string | null
+          raw_region_code?: string | null
+          raw_release_date_text?: string | null
+          source_payload?: Json
+          source_product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'raw_product_records_import_job_id_fkey'
+            columns: ['import_job_id']
+            isOneToOne: false
+            referencedRelation: 'import_jobs'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      card_printing_normalization_status:
+        | 'auto_resolved'
+        | 'unresolved'
+        | 'ambiguous'
+        | 'blocked_for_review'
+        | 'superseded'
+      import_job_stage:
+        | 'source'
+        | 'raw_import'
+        | 'normalization'
+        | 'publication'
+        | 'published'
+      import_job_status:
+        | 'pending'
+        | 'running'
+        | 'blocked_for_review'
+        | 'completed'
+        | 'partially_completed'
+        | 'failed'
+        | 'cancelled'
+      manual_review_reason:
+        | 'ambiguous_mapping'
+        | 'unresolved_mapping'
+        | 'conflicting_facts'
+        | 'exceptional_card'
+      manual_review_resolution_kind:
+        | 'accept_proposed_match'
+        | 'select_candidate_match'
+        | 'keep_unresolved'
+        | 'mark_exceptional'
+        | 'reject_imported_record'
+      manual_review_status:
+        | 'open'
+        | 'in_review'
+        | 'resolved'
+        | 'rejected'
+        | 'superseded'
+        | 'cancelled'
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1193,7 +1797,9 @@ export type Database = {
           description: string | null
           format_id: string
           id: string
+          is_favorite: boolean
           owner_profile_id: string
+          tags: string[]
           title: string
           updated_at: string
           visibility: string
@@ -1205,7 +1811,9 @@ export type Database = {
           description?: string | null
           format_id: string
           id?: string
+          is_favorite?: boolean
           owner_profile_id: string
+          tags?: string[]
           title: string
           updated_at?: string
           visibility?: string
@@ -1217,7 +1825,9 @@ export type Database = {
           description?: string | null
           format_id?: string
           id?: string
+          is_favorite?: boolean
           owner_profile_id?: string
+          tags?: string[]
           title?: string
           updated_at?: string
           visibility?: string
@@ -1277,7 +1887,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          display_name: string
+          id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
@@ -1414,6 +2032,54 @@ export const Constants = {
   },
   gameplay: {
     Enums: {},
+  },
+  importer: {
+    Enums: {
+      card_printing_normalization_status: [
+        'auto_resolved',
+        'unresolved',
+        'ambiguous',
+        'blocked_for_review',
+        'superseded',
+      ],
+      import_job_stage: [
+        'source',
+        'raw_import',
+        'normalization',
+        'publication',
+        'published',
+      ],
+      import_job_status: [
+        'pending',
+        'running',
+        'blocked_for_review',
+        'completed',
+        'partially_completed',
+        'failed',
+        'cancelled',
+      ],
+      manual_review_reason: [
+        'ambiguous_mapping',
+        'unresolved_mapping',
+        'conflicting_facts',
+        'exceptional_card',
+      ],
+      manual_review_resolution_kind: [
+        'accept_proposed_match',
+        'select_candidate_match',
+        'keep_unresolved',
+        'mark_exceptional',
+        'reject_imported_record',
+      ],
+      manual_review_status: [
+        'open',
+        'in_review',
+        'resolved',
+        'rejected',
+        'superseded',
+        'cancelled',
+      ],
+    },
   },
   legality: {
     Enums: {},

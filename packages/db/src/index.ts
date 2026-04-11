@@ -9,4 +9,5 @@ export type {
 } from './generated/database.types'
 
 export { Constants } from './generated/database.types'
+export { createDbClient, type CreateDbClientInput } from './client'
 export * from './repositories'

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   mapCardEntityRow,
+  mapCardPrintingDetailRow,
   mapCardPrintingRow,
   mapProductRow,
 } from './catalog.mappers'
@@ -88,5 +89,54 @@ describe('catalog mappers', () => {
     expect(printing.product).toEqual(product)
     expect(printing.cardEntityId).toBe('card-1')
     expect(printing.printingKey).toContain('printing.azure-vanguard-dragon')
+  })
+
+  it('maps printing detail rows with both product and canonical card data', () => {
+    const printing = mapCardPrintingDetailRow({
+      id: 'printing-1',
+      printing_key: 'printing.azure-vanguard-dragon.d-sd01.004.en',
+      card_entity_id: 'card-1',
+      collector_number: '004',
+      rarity: 'RRR',
+      locale_code: 'en',
+      region_code: 'en',
+      printed_name: 'Azure Vanguard Dragon',
+      art_variant: 'starter-art',
+      is_alternate_art: false,
+      is_promo_variant: false,
+      product: {
+        id: 'product-1',
+        canonical_key: 'product.d-bt01.genesis-of-azure',
+        family_id: 'family-standard',
+        official_code: 'D-BT01',
+        name: 'Genesis of Azure',
+        product_category: 'booster',
+        product_kind: 'main',
+        release_date: '2021-05-14',
+        region_code: 'en',
+        cycle_key: 'dev-standard-wave-1',
+      },
+      card: {
+        id: 'card-1',
+        canonical_key: 'card.azure-vanguard-dragon',
+        name: 'Azure Vanguard Dragon',
+        normalized_name: 'azure vanguard dragon',
+        grade: 3,
+        card_type: 'normal-unit',
+        nation: 'Dragon Empire',
+        clan: null,
+        race: 'Cosmo Dragon',
+        trigger_type: null,
+        base_power: 13000,
+        base_critical: 1,
+        base_shield: 0,
+        keywords: ['twin-drive'],
+        effect_refs: ['effect.ref.dev.dragon'],
+      },
+    })
+
+    expect(printing.product.officialCode).toBe('D-BT01')
+    expect(printing.card.canonicalKey).toBe('card.azure-vanguard-dragon')
+    expect(printing.card.basePower).toBe(13000)
   })
 })

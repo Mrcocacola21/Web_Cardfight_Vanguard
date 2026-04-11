@@ -17,6 +17,9 @@ describe('@web-vg/catalog', () => {
   it('exposes an importable package entrypoint', () => {
     expect(entry).toBeDefined()
     expect(entry.groupPrintingsByCardId).toBeTypeOf('function')
+    expect(entry.isNormalizationResultPublishable).toBeTypeOf('function')
+    expect(entry.createCatalogPublicationService).toBeTypeOf('function')
+    expect(entry.createTrackedCatalogPublicationService).toBeTypeOf('function')
   })
 
   it('keeps catalog entities keyed by domain identifiers', () => {

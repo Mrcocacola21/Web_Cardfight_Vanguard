@@ -2,18 +2,28 @@ import { describe, expect, it } from 'vitest'
 import { expectTypeOf } from 'vitest'
 
 import * as entry from './index'
-import type { Deck, DeckSnapshot, DeckVersion } from './index'
-import type { DeckId, FormatId } from '@web-vg/shared'
+import type { CardId, DeckId, FormatId, UserId } from '@web-vg/shared'
+import type { Deck, DeckCard, DeckSnapshot, DeckVersion } from './index'
 
 describe('@web-vg/decks', () => {
-  it('exposes an importable package entrypoint', () => {
+  it('exposes deck aggregate and mutation entrypoints', () => {
     expect(entry).toBeDefined()
-    expect(entry.getDeckSection).toBeTypeOf('function')
+    expect(entry.createDeck).toBeTypeOf('function')
+    expect(entry.addCard).toBeTypeOf('function')
+    expect(entry.setCardCount).toBeTypeOf('function')
+    expect(entry.removeCard).toBeTypeOf('function')
+    expect(entry.clearDeck).toBeTypeOf('function')
+    expect(entry.toDeckSnapshot).toBeTypeOf('function')
   })
 
-  it('keeps decks aligned with format-bound snapshots', () => {
+  it('keeps deck identity canonical-card based', () => {
     expectTypeOf<Deck['id']>().toEqualTypeOf<DeckId>()
-    expectTypeOf<DeckVersion['formatId']>().toEqualTypeOf<FormatId>()
+    expectTypeOf<Deck['ownerId']>().toEqualTypeOf<UserId>()
+    expectTypeOf<Deck['formatId']>().toEqualTypeOf<FormatId>()
     expectTypeOf<DeckVersion['snapshot']>().toEqualTypeOf<DeckSnapshot>()
+    expectTypeOf<DeckCard['cardEntityId']>().toEqualTypeOf<CardId>()
+    expectTypeOf<
+      'printingId' extends keyof DeckCard ? true : false
+    >().toEqualTypeOf<false>()
   })
 })

@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 
 import { CatalogCardDetailView } from '@/components/catalog/catalog-card-detail-view'
-import { CatalogStatusCard } from '@/components/catalog/catalog-status-card'
+import { ErrorState } from '@/components/feedback'
+import { PageContainer } from '@/components/layout'
 import { getCatalogCardDetail } from '@/features/catalog/server/catalog-read'
 
 interface CatalogCardPageProps {
@@ -18,14 +19,18 @@ export default async function CatalogCardPage({
 
   if (!result.ok) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <CatalogStatusCard
+      <PageContainer
+        as="main"
+        size="default"
+        className="flex min-h-screen items-center py-14"
+      >
+        <ErrorState
           title="Card detail is unavailable"
           description="The server-side card detail flow failed. Repository mapping kept database internals out of the page, but the read operation did not complete."
           actionLabel="Back to catalog"
           actionHref="/catalog"
         />
-      </main>
+      </PageContainer>
     )
   }
 
@@ -33,10 +38,5 @@ export default async function CatalogCardPage({
     notFound()
   }
 
-  return (
-    <CatalogCardDetailView
-      card={result.data.card}
-      printings={result.data.printings}
-    />
-  )
+  return <CatalogCardDetailView detail={result.data} />
 }

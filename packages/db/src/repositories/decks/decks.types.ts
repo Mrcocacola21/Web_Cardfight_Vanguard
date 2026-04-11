@@ -34,6 +34,8 @@ export interface DeckRecord {
   readonly formatId: string
   readonly title: string
   readonly description: string | null
+  readonly tags: readonly string[]
+  readonly isFavorite: boolean
   readonly visibility: string
   readonly archivedAt: string | null
   readonly createdAt: string
@@ -46,6 +48,8 @@ export interface DeckListItemRecord {
   readonly ownerProfileId: string
   readonly title: string
   readonly description: string | null
+  readonly tags: readonly string[]
+  readonly isFavorite: boolean
   readonly visibility: string
   readonly archivedAt: string | null
   readonly createdAt: string
@@ -92,6 +96,8 @@ export interface DeckDetailRecord {
   readonly ownerProfileId: string
   readonly title: string
   readonly description: string | null
+  readonly tags: readonly string[]
+  readonly isFavorite: boolean
   readonly visibility: string
   readonly archivedAt: string | null
   readonly createdAt: string
@@ -112,7 +118,14 @@ export interface CreateDeckInput {
   readonly formatId: string
   readonly title: string
   readonly description?: string | null
+  readonly tags?: readonly string[]
+  readonly isFavorite?: boolean
   readonly visibility?: 'private' | 'unlisted' | 'public'
   readonly versionNote?: string | null
   readonly cards?: readonly CreateDeckCardInput[]
+}
+
+export interface SaveDeckInput extends CreateDeckInput {
+  readonly deckId?: string
+  readonly archivedAt?: string | null
 }

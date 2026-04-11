@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useActionState } from 'react'
 
+import { ErrorState, SuccessState } from '@/components/feedback'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,9 +25,21 @@ export function SignUpForm() {
     AuthFormState,
     FormData
   >(signUpAction, initialAuthFormState)
+  const displayNameErrorId = state.fieldErrors.displayName
+    ? 'sign-up-display-name-error'
+    : undefined
+  const emailErrorId = state.fieldErrors.email
+    ? 'sign-up-email-error'
+    : undefined
+  const passwordErrorId = state.fieldErrors.password
+    ? 'sign-up-password-error'
+    : undefined
+  const confirmPasswordErrorId = state.fieldErrors.confirmPassword
+    ? 'sign-up-confirm-password-error'
+    : undefined
 
   return (
-    <Card className="border-white/50 bg-card/95 shadow-lg shadow-black/5">
+    <Card>
       <CardHeader>
         <CardTitle>Register</CardTitle>
         <CardDescription>
@@ -44,12 +57,14 @@ export function SignUpForm() {
             <Input
               id="displayName"
               name="displayName"
+              required
               autoComplete="nickname"
               aria-invalid={state.fieldErrors.displayName ? 'true' : 'false'}
+              aria-describedby={displayNameErrorId}
               placeholder="Azure Pilot"
             />
             {state.fieldErrors.displayName ? (
-              <p className="text-sm text-destructive">
+              <p id={displayNameErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.displayName}
               </p>
             ) : null}
@@ -63,12 +78,14 @@ export function SignUpForm() {
               id="email"
               name="email"
               type="email"
+              required
               autoComplete="email"
               aria-invalid={state.fieldErrors.email ? 'true' : 'false'}
+              aria-describedby={emailErrorId}
               placeholder="pilot@example.com"
             />
             {state.fieldErrors.email ? (
-              <p className="text-sm text-destructive">
+              <p id={emailErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.email}
               </p>
             ) : null}
@@ -82,12 +99,14 @@ export function SignUpForm() {
               id="password"
               name="password"
               type="password"
+              required
               autoComplete="new-password"
               aria-invalid={state.fieldErrors.password ? 'true' : 'false'}
+              aria-describedby={passwordErrorId}
               placeholder="Create a password"
             />
             {state.fieldErrors.password ? (
-              <p className="text-sm text-destructive">
+              <p id={passwordErrorId} className="text-sm text-destructive">
                 {state.fieldErrors.password}
               </p>
             ) : null}
@@ -101,32 +120,41 @@ export function SignUpForm() {
               id="confirmPassword"
               name="confirmPassword"
               type="password"
+              required
               autoComplete="new-password"
               aria-invalid={
                 state.fieldErrors.confirmPassword ? 'true' : 'false'
               }
+              aria-describedby={confirmPasswordErrorId}
               placeholder="Repeat the password"
             />
             {state.fieldErrors.confirmPassword ? (
-              <p className="text-sm text-destructive">
+              <p
+                id={confirmPasswordErrorId}
+                className="text-sm text-destructive"
+              >
                 {state.fieldErrors.confirmPassword}
               </p>
             ) : null}
           </div>
 
           {state.message ? (
-            <p
-              className={
-                state.status === 'success'
-                  ? 'text-sm text-emerald-700'
-                  : 'text-sm text-destructive'
-              }
-            >
-              {state.message}
-            </p>
+            state.status === 'success' ? (
+              <SuccessState
+                compact
+                title="Registration created"
+                description={state.message}
+              />
+            ) : (
+              <ErrorState
+                compact
+                title="Registration failed"
+                description={state.message}
+              />
+            )
           ) : null}
         </CardContent>
-        <CardFooter className="justify-between gap-4">
+        <CardFooter className="flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             Already have an account?{' '}
             <Link

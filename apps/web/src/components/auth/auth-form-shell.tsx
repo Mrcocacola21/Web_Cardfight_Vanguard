@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { PageContainer, PageSection } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 
 interface AuthFormShellProps {
@@ -23,18 +24,22 @@ export function AuthFormShell({
   children,
 }: AuthFormShellProps) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
+    <PageContainer
+      as="main"
+      size="default"
+      className="flex min-h-screen items-center py-14"
+    >
       <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <section className="space-y-4">
+        <PageSection as="section" spacing="compact" className="space-y-4">
           <Badge variant="outline">{badgeLabel}</Badge>
-          <div className="space-y-2">
+          <PageSection spacing="compact">
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
               {title}
             </h1>
             <p className="max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
               {description}
             </p>
-          </div>
+          </PageSection>
           <p className="text-sm text-muted-foreground">
             {alternateText}{' '}
             <Link
@@ -44,9 +49,9 @@ export function AuthFormShell({
               {alternateLabel}
             </Link>
           </p>
-        </section>
+        </PageSection>
         <div>{children}</div>
       </div>
-    </main>
+    </PageContainer>
   )
 }

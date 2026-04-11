@@ -1,0 +1,1 @@
+export const DECK_BUILDER_MAX_COPIES = 4

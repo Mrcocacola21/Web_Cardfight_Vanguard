@@ -10,6 +10,7 @@ import type {
 
 const profileSelect =
   'id, username, display_name, bio, avatar_url, visibility, created_at, updated_at'
+const publicProfileSelect = 'id, display_name, avatar_url, bio'
 
 export interface ProfilesRepository {
   getProfileById(id: string): Promise<RepositoryResult<ProfileRecord | null>>
@@ -56,10 +57,9 @@ export function createProfilesRepository(client: DbClient): ProfilesRepository {
     async getPublicProfileById(id) {
       const { data, error } = await client
         .schema('user_data')
-        .from('profiles')
-        .select(profileSelect)
+        .from('public_profiles')
+        .select(publicProfileSelect)
         .eq('id', id)
-        .eq('visibility', 'public')
         .maybeSingle()
 
       if (error) {

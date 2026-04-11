@@ -1,0 +1,67 @@
+insert into catalog.card_entities (
+  id,
+  canonical_key,
+  name,
+  normalized_name,
+  grade,
+  card_type,
+  nation,
+  clan,
+  race,
+  trigger_type,
+  base_power,
+  base_critical,
+  base_shield,
+  keywords,
+  effect_refs
+)
+values
+  (
+    '41000000-0000-4000-8000-000000000001',
+    'card.apex-ruler-bastion',
+    'Apex Ruler, Bastion',
+    'apex ruler, bastion',
+    3,
+    'normal-unit',
+    'Keter Sanctuary',
+    null,
+    'Human',
+    null,
+    13000,
+    1,
+    0,
+    '{}'::text[],
+    array['effect.ref.wave-1.bastion']::text[]
+  ),
+  (
+    '41000000-0000-4000-8000-000000000002',
+    'card.fated-one-of-miracles-rezael',
+    'Fated One of Miracles, Rezael',
+    'fated one of miracles, rezael',
+    3,
+    'normal-unit',
+    'Keter Sanctuary',
+    null,
+    'Angel',
+    null,
+    13000,
+    1,
+    0,
+    '{}'::text[],
+    array['effect.ref.wave-1.rezael']::text[]
+  )
+on conflict (canonical_key) do update
+set
+  name = excluded.name,
+  normalized_name = excluded.normalized_name,
+  grade = excluded.grade,
+  card_type = excluded.card_type,
+  nation = excluded.nation,
+  clan = excluded.clan,
+  race = excluded.race,
+  trigger_type = excluded.trigger_type,
+  base_power = excluded.base_power,
+  base_critical = excluded.base_critical,
+  base_shield = excluded.base_shield,
+  keywords = excluded.keywords,
+  effect_refs = excluded.effect_refs;

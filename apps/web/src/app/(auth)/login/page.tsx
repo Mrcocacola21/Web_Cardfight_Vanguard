@@ -1,5 +1,5 @@
-import { AuthStatusCard } from '@/components/auth/auth-status-card'
 import { AuthFormShell } from '@/components/auth/auth-form-shell'
+import { ErrorState } from '@/components/feedback'
 import { SignInForm } from '@/components/auth/sign-in-form'
 import { getAuthCallbackErrorMessage } from '@/features/auth/server/auth-callback'
 
@@ -24,7 +24,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     >
       <div className="space-y-4">
         {callbackErrorMessage ? (
-          <AuthStatusCard
+          <ErrorState
+            compact
             title="Authentication callback failed"
             description={callbackErrorMessage}
           />

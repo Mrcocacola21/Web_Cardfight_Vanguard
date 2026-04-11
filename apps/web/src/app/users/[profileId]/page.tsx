@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 
-import { ProfileStatusCard } from '@/components/profiles/profile-status-card'
+import { ErrorState } from '@/components/feedback'
+import { PageContainer } from '@/components/layout'
 import { PublicProfileView } from '@/components/profiles/public-profile-view'
 import { getPublicProfilePageState } from '@/features/profiles/server/public-profile-read'
 
@@ -24,14 +25,18 @@ export default async function PublicProfilePage({
 
   if (state.kind === 'error') {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <ProfileStatusCard
+      <PageContainer
+        as="main"
+        size="default"
+        className="flex min-h-screen items-center py-14"
+      >
+        <ErrorState
           title="Public profile is unavailable"
           description={state.message}
           actionLabel="Back home"
           actionHref="/"
         />
-      </main>
+      </PageContainer>
     )
   }
 

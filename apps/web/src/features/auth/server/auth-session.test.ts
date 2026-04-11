@@ -72,4 +72,26 @@ describe('getCurrentAuthState', () => {
       message: 'Failed to resolve the current authenticated session.',
     })
   })
+
+  it('treats a missing Supabase session as a signed-out guest state', async () => {
+    const state = await getCurrentAuthState({
+      client: {
+        auth: {
+          getUser: () =>
+            Promise.resolve({
+              data: {
+                user: null,
+              },
+              error: {
+                message: 'Auth session missing!',
+              },
+            }),
+        },
+      } as never,
+    })
+
+    expect(state).toEqual({
+      kind: 'signed-out',
+    })
+  })
 })

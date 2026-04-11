@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { ArrowRight, Layers3, Palette, Route } from 'lucide-react'
 
+import { StatBlock, StatGrid } from '@/components/data-display'
+import { FoundationDataDisplayPreview } from '@/components/foundation/foundation-data-display-preview'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,7 +28,7 @@ export function FoundationHome() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-6 py-14 md:px-10">
       <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-        <Card className="border-white/50 shadow-2xl shadow-black/5 backdrop-blur">
+        <Card className="bg-card/92 backdrop-blur-sm">
           <CardHeader className="gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">UI Foundation</Badge>
@@ -46,31 +48,39 @@ export function FoundationHome() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-xl border bg-background/70 p-4">
-                <Route className="mb-3 size-4 text-primary" />
-                <p className="text-sm font-medium">App Router shell</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Routing and layout foundation are in place for future screens.
-                </p>
-              </div>
-              <div className="rounded-xl border bg-background/70 p-4">
-                <Palette className="mb-3 size-4 text-primary" />
-                <p className="text-sm font-medium">Design tokens</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Minimal theme variables are configured without a full design
-                  system buildout.
-                </p>
-              </div>
-              <div className="rounded-xl border bg-background/70 p-4">
-                <Layers3 className="mb-3 size-4 text-primary" />
-                <p className="text-sm font-medium">Monorepo-safe start</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Generated components stay app-local for now to avoid premature
-                  extraction into shared packages.
-                </p>
-              </div>
-            </div>
+            <StatGrid columns={3}>
+              <StatBlock
+                label="App Router shell"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <Route className="size-4 text-primary" />
+                    Ready
+                  </span>
+                }
+                hint="Routing and layout foundation are in place for future screens."
+              />
+              <StatBlock
+                label="Design tokens"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <Palette className="size-4 text-primary" />
+                    Dark-first
+                  </span>
+                }
+                hint="Minimal theme variables are configured without a full design system buildout."
+                tone="accent"
+              />
+              <StatBlock
+                label="Component scope"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <Layers3 className="size-4 text-primary" />
+                    App-local
+                  </span>
+                }
+                hint="Generated components stay app-local for now to avoid premature extraction into shared packages."
+              />
+            </StatGrid>
 
             <Separator />
 
@@ -126,28 +136,20 @@ export function FoundationHome() {
         </Card>
 
         <div className="grid gap-6">
-          <Card className="border-white/50 bg-card/90 shadow-xl shadow-black/5 backdrop-blur">
+          <Card className="bg-card/92 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg">Input Baseline</CardTitle>
+              <CardTitle className="text-lg">Data Display Baseline</CardTitle>
               <CardDescription>
-                A small, practical component set is ready for the next frontend
-                steps.
+                Shared search, filters, and stat display primitives are ready
+                for future catalog and deck screens.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input
-                aria-label="Foundation input preview"
-                placeholder="App-local UI primitives are now available"
-              />
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="h-4 w-2/3" />
-              </div>
+              <FoundationDataDisplayPreview />
             </CardContent>
           </Card>
 
-          <Card className="border-white/50 bg-card/85 shadow-xl shadow-black/5 backdrop-blur">
+          <Card className="bg-card/90 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-lg">Current Boundaries</CardTitle>
             </CardHeader>
@@ -160,6 +162,23 @@ export function FoundationHome() {
                   </li>
                 ))}
               </ul>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/90 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Loading Baseline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                aria-label="Foundation input preview"
+                placeholder="App-local UI primitives are now available"
+              />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
             </CardContent>
           </Card>
         </div>

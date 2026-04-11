@@ -94,6 +94,112 @@ async function withRollback(client, name, callback) {
   }
 }
 
+async function createAuthUser(
+  client,
+  { authUserId, email } = { authUserId: randomUUID(), email: null },
+) {
+  const resolvedAuthUserId = authUserId ?? randomUUID()
+  const resolvedEmail = email ?? `${resolvedAuthUserId}@example.test`
+
+  await client.query(
+    `
+      insert into auth.users (
+        instance_id,
+        id,
+        aud,
+        role,
+        email,
+        encrypted_password,
+        email_confirmed_at,
+        raw_app_meta_data,
+        raw_user_meta_data,
+        is_sso_user,
+        created_at,
+        updated_at
+      ) values (
+        '00000000-0000-0000-0000-000000000000',
+        $1,
+        'authenticated',
+        'authenticated',
+        $2,
+        crypt('password', gen_salt('bf')),
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{}'::jsonb,
+        false,
+        now(),
+        now()
+      )
+    `,
+    [resolvedAuthUserId, resolvedEmail],
+  )
+
+  return resolvedAuthUserId
+}
+
+async function createProfileFixture(
+  client,
+  {
+    authUserId = randomUUID(),
+    profileId = randomUUID(),
+    displayName,
+    visibility = 'private',
+  },
+) {
+  await createAuthUser(client, {
+    authUserId,
+    email: `${profileId}@example.test`,
+  })
+
+  await client.query(
+    `
+        insert into user_data.profiles (
+          id,
+          auth_user_id,
+          display_name,
+          visibility
+        ) values (
+          $1,
+          $2,
+          $3,
+          $4
+        )
+      `,
+    [profileId, authUserId, displayName, visibility],
+  )
+
+  return {
+    authUserId,
+    profileId,
+  }
+}
+
+async function runAsDatabaseRole(client, { role, authUserId }, callback) {
+  const claims = JSON.stringify(
+    authUserId
+      ? {
+          sub: authUserId,
+          role,
+        }
+      : {
+          role,
+        },
+  )
+
+  await client.query(`set local role ${role}`)
+  await client.query(
+    `
+      select
+        set_config('request.jwt.claim.role', $1, true),
+        set_config('request.jwt.claim.sub', $2, true),
+        set_config('request.jwt.claims', $3, true)
+    `,
+    [role, authUserId ?? '', claims],
+  )
+
+  return callback()
+}
+
 async function verifySeedSmoke(client) {
   console.log('Verifying seeded baseline...')
 
@@ -474,6 +580,691 @@ async function verifyConstraints(client) {
   )
 }
 
+async function verifyAuthorizationRls(client) {
+  console.log('Verifying baseline authorization and RLS...')
+
+  await withRollback(
+    client,
+    'profiles stay owner-only while public profile reads use a safe projection',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Owner Pilot',
+        visibility: 'private',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Stranger Pilot',
+        visibility: 'private',
+      })
+      const publicProfile = await createProfileFixture(client, {
+        displayName: 'Public Pilot',
+        visibility: 'public',
+      })
+
+      await runAsDatabaseRole(client, { role: 'anon' }, async () => {
+        const publicViewResult = await client.query(
+          `
+            select id, display_name, avatar_url, bio
+            from user_data.public_profiles
+            order by display_name asc
+          `,
+        )
+
+        assert(
+          publicViewResult.rowCount === 1,
+          'Anon should see only one public profile row.',
+        )
+        assert(
+          publicViewResult.rows[0]?.id === publicProfile.profileId,
+          'Anon should only see the public profile projection.',
+        )
+
+        await expectPgError(
+          'anon cannot read base profiles table directly',
+          () => client.query(`select id from user_data.profiles`),
+          '42501',
+        )
+      })
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const ownProfileResult = await client.query(
+            `
+              select id
+              from user_data.profiles
+              where id = $1
+            `,
+            [owner.profileId],
+          )
+
+          assert(
+            ownProfileResult.rowCount === 1,
+            'Owner should be able to read their own profile row.',
+          )
+
+          const privateOtherResult = await client.query(
+            `
+              select id
+              from user_data.profiles
+              where id = $1
+            `,
+            [stranger.profileId],
+          )
+
+          assert(
+            privateOtherResult.rowCount === 0,
+            'Authenticated non-owner must not read another private profile row.',
+          )
+
+          const updateOwnProfileResult = await client.query(
+            `
+              update user_data.profiles
+              set bio = 'Owner bio'
+              where id = $1
+              returning id
+            `,
+            [owner.profileId],
+          )
+
+          assert(
+            updateOwnProfileResult.rowCount === 1,
+            'Owner should be able to update their own profile row.',
+          )
+
+          await expectPgError(
+            'authenticated user cannot forge another auth_user_id on profile insert',
+            () =>
+              client.query(
+                `
+                  insert into user_data.profiles (
+                    auth_user_id,
+                    display_name,
+                    visibility
+                  ) values (
+                    $1,
+                    'Forged Profile',
+                    'private'
+                  )
+                `,
+                [stranger.authUserId],
+              ),
+            '42501',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'collections and collection items stay owner-only',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Collection Owner',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Collection Stranger',
+      })
+
+      const ownerCollectionId = randomUUID()
+
+      await client.query(
+        `
+          insert into user_data.collections (
+            id,
+            owner_profile_id,
+            name,
+            collection_kind,
+            visibility,
+            is_default
+          ) values (
+            $1,
+            $2,
+            'Owner Binder',
+            'binder',
+            'private',
+            false
+          )
+        `,
+        [ownerCollectionId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into user_data.collection_items (
+            collection_id,
+            card_printing_id,
+            quantity
+          ) values (
+            $1,
+            '30000000-0000-4000-8000-000000000001',
+            2
+          )
+        `,
+        [ownerCollectionId],
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const ownCollections = await client.query(
+            `select id from user_data.collections where owner_profile_id = $1`,
+            [owner.profileId],
+          )
+
+          assert(
+            ownCollections.rowCount === 1,
+            'Owner should be able to read their own collection.',
+          )
+
+          const ownItems = await client.query(
+            `select id from user_data.collection_items where collection_id = $1`,
+            [ownerCollectionId],
+          )
+
+          assert(
+            ownItems.rowCount === 1,
+            'Owner should be able to read collection items for their collection.',
+          )
+
+          const updateCollectionResult = await client.query(
+            `
+              update user_data.collections
+              set description = 'Updated by owner'
+              where id = $1
+              returning id
+            `,
+            [ownerCollectionId],
+          )
+
+          assert(
+            updateCollectionResult.rowCount === 1,
+            'Owner should be able to update their own collection.',
+          )
+
+          await expectPgError(
+            'owner cannot create a collection for another profile',
+            () =>
+              client.query(
+                `
+                  insert into user_data.collections (
+                    owner_profile_id,
+                    name,
+                    collection_kind,
+                    visibility
+                  ) values (
+                    $1,
+                    'Forged Inventory',
+                    'inventory',
+                    'private'
+                  )
+                `,
+                [stranger.profileId],
+              ),
+            '42501',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: stranger.authUserId },
+        async () => {
+          const otherCollections = await client.query(
+            `select id from user_data.collections where id = $1`,
+            [ownerCollectionId],
+          )
+
+          assert(
+            otherCollections.rowCount === 0,
+            'Non-owner must not read another user collection.',
+          )
+
+          await expectPgError(
+            'non-owner cannot add items to another user collection',
+            () =>
+              client.query(
+                `
+                  insert into user_data.collection_items (
+                    collection_id,
+                    card_printing_id,
+                    quantity
+                  ) values (
+                    $1,
+                    '30000000-0000-4000-8000-000000000002',
+                    1
+                  )
+                `,
+                [ownerCollectionId],
+              ),
+            '42501',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'decks, versions, and cards stay owner-only',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Deck Owner',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Deck Stranger',
+      })
+
+      const ownerDeckId = randomUUID()
+      const ownerDeckVersionId = randomUUID()
+
+      await client.query(
+        `
+          insert into user_data.decks (
+            id,
+            owner_profile_id,
+            format_id,
+            title,
+            visibility
+          ) values (
+            $1,
+            $2,
+            'standard',
+            'Owner Deck',
+            'private'
+          )
+        `,
+        [ownerDeckId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_versions (
+            id,
+            deck_id,
+            version_number,
+            created_by_profile_id,
+            version_note
+          ) values (
+            $1,
+            $2,
+            1,
+            $3,
+            'owner baseline'
+          )
+        `,
+        [ownerDeckVersionId, ownerDeckId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_cards (
+            deck_version_id,
+            section_key,
+            card_entity_id,
+            quantity
+          ) values (
+            $1,
+            'main',
+            '20000000-0000-4000-8000-000000000004',
+            4
+          )
+        `,
+        [ownerDeckVersionId],
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const ownDecks = await client.query(
+            `select id from user_data.decks where id = $1`,
+            [ownerDeckId],
+          )
+
+          assert(
+            ownDecks.rowCount === 1,
+            'Owner should be able to read their own deck.',
+          )
+
+          const ownVersions = await client.query(
+            `select id from user_data.deck_versions where id = $1`,
+            [ownerDeckVersionId],
+          )
+
+          assert(
+            ownVersions.rowCount === 1,
+            'Owner should be able to read their own deck versions.',
+          )
+
+          const ownDeckCards = await client.query(
+            `select id from user_data.deck_cards where deck_version_id = $1`,
+            [ownerDeckVersionId],
+          )
+
+          assert(
+            ownDeckCards.rowCount === 1,
+            'Owner should be able to read deck cards for their own deck.',
+          )
+
+          const updateDeckResult = await client.query(
+            `
+              update user_data.decks
+              set title = 'Owner Deck Updated'
+              where id = $1
+              returning id
+            `,
+            [ownerDeckId],
+          )
+
+          assert(
+            updateDeckResult.rowCount === 1,
+            'Owner should be able to update their own deck.',
+          )
+
+          const insertedVersion = await client.query(
+            `
+              insert into user_data.deck_versions (
+                deck_id,
+                version_number,
+                created_by_profile_id,
+                version_note
+              ) values (
+                $1,
+                2,
+                $2,
+                'owner revision'
+              )
+              returning id
+            `,
+            [ownerDeckId, owner.profileId],
+          )
+
+          assert(
+            insertedVersion.rowCount === 1,
+            'Owner should be able to create a new deck version on their own deck.',
+          )
+
+          await expectPgError(
+            'owner cannot create a deck for another profile',
+            () =>
+              client.query(
+                `
+                  insert into user_data.decks (
+                    owner_profile_id,
+                    format_id,
+                    title,
+                    visibility
+                  ) values (
+                    $1,
+                    'standard',
+                    'Forged Deck',
+                    'private'
+                  )
+                `,
+                [stranger.profileId],
+              ),
+            '42501',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: stranger.authUserId },
+        async () => {
+          const foreignDecks = await client.query(
+            `select id from user_data.decks where id = $1`,
+            [ownerDeckId],
+          )
+
+          assert(
+            foreignDecks.rowCount === 0,
+            'Non-owner must not read another user deck.',
+          )
+
+          const deleteDeckResult = await client.query(
+            `
+              delete from user_data.decks
+              where id = $1
+              returning id
+            `,
+            [ownerDeckId],
+          )
+
+          assert(
+            deleteDeckResult.rowCount === 0,
+            'Non-owner must not delete another user deck.',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'matches and participants stay owner-only',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Match Owner',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Match Stranger',
+      })
+
+      const ownerDeckId = randomUUID()
+      const ownerDeckVersionId = randomUUID()
+      const ownerMatchId = randomUUID()
+
+      await client.query(
+        `
+          insert into user_data.decks (
+            id,
+            owner_profile_id,
+            format_id,
+            title,
+            visibility
+          ) values (
+            $1,
+            $2,
+            'standard',
+            'Match Deck',
+            'private'
+          )
+        `,
+        [ownerDeckId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_versions (
+            id,
+            deck_id,
+            version_number,
+            created_by_profile_id,
+            version_note
+          ) values (
+            $1,
+            $2,
+            1,
+            $3,
+            'match baseline'
+          )
+        `,
+        [ownerDeckVersionId, ownerDeckId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into social.matches (
+            id,
+            recorded_by_profile_id,
+            format_id,
+            visibility,
+            status,
+            notes
+          ) values (
+            $1,
+            $2,
+            'standard',
+            'private',
+            'completed',
+            'Owner-only match'
+          )
+        `,
+        [ownerMatchId, owner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into social.match_participants (
+            match_id,
+            profile_id,
+            deck_version_id,
+            seat_order,
+            result
+          ) values (
+            $1,
+            $2,
+            $3,
+            1,
+            'win'
+          )
+        `,
+        [ownerMatchId, owner.profileId, ownerDeckVersionId],
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const ownMatches = await client.query(
+            `select id from social.matches where id = $1`,
+            [ownerMatchId],
+          )
+
+          assert(
+            ownMatches.rowCount === 1,
+            'Owner should be able to read their own match rows.',
+          )
+
+          const ownParticipants = await client.query(
+            `select id from social.match_participants where match_id = $1`,
+            [ownerMatchId],
+          )
+
+          assert(
+            ownParticipants.rowCount === 1,
+            'Owner should be able to read participants for their own recorded match.',
+          )
+
+          const updateMatchResult = await client.query(
+            `
+              update social.matches
+              set notes = 'Updated owner note'
+              where id = $1
+              returning id
+            `,
+            [ownerMatchId],
+          )
+
+          assert(
+            updateMatchResult.rowCount === 1,
+            'Owner should be able to update their own match rows.',
+          )
+
+          const insertedParticipant = await client.query(
+            `
+              insert into social.match_participants (
+                match_id,
+                profile_id,
+                deck_version_id,
+                seat_order,
+                result
+              ) values (
+                $1,
+                $2,
+                $3,
+                2,
+                'loss'
+              )
+              returning id
+            `,
+            [ownerMatchId, stranger.profileId, ownerDeckVersionId],
+          )
+
+          assert(
+            insertedParticipant.rowCount === 1,
+            'Owner should be able to add participants to their own match row.',
+          )
+
+          await expectPgError(
+            'owner cannot create a match for another profile',
+            () =>
+              client.query(
+                `
+                  insert into social.matches (
+                    recorded_by_profile_id,
+                    format_id,
+                    visibility,
+                    status
+                  ) values (
+                    $1,
+                    'standard',
+                    'private',
+                    'completed'
+                  )
+                `,
+                [stranger.profileId],
+              ),
+            '42501',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: stranger.authUserId },
+        async () => {
+          const foreignMatches = await client.query(
+            `select id from social.matches where id = $1`,
+            [ownerMatchId],
+          )
+
+          assert(
+            foreignMatches.rowCount === 0,
+            'Non-owner must not read another user match.',
+          )
+
+          await expectPgError(
+            'non-owner cannot add participants to another user match',
+            () =>
+              client.query(
+                `
+                  insert into social.match_participants (
+                    match_id,
+                    profile_id,
+                    seat_order,
+                    result
+                  ) values (
+                    $1,
+                    $2,
+                    3,
+                    'draw'
+                  )
+                `,
+                [ownerMatchId, stranger.profileId],
+              ),
+            '42501',
+          )
+        },
+      )
+    },
+  )
+}
+
 async function main() {
   console.log('Starting DB checkpoint verification...')
 
@@ -501,6 +1292,7 @@ async function main() {
     await client.connect()
     await verifySeedSmoke(client)
     await verifyConstraints(client)
+    await verifyAuthorizationRls(client)
     console.log('DB checkpoint verification completed successfully.')
   } finally {
     await client.end().catch(() => {})

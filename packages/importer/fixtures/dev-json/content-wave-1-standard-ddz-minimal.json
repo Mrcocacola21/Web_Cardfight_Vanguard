@@ -1,0 +1,156 @@
+{
+  "source": {
+    "key": "dev-json.content-wave-1-standard-ddz-minimal",
+    "displayName": "Content wave 1: minimal Standard D/DZ seed",
+    "providerName": "local-dev",
+    "snapshotKey": "wave-1-v1"
+  },
+  "job": {
+    "scopeMetadata": {
+      "fixture": "content-wave-1-standard-ddz-minimal",
+      "wave": "content-wave-1",
+      "formatScope": "standard-ddz-minimal"
+    }
+  },
+  "options": {
+    "runNormalization": true
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-d-bt01",
+      "name": "D-BT01 Genesis of the Five Greats",
+      "code": "D-BT01",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2021-05-21",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedRole": "normal-control-product",
+        "expectedCases": ["normal-single-printing"]
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-bt01",
+      "name": "DZ-BT01 Fated Clash",
+      "code": "DZ-BT01",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2024-05-03",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedRole": "multiple-printings-product",
+        "expectedCases": ["multiple-printings"]
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-bt02",
+      "name": "DZ-BT02 Illusionless Strife",
+      "code": "DZ-BT02",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2024-06-28",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedRole": "review-queue-product",
+        "expectedCases": ["review-unresolved"]
+      }
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-bastion-d-bt01-main",
+      "sourceProductId": "prod-d-bt01",
+      "sourceProductCode": "D-BT01",
+      "cardName": "Apex Ruler, Bastion",
+      "printingCode": "D-BT01/001EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedCase": "normal-single-printing",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "apex-ruler-bastion"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-rrr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/010EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-dsr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/DSR01EN",
+      "rarity": "DSR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-liael-amorta-dz-bt02-main",
+      "sourceProductId": "prod-dz-bt02",
+      "sourceProductCode": "DZ-BT02",
+      "cardName": "Fated One of Time, Liael=Amorta",
+      "printingCode": "DZ-BT02/010EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "content-wave-1",
+        "seedCase": "review-unresolved",
+        "expectedNormalization": "unresolved_review_queue",
+        "canonicalGroup": "fated-one-of-time-liael-amorta",
+        "seedAssumption": "wave-1 canonical bootstrap intentionally omits Liael=Amorta"
+      }
+    }
+  ]
+}

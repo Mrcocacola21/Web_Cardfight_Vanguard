@@ -1,8 +1,10 @@
 # Web_VG
 
-Early-stage monorepo for a Cardfight!! Vanguard web client / companion platform.
+Monorepo for a Cardfight!! Vanguard web client / companion platform.
 
-The repository foundation is ready: monorepo tooling, a Next.js frontend shell, UI baseline, and code-quality tooling. Product features are still largely unimplemented.
+The repository is no longer just a shell. It now contains a working catalog,
+an importer -> publication content pipeline, baseline auth/RLS, and the first
+real deck builder workflow.
 
 ## Prerequisites
 
@@ -71,6 +73,12 @@ corepack pnpm test
 # Run Playwright e2e
 corepack pnpm test:e2e
 
+# Run the local auth runtime checkpoint
+corepack pnpm test:auth:e2e
+
+# Run the local deck-builder runtime checkpoint
+corepack pnpm test:decks:e2e
+
 # Seed a local dev dataset
 # requires DATABASE_URL or SUPABASE_DB_URL
 corepack pnpm db:seed
@@ -78,6 +86,9 @@ corepack pnpm db:seed
 # Generate DB types from the current schema
 # uses local Supabase DB when running, otherwise DATABASE_URL / SUPABASE_DB_URL
 corepack pnpm db:types:generate
+
+# Run the dev JSON importer path against a local fixture
+corepack pnpm importer:dev-json -- ./packages/importer/fixtures/dev-json/sample-standard-with-review.json
 ```
 
 ## Repository Layout
@@ -117,11 +128,19 @@ Full repo-wide checks such as build, test, and typecheck are not part of pre-com
 
 Current test setup:
 
-- Vitest for package unit tests
+- Vitest for package/domain unit tests
 - Vitest + React Testing Library for `apps/web`
-- Playwright for e2e foundation
+- Playwright for local runtime/browser checkpoints
 
-This is an infrastructure baseline only. The project is not broadly covered by tests yet.
+Current practical coverage is strongest around:
+
+- catalog read-side and publication-related repository/service flows
+- importer pipeline and publication lifecycle checkpoints
+- auth/profile baseline
+- deck domain, deck builder UI, autosave, and metadata flows
+
+The browser/runtime layer is still lighter than unit/component coverage and is
+best treated as checkpoint confidence, not a full e2e matrix.
 
 ## Current Status
 
@@ -131,21 +150,50 @@ Available now:
 
 - monorepo/workspace foundation
 - `apps/web` app shell
-- Tailwind + shadcn/ui baseline
-- app-local Supabase browser/server client foundation
-- SSR-friendly auth/session foundation in `apps/web`
-- SSR-aware public/protected route protection baseline
-- server-side auth callback flow at `/auth/callback`
-- profile auto-creation after registration
-- protected own-profile page with read/update foundation
-- public profile page foundation at `/users/[profileId]`
-- profile visibility control with `public` / `private` enforcement
+- shared layout / feedback / data-display primitives
+- Supabase browser/server client foundation
+- SSR-friendly auth/session foundation
+- baseline owner-based authorization and RLS for profiles, decks, collections, and matches
+- protected and public profile surfaces
+- catalog read-side:
+  - `/catalog`
+  - `/catalog/[cardKey]`
+  - `/catalog/printings/[printingKey]`
+  - `/catalog/products/[productKey]`
+- importer stack:
+  - tracked `import_sources` / `import_jobs`
+  - raw import
+  - normalization
+  - manual review queue
+  - explicit publication into catalog truth
+- published wave-1 catalog content with:
+  - products
+  - card entities
+  - printings
+  - legality/restriction data
+  - keyword/mechanics data
+- deck foundation:
+  - deck list at `/decks`
+  - create deck flow at `/decks/create`
+  - deck builder at `/decks/[deckId]`
+  - entity-based deck composition
+  - add/remove/quantity controls
+  - draft state + autosave
+  - metadata editing
+- importer/runtime checkpoint scripts and focused review docs
 - linting, formatting, typecheck, and pre-commit checks
 
 Not implemented yet:
 
-- importer and write-heavy catalog flows
-- deck builder writes
-- legality engine features
-- gameplay features
-- fine-grained authorization, social features, and broader account management
+- deck validation rules and deck legality UX
+- collection/binder product flow
+- social product workflows
+- match history product workflows
+- gameplay engine and effect system
+- advanced sharing/visibility authorization beyond the baseline owner model
+
+Developer-only importer support includes the local JSON entrypoint and the
+persisted pipeline runtime path:
+
+- `corepack pnpm importer:dev-json -- <fixture>`
+- `corepack pnpm pipeline:dev-json -- <fixture>`

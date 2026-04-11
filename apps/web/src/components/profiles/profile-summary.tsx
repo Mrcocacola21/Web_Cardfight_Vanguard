@@ -21,7 +21,7 @@ export function ProfileSummary({
   description,
 }: ProfileSummaryProps) {
   return (
-    <Card className="border-white/50 bg-card/95 shadow-lg shadow-black/5">
+    <Card>
       <CardHeader className="gap-3">
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{profile.visibility}</Badge>

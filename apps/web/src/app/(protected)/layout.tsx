@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 
-import { AuthStatusCard } from '@/components/auth/auth-status-card'
+import { ErrorState } from '@/components/feedback'
+import { PageContainer } from '@/components/layout'
+import { ProtectedAppShell } from '@/components/shell/protected-app-shell'
 import { requireProtectedRouteAccess } from '@/features/auth/server/route-guards'
 
 interface ProtectedLayoutProps {
@@ -14,16 +16,24 @@ export default async function ProtectedLayout({
 
   if (accessState.kind === 'error') {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <AuthStatusCard
+      <PageContainer
+        as="main"
+        size="default"
+        className="flex min-h-screen items-center py-14"
+      >
+        <ErrorState
           title="Protected route is unavailable"
           description={accessState.message}
           actionLabel="Back home"
           actionHref="/"
         />
-      </main>
+      </PageContainer>
     )
   }
 
-  return children
+  return (
+    <ProtectedAppShell authUser={accessState.user}>
+      {children}
+    </ProtectedAppShell>
+  )
 }

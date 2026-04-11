@@ -50,7 +50,7 @@ describe('profiles repository', () => {
       {
         assert(query) {
           expect(query.schema).toBe('user_data')
-          expect(query.table).toBe('profiles')
+          expect(query.table).toBe('public_profiles')
           expect(query.cardinality).toBe('maybeSingle')
           expect(query.filters).toEqual([
             {
@@ -58,23 +58,14 @@ describe('profiles repository', () => {
               column: 'id',
               value: 'profile-public-1',
             },
-            {
-              type: 'eq',
-              column: 'visibility',
-              value: 'public',
-            },
           ])
         },
         response: {
           data: {
             id: 'profile-public-1',
-            username: null,
             display_name: 'Azure Pilot',
             bio: 'Public pilot bio.',
             avatar_url: 'https://images.example/avatar.png',
-            visibility: 'public',
-            created_at: '2026-04-08T00:00:00.000Z',
-            updated_at: '2026-04-08T01:00:00.000Z',
           },
           error: null,
         },
@@ -102,18 +93,13 @@ describe('profiles repository', () => {
       {
         assert(query) {
           expect(query.schema).toBe('user_data')
-          expect(query.table).toBe('profiles')
+          expect(query.table).toBe('public_profiles')
           expect(query.cardinality).toBe('maybeSingle')
           expect(query.filters).toEqual([
             {
               type: 'eq',
               column: 'id',
               value: 'profile-missing',
-            },
-            {
-              type: 'eq',
-              column: 'visibility',
-              value: 'public',
             },
           ])
         },

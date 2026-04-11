@@ -5,9 +5,10 @@ export interface MockQueryInvocation {
   readonly table: string
   readonly operation: 'select' | 'insert' | 'update' | 'upsert' | 'delete'
   readonly select: string | null
+  readonly count: 'exact' | 'planned' | 'estimated' | null
   readonly values: unknown
   readonly filters: readonly {
-    readonly type: 'eq' | 'in'
+    readonly type: 'eq' | 'in' | 'ilike'
     readonly column: string
     readonly value: unknown
   }[]
@@ -15,6 +16,10 @@ export interface MockQueryInvocation {
     readonly column: string
     readonly ascending: boolean
   }[]
+  readonly range: {
+    readonly from: number
+    readonly to: number
+  } | null
   readonly onConflict: string | null
   readonly cardinality: 'many' | 'single' | 'maybeSingle'
 }
@@ -22,6 +27,7 @@ export interface MockQueryInvocation {
 export interface MockQueryResponse {
   readonly data: unknown
   readonly error: unknown
+  readonly count?: number | null
 }
 
 interface MockStep {
@@ -33,9 +39,11 @@ class MockQueryBuilder {
   private readonly filters: MockQueryInvocation['filters'] = []
   private readonly orders: MockQueryInvocation['orders'] = []
   private selectClause: string | null = null
+  private count: MockQueryInvocation['count'] = null
   private values: unknown = null
   private onConflict: string | null = null
   private operation: MockQueryInvocation['operation'] = 'select'
+  private rangeValues: MockQueryInvocation['range'] = null
 
   constructor(
     private readonly schemaName: string,
@@ -45,8 +53,14 @@ class MockQueryBuilder {
     ) => MockQueryResponse | Promise<MockQueryResponse>,
   ) {}
 
-  select(select: string) {
+  select(
+    select: string,
+    options?: {
+      count?: MockQueryInvocation['count']
+    },
+  ) {
     this.selectClause = select
+    this.count = options?.count ?? null
     return this
   }
 
@@ -68,11 +82,28 @@ class MockQueryBuilder {
     return this
   }
 
+  ilike(column: string, value: string) {
+    ;(this.filters as Array<(typeof this.filters)[number]>).push({
+      type: 'ilike',
+      column,
+      value,
+    })
+    return this
+  }
+
   order(column: string, options?: { ascending?: boolean }) {
     ;(this.orders as Array<(typeof this.orders)[number]>).push({
       column,
       ascending: options?.ascending ?? true,
     })
+    return this
+  }
+
+  range(from: number, to: number) {
+    this.rangeValues = {
+      from,
+      to,
+    }
     return this
   }
 
@@ -124,9 +155,11 @@ class MockQueryBuilder {
         table: this.tableName,
         operation: this.operation,
         select: this.selectClause,
+        count: this.count,
         values: this.values,
         filters: this.filters,
         orders: this.orders,
+        range: this.rangeValues,
         onConflict: this.onConflict,
         cardinality,
       }),

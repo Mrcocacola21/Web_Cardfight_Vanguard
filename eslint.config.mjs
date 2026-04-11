@@ -104,6 +104,27 @@ export default defineConfig([
     },
   },
   {
+    files: ['scripts/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        projectService: false,
+        project: ['./tsconfig.eslint.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  {
     files: ['**/*.{js,mjs,cjs}'],
     languageOptions: {
       globals: {
@@ -195,7 +216,6 @@ export default defineConfig([
     files: ['packages/importer/**/*.{ts,tsx,js,jsx}'],
     rules: {
       'no-restricted-imports': restrictWorkspaceImports([
-        '@web-vg/db',
         '@web-vg/decks',
         '@web-vg/legality',
         '@web-vg/rules-core',

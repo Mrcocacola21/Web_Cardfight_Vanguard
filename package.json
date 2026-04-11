@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "corepack pnpm --filter @web-vg/web dev",
     "build": "corepack pnpm --filter @web-vg/web build",
+    "importer:dev-json": "corepack pnpm --filter @web-vg/importer run dev:json --",
+    "pipeline:dev-json": "corepack pnpm dlx tsx ./scripts/run-persisted-pipeline.ts --",
     "db:seed": "corepack pnpm --filter @web-vg/db run seed",
     "db:types:generate": "corepack pnpm --filter @web-vg/db run types:generate",
     "lint": "corepack pnpm -r --if-present run lint",
@@ -17,6 +19,7 @@
     "test": "corepack pnpm test:unit && corepack pnpm test:web",
     "test:auth": "corepack pnpm --filter @web-vg/web run test && node apps/web/scripts/test-auth-e2e.mjs",
     "test:auth:e2e": "node apps/web/scripts/test-auth-e2e.mjs",
+    "test:decks:e2e": "node apps/web/scripts/test-decks-e2e.mjs",
     "test:db": "corepack pnpm --filter @web-vg/db run test:db && corepack pnpm --filter @web-vg/db run test",
     "test:unit": "corepack pnpm --filter @web-vg/db --filter @web-vg/shared --filter @web-vg/catalog --filter @web-vg/decks --filter @web-vg/importer --filter @web-vg/legality --filter @web-vg/rules-core --filter @web-vg/social -r run test",
     "test:web": "corepack pnpm --filter @web-vg/web run test",

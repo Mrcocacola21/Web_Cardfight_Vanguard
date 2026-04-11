@@ -1,7 +1,10 @@
 import { notFound } from 'next/navigation'
 
-import { DeckDetailView } from '@/components/decks/deck-detail-view'
-import { DeckStatusCard } from '@/components/decks/deck-status-card'
+import { DeckBuilderView } from '@/components/decks/deck-builder-view'
+import { EmptyState, ErrorState } from '@/components/feedback'
+import { PageContainer } from '@/components/layout'
+import { resolveDeckBuilderQuery } from '@/features/decks/deck-builder-query'
+import { listDeckBuilderCatalogCards } from '@/features/decks/server/deck-builder-read'
 import { getDeckDetailById } from '@/features/decks/server/deck-read'
 import { getCurrentProfileState } from '@/features/profiles/server/profile-read'
 
@@ -9,15 +12,25 @@ interface DeckDetailPageProps {
   readonly params: Promise<{
     deckId: string
   }>
+  readonly searchParams?: Promise<
+    Record<string, string | readonly string[] | undefined>
+  >
 }
 
-export default async function DeckDetailPage({ params }: DeckDetailPageProps) {
+export default async function DeckDetailPage({
+  params,
+  searchParams,
+}: DeckDetailPageProps) {
   const profileState = await getCurrentProfileState()
 
   if (profileState.kind !== 'ready') {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <DeckStatusCard
+      <PageContainer
+        as="section"
+        size="default"
+        className="flex min-h-[calc(100vh-10rem)] items-center py-8"
+      >
+        <ErrorState
           title="Deck detail is unavailable"
           description={
             profileState.kind === 'error'
@@ -27,20 +40,24 @@ export default async function DeckDetailPage({ params }: DeckDetailPageProps) {
           actionLabel="Back home"
           actionHref="/"
         />
-      </main>
+      </PageContainer>
     )
   }
 
   if (!profileState.profile) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <DeckStatusCard
+      <PageContainer
+        as="section"
+        size="default"
+        className="flex min-h-[calc(100vh-10rem)] items-center py-8"
+      >
+        <EmptyState
           title="No profile row for deck ownership"
           description="The authenticated session exists, but no persisted profile row is available yet, so this deck detail route cannot resolve profile-owned data."
           actionLabel="Open profile"
           actionHref="/profile"
         />
-      </main>
+      </PageContainer>
     )
   }
 
@@ -49,14 +66,18 @@ export default async function DeckDetailPage({ params }: DeckDetailPageProps) {
 
   if (!deckResult.ok) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-14 md:px-10">
-        <DeckStatusCard
+      <PageContainer
+        as="section"
+        size="default"
+        className="flex min-h-[calc(100vh-10rem)] items-center py-8"
+      >
+        <ErrorState
           title="Deck detail is unavailable"
           description="The repository-backed deck detail flow failed before the page could compose the current deck record."
           actionLabel="Back to decks"
           actionHref="/decks"
         />
-      </main>
+      </PageContainer>
     )
   }
 
@@ -67,5 +88,22 @@ export default async function DeckDetailPage({ params }: DeckDetailPageProps) {
     notFound()
   }
 
-  return <DeckDetailView deck={deckResult.data} />
+  const query = resolveDeckBuilderQuery((await searchParams) ?? {})
+  const catalogResult = await listDeckBuilderCatalogCards({
+    formatId: deckResult.data.format.id,
+    searchText: query.searchText,
+  })
+
+  return (
+    <DeckBuilderView
+      initialDeck={deckResult.data}
+      catalogCards={catalogResult.ok ? catalogResult.data.items : []}
+      catalogErrorMessage={
+        catalogResult.ok
+          ? null
+          : 'The published catalog cards could not be loaded for this builder session.'
+      }
+      query={query}
+    />
+  )
 }

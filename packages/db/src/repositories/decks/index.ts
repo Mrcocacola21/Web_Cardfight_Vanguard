@@ -13,4 +13,5 @@ export type {
   DeckSectionCountsRecord,
   DeckSectionKey,
   DeckVersionRecord,
+  SaveDeckInput,
 } from './decks.types'

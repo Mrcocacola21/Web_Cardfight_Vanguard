@@ -53,6 +53,8 @@ describe('deck mappers', () => {
         format_id: 'standard',
         title: 'Azure Test Deck',
         description: null,
+        tags: ['tempo'],
+        is_favorite: true,
         visibility: 'private',
         archived_at: null,
         created_at: '2026-04-08T00:00:00.000Z',
@@ -64,6 +66,8 @@ describe('deck mappers', () => {
 
     expect(deck.currentVersion?.cards[0]?.cardEntityId).toBe('card-entity-1')
     expect(deck.formatId).toBe('standard')
+    expect(deck.tags).toEqual(['tempo'])
+    expect(deck.isFavorite).toBe(true)
   })
 
   it('builds section counts and list summaries without legality assumptions', () => {
@@ -91,6 +95,8 @@ describe('deck mappers', () => {
         format_id: 'standard',
         title: 'Azure Test Deck',
         description: 'Server-side read model',
+        tags: ['ranked'],
+        is_favorite: false,
         visibility: 'private',
         archived_at: null,
         created_at: '2026-04-08T00:00:00.000Z',
@@ -114,6 +120,8 @@ describe('deck mappers', () => {
     expect(summary.totalCards).toBe(50)
     expect(summary.sectionCounts.ride).toBe(4)
     expect(summary.sectionCounts.g).toBe(0)
+    expect(summary.tags).toEqual(['ranked'])
+    expect(summary.isFavorite).toBe(false)
   })
 
   it('builds detail sections from canonical card summaries', () => {

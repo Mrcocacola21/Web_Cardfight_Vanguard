@@ -93,14 +93,7 @@ export async function signInAction(
   })
 
   if (!profileResult.ok) {
-    await client.auth.signOut()
-
-    return {
-      status: 'error',
-      message:
-        'Sign-in succeeded, but the application profile could not be prepared. The session was cleared; sign in again to retry.',
-      fieldErrors: {},
-    }
+    redirect('/profile')
   }
 
   redirect('/profile')
@@ -188,14 +181,13 @@ export async function signUpAction(
 
   if (!profileResult.ok) {
     if (data.session) {
-      await client.auth.signOut()
+      redirect('/profile')
     }
 
     return {
       status: 'error',
-      message: data.session
-        ? 'Account created, but profile initialization failed. The session was cleared; sign in again to retry.'
-        : 'Account created, but profile initialization failed. After confirming your email, sign in to retry profile setup.',
+      message:
+        'Account created, but profile initialization failed. After confirming your email, sign in to retry profile setup.',
       fieldErrors: {},
     }
   }

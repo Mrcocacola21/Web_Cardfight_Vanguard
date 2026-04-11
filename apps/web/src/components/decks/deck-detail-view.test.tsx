@@ -12,6 +12,8 @@ describe('DeckDetailView', () => {
           ownerProfileId: 'profile-1',
           title: 'Azure Standard Deck',
           description: 'Current persisted Standard list.',
+          tags: [],
+          isFavorite: false,
           visibility: 'private',
           archivedAt: null,
           createdAt: '2026-04-08T00:00:00.000Z',

@@ -34,6 +34,23 @@ Current foundation:
 - `@/*` alias mapped to `src/*`.
 - Tailwind CSS v4;
 - shadcn/ui with app-local generated components in `src/components/ui`.
+- dark-first theme foundation in `src/app/globals.css`:
+  - CSS variable tokens are the source of truth for color, radius, and base typography
+  - Tailwind utilities resolve through semantic tokens such as `background`, `card`, `primary`, `muted`, and `success`
+  - light-theme switching is intentionally not implemented yet
+- layout system foundation in `src/components/layout`:
+  - `PageContainer` centralizes content widths and horizontal gutters
+  - `DashboardPageLayout` is the standard list/panel pattern
+  - `DetailPageLayout` is the standard header + main + optional aside pattern
+  - auth, profile, public profile, catalog, and decks screens now consume the shared layout primitives
+- shared feedback components in `src/components/feedback`:
+  - `LoadingState`, `EmptyState`, `ErrorState`, and `SuccessState`
+  - route fallbacks and compact form-level success/error messages now use the same feedback surface
+  - feedback components stay presentation-only and do not own retry or business logic
+- shared data-display components in `src/components/data-display`:
+  - `ItemCard`, `StatBlock`, and `StatGrid` standardize record summaries and compact metrics
+  - `SearchBar`, `FilterBar`, `FilterSelect`, and `FilterChip` stay presentational and do not own query-state orchestration
+  - badge usage remains semantic through shared variants such as `secondary`, `accent`, `success`, `warning`, and `outline`
 - Supabase integration foundation in `src/lib/supabase`:
   - `browser.ts` for client-side usage
   - `server.ts` for App Router server-side usage
@@ -42,7 +59,23 @@ Current foundation:
 - initial server-side catalog read flow:
   - `/catalog`
   - `/catalog/[cardKey]`
-  - data loads through `@web-vg/db` repositories, not UI-level queries
+  - `/catalog/printings/[printingKey]`
+  - `/catalog/products/[productKey]`
+  - `/catalog` is now a real entity-centric card list page
+  - supported list capabilities: text search, format-aware `era` / `nation` / `clan` / `type` / `trigger` / `rarity` / `set` filters, a small sort set, and URL-aware page pagination
+  - search params are interpreted through `@web-vg/catalog`, then loaded through `@web-vg/db` repositories
+  - format-aware filtering is first-class: `standard` keeps nation-led filtering, while `v-premium` and `premium` switch the active identity filter toward clans
+  - `era` filters map to product-family lineage, while `rarity` and `set` stay printing-derived and then flow back to canonical card entities
+  - data loads through repositories, not UI-level queries
+  - printings remain detail-level data; the list route does not collapse card entities and printings into one surface
+  - `/catalog/[cardKey]` is now a canonical-card-centric detail page
+  - detail sections currently cover core stats, rules references, printings, legality facts, and related products
+  - the detail route stays entity-first; printings remain subordinate concrete editions rather than becoming the page identity
+  - `/catalog/printings/[printingKey]` is now an explicit printing-centric detail page
+  - printing detail shows one concrete edition with release metadata, a canonical card link, and sibling printings of the same card
+  - `/catalog/products/[productKey]` is now a product-centric release page
+  - product detail currently covers release info and a printing list with links to both printing detail and canonical card detail
+  - the product route stays release-first; printings remain subordinate concrete editions, and canonical cards stay linked from those printings
 - initial profile read/write foundation:
   - `/profile`
   - protected own-profile page
@@ -69,6 +102,11 @@ Current foundation:
   - minimal sign-out action from the profile page
   - authenticated users are redirected away from auth pages to `/profile`
   - registration auto-creates the application profile baseline
+- protected application shell baseline:
+  - applies to the protected route group
+  - desktop sidebar + top header + mobile drawer navigation
+  - shared navigation items: `Home`, `Catalog`, `Decks`, `Profile`
+  - shell stays UI-only and does not load repository/business data
 - initial decks read-side foundation:
   - `/decks`
   - `/decks/[deckId]`
@@ -76,10 +114,15 @@ Current foundation:
   - deck detail with explicit format attachment and sectioned composition
   - no builder writes or legality/gameplay coupling yet
 - route protection baseline:
-  - public routes: `/`, `/catalog`, `/catalog/[cardKey]`, `/login`, `/register`, `/auth/callback`, `/users/[profileId]`
+  - public routes: `/`, `/catalog`, `/catalog/[cardKey]`, `/catalog/printings/[printingKey]`, `/catalog/products/[productKey]`, `/login`, `/register`, `/auth/callback`, `/users/[profileId]`
   - protected routes: `/profile`, `/decks`, `/decks/[deckId]`
   - protection lives in App Router route-group layouts backed by server-side auth guards
   - unauthenticated access redirects to `/login`
+- baseline owner-based authorization and RLS:
+  - `user_data.profiles` stay owner-readable/writable at the base table
+  - public profile reads resolve through a public-safe projection instead of exposing raw profile rows
+  - `decks`, `collections`, `matches`, and their subordinate rows are owner-only by default
+  - advanced sharing and friend-based visibility are still intentionally deferred
 
 Environment:
 
@@ -93,7 +136,7 @@ Environment:
 Intentionally not implemented yet:
 
 - write-side Supabase feature flows;
-- per-resource authorization;
+- advanced sharing and richer per-resource visibility;
 - friends-only profile visibility;
 - password reset flows;
 - magic-link and multi-provider auth;
