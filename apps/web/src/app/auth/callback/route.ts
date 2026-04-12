@@ -1,3 +1,4 @@
+import { createProfilesRepository } from '@web-vg/db'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import {
@@ -5,7 +6,7 @@ import {
   createInitialProfileDraftFromAuthUser,
   getAuthCallbackErrorRedirectHref,
 } from '@/features/auth/server/auth-callback'
-import { ensureProfileForAuthUser } from '@/features/profiles/server/profile-provisioning'
+import { ensureProfileForAuthUserUseCase } from '@/features/profiles/application/profile-provisioning-use-cases'
 import { createSupabaseRouteHandlerClient } from '@/lib/supabase/route-handler'
 
 export async function GET(request: NextRequest) {
@@ -44,14 +45,18 @@ export async function GET(request: NextRequest) {
     },
     async ensureProfile(user) {
       const initialProfileDraft = createInitialProfileDraftFromAuthUser(user)
-      const profileResult = await ensureProfileForAuthUser({
-        client,
-        authUserId: user.id,
-        displayName: initialProfileDraft.displayName,
-        avatarUrl: initialProfileDraft.avatarUrl,
-        bio: initialProfileDraft.bio,
-        visibility: initialProfileDraft.visibility,
-      })
+      const profileResult = await ensureProfileForAuthUserUseCase(
+        {
+          repository: createProfilesRepository(client),
+        },
+        {
+          authUserId: user.id,
+          displayName: initialProfileDraft.displayName,
+          avatarUrl: initialProfileDraft.avatarUrl,
+          bio: initialProfileDraft.bio,
+          visibility: initialProfileDraft.visibility,
+        },
+      )
 
       return profileResult.ok
     },

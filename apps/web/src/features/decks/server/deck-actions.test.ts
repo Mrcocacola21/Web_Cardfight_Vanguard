@@ -1,12 +1,12 @@
-import type { RepositoryResult } from '@web-vg/db'
+import { createDeck, type Deck } from '@web-vg/decks'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { initialDeckCreateFormState } from '@/features/decks/server/deck-create-form-state'
 
 const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   getCurrentAuthState: vi.fn(),
-  createProfilesRepository: vi.fn(),
-  createDecksRepository: vi.fn(),
+  createDeckWriteRepository: vi.fn(),
   redirect: vi.fn(),
   revalidatePath: vi.fn(),
 }))
@@ -19,9 +19,8 @@ vi.mock('@/features/auth/server/auth-session', () => ({
   getCurrentAuthState: mocks.getCurrentAuthState,
 }))
 
-vi.mock('@web-vg/db', () => ({
-  createProfilesRepository: mocks.createProfilesRepository,
-  createDecksRepository: mocks.createDecksRepository,
+vi.mock('@/features/decks/infrastructure/deck-write-repository', () => ({
+  createDeckWriteRepository: mocks.createDeckWriteRepository,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -40,16 +39,6 @@ import {
 
 describe('deck-actions', () => {
   const client = { auth: {} }
-  const profile = {
-    id: 'profile-1',
-    username: 'azure_pilot',
-    displayName: 'Azure Pilot',
-    bio: null,
-    avatarUrl: null,
-    visibility: 'private',
-    createdAt: '2026-04-08T00:00:00.000Z',
-    updatedAt: '2026-04-08T00:00:00.000Z',
-  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -61,35 +50,32 @@ describe('deck-actions', () => {
         email: 'azure@example.com',
       },
     })
-    mocks.createProfilesRepository.mockReturnValue({
-      getProfileByAuthUserId: vi.fn().mockResolvedValue({
-        ok: true,
-        data: profile,
-      } satisfies RepositoryResult<typeof profile | null>),
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(createRepository())
   })
 
   it('creates an empty Standard deck and redirects into its detail page', async () => {
-    const createDeck = vi.fn().mockResolvedValue({
+    const createDeckRecord = vi.fn().mockResolvedValue({
       ok: true,
       data: {
         id: 'deck-new',
       },
     })
 
-    mocks.createDecksRepository.mockReturnValue({
-      createDeck,
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(
+      createRepository({
+        createDeck: createDeckRecord,
+      }),
+    )
 
     const formData = new FormData()
     formData.set('formatId', 'standard')
 
     await createDeckAction(initialDeckCreateFormState, formData)
 
-    expect(createDeck).toHaveBeenCalledWith({
+    expect(createDeckRecord).toHaveBeenCalledWith({
       ownerProfileId: 'profile-1',
       formatId: 'standard',
-      title: 'Untitled Deck',
+      name: 'Untitled Deck',
       description: null,
       tags: [],
       isFavorite: false,
@@ -100,26 +86,28 @@ describe('deck-actions', () => {
   })
 
   it('creates an empty deck in the selected format', async () => {
-    const createDeck = vi.fn().mockResolvedValue({
+    const createDeckRecord = vi.fn().mockResolvedValue({
       ok: true,
       data: {
         id: 'deck-premium',
       },
     })
 
-    mocks.createDecksRepository.mockReturnValue({
-      createDeck,
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(
+      createRepository({
+        createDeck: createDeckRecord,
+      }),
+    )
 
     const formData = new FormData()
     formData.set('formatId', 'premium')
 
     await createDeckAction(initialDeckCreateFormState, formData)
 
-    expect(createDeck).toHaveBeenCalledWith({
+    expect(createDeckRecord).toHaveBeenCalledWith({
       ownerProfileId: 'profile-1',
       formatId: 'premium',
-      title: 'Untitled Deck',
+      name: 'Untitled Deck',
       description: null,
       tags: [],
       isFavorite: false,
@@ -129,18 +117,20 @@ describe('deck-actions', () => {
   })
 
   it('returns a validation error for unsupported formats', async () => {
-    const createDeck = vi.fn()
+    const createDeckRecord = vi.fn()
 
-    mocks.createDecksRepository.mockReturnValue({
-      createDeck,
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(
+      createRepository({
+        createDeck: createDeckRecord,
+      }),
+    )
 
     const formData = new FormData()
     formData.set('formatId', 'unsupported')
 
     const result = await createDeckAction(initialDeckCreateFormState, formData)
 
-    expect(createDeck).not.toHaveBeenCalled()
+    expect(createDeckRecord).not.toHaveBeenCalled()
     expect(result).toEqual({
       status: 'error',
       message: 'Select one of the supported formats before creating a deck.',
@@ -153,46 +143,35 @@ describe('deck-actions', () => {
   it('duplicates the current deck composition under a copied title', async () => {
     const getDeckById = vi.fn().mockResolvedValue({
       ok: true,
-      data: {
-        id: 'deck-1',
-        ownerProfileId: 'profile-1',
-        formatId: 'standard',
-        title: 'Azure Bastion',
-        description: 'Current list.',
-        tags: ['tempo'],
-        isFavorite: true,
-        visibility: 'private',
-        archivedAt: null,
-        createdAt: '2026-04-08T00:00:00.000Z',
-        updatedAt: '2026-04-08T01:00:00.000Z',
-        currentVersion: {
-          id: 'version-1',
-          deckId: 'deck-1',
-          versionNumber: 1,
-          createdByProfileId: 'profile-1',
-          versionNote: null,
-          createdAt: '2026-04-08T01:00:00.000Z',
+      data: createStoredDeck({
+        deck: createBaseDeck({
+          description: 'Current list.',
+          tags: ['tempo'],
+          isFavorite: true,
           cards: [
             {
-              sectionKey: 'main',
+              section: 'main',
               cardEntityId: 'entity-bastion',
               quantity: 4,
             },
           ],
-        },
-      },
+        }),
+        visibility: 'private',
+      }),
     })
-    const createDeck = vi.fn().mockResolvedValue({
+    const createDeckRecord = vi.fn().mockResolvedValue({
       ok: true,
       data: {
         id: 'deck-copy',
       },
     })
 
-    mocks.createDecksRepository.mockReturnValue({
-      getDeckById,
-      createDeck,
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(
+      createRepository({
+        getDeckById,
+        createDeck: createDeckRecord,
+      }),
+    )
 
     const formData = new FormData()
     formData.set('deckId', 'deck-1')
@@ -200,17 +179,17 @@ describe('deck-actions', () => {
     await duplicateDeckAction(formData)
 
     expect(getDeckById).toHaveBeenCalledWith('deck-1')
-    expect(createDeck).toHaveBeenCalledWith({
+    expect(createDeckRecord).toHaveBeenCalledWith({
       ownerProfileId: 'profile-1',
       formatId: 'standard',
-      title: 'Azure Bastion (copy)',
+      name: 'Azure Bastion (copy)',
       description: 'Current list.',
       tags: ['tempo'],
       isFavorite: true,
       visibility: 'private',
       cards: [
         {
-          sectionKey: 'main',
+          section: 'main',
           cardEntityId: 'entity-bastion',
           quantity: 4,
         },
@@ -222,28 +201,92 @@ describe('deck-actions', () => {
   it('deletes an owned deck and revalidates list/detail routes', async () => {
     const getDeckById = vi.fn().mockResolvedValue({
       ok: true,
-      data: {
-        id: 'deck-1',
-        ownerProfileId: 'profile-1',
-      },
+      data: createStoredDeck({
+        deck: createBaseDeck(),
+        visibility: 'private',
+      }),
     })
-    const deleteDeck = vi.fn().mockResolvedValue({
+    const deleteDeckRecord = vi.fn().mockResolvedValue({
       ok: true,
       data: undefined,
     })
 
-    mocks.createDecksRepository.mockReturnValue({
-      getDeckById,
-      deleteDeck,
-    })
+    mocks.createDeckWriteRepository.mockReturnValue(
+      createRepository({
+        getDeckById,
+        deleteDeck: deleteDeckRecord,
+      }),
+    )
 
     const formData = new FormData()
     formData.set('deckId', 'deck-1')
 
     await deleteDeckAction(formData)
 
-    expect(deleteDeck).toHaveBeenCalledWith('deck-1')
+    expect(deleteDeckRecord).toHaveBeenCalledWith('deck-1')
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/decks')
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/decks/deck-1')
   })
 })
+
+function createRepository(overrides?: Record<string, unknown>) {
+  return {
+    getOwnerProfileIdByAuthUserId: vi.fn().mockResolvedValue({
+      ok: true,
+      data: 'profile-1',
+    }),
+    getDeckById: vi.fn().mockResolvedValue({
+      ok: true,
+      data: createStoredDeck({
+        deck: createBaseDeck(),
+        visibility: 'private',
+      }),
+    }),
+    getDeckDetailById: vi.fn(),
+    createDeck: vi.fn(),
+    saveDeck: vi.fn(),
+    deleteDeck: vi.fn(),
+    ...overrides,
+  }
+}
+
+function createStoredDeck(input?: {
+  readonly deck?: Deck
+  readonly visibility?: 'private' | 'unlisted' | 'public'
+}) {
+  return {
+    deck: input?.deck ?? createBaseDeck(),
+    visibility: input?.visibility ?? 'private',
+  }
+}
+
+function createBaseDeck(input?: {
+  readonly description?: string | null
+  readonly tags?: readonly string[]
+  readonly isFavorite?: boolean
+  readonly cards?: readonly {
+    readonly section: 'main' | 'ride' | 'g'
+    readonly cardEntityId: string
+    readonly quantity: number
+  }[]
+}): Deck {
+  return createDeck({
+    id: 'deck-1' as never,
+    ownerId: 'profile-1' as never,
+    formatId: 'standard' as never,
+    name: 'Azure Bastion',
+    description: input?.description ?? null,
+    tags: input?.tags ?? ['tempo'],
+    isFavorite: input?.isFavorite ?? false,
+    createdAt: '2026-04-08T00:00:00.000Z',
+    updatedAt: '2026-04-08T01:00:00.000Z',
+    currentVersionId: 'version-1' as never,
+    revision: 1,
+    cards:
+      input?.cards?.map((card) => ({
+        section: card.section,
+        cardEntityId: card.cardEntityId as never,
+        quantity: card.quantity,
+      })) ?? [],
+  })
+}

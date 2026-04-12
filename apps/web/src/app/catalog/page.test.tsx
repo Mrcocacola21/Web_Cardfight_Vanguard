@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import type { CatalogQuery } from '@web-vg/catalog'
-import type { CatalogCardEntityListRecord, RepositoryResult } from '@web-vg/db'
+import type { RepositoryResult } from '@web-vg/db'
+import type { CatalogCardEntityListRecord } from '@web-vg/db/repositories/catalog'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({

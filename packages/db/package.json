@@ -4,7 +4,12 @@
   "version": "0.0.0",
   "description": "Database and persistence foundation scaffold for the Cardfight!! Vanguard platform",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./repositories": "./src/repositories/index.ts",
+    "./repositories/catalog": "./src/repositories/catalog/index.ts",
+    "./repositories/decks": "./src/repositories/decks/index.ts",
+    "./repositories/importer": "./src/repositories/importer/index.ts",
+    "./repositories/profiles": "./src/repositories/profiles/index.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -1,7 +1,7 @@
 import type {
   CatalogProductDetailRecord,
   CatalogProductPrintingRecord,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/catalog'
 
 export interface CatalogProductSummaryRecord {
   readonly printingCount: number

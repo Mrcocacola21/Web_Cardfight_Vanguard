@@ -5,7 +5,7 @@ import type {
   ImporterRepository,
   ImportJobRecord,
   RawCardPrintingRecord,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import {
   createPayloadFingerprint,

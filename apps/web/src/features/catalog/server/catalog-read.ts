@@ -3,12 +3,11 @@ import {
   normalizeCanonicalCardKey,
   type CatalogQuery,
 } from '@web-vg/catalog'
-import {
-  createCatalogRepository,
-  type CatalogCardEntityListRecord,
-  type CatalogCardPrintingRecord,
-  type RepositoryResult,
-} from '@web-vg/db'
+import { createCatalogRepository, type RepositoryResult } from '@web-vg/db'
+import type {
+  CatalogCardEntityListRecord,
+  CatalogCardPrintingRecord,
+} from '@web-vg/db/repositories/catalog'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type {

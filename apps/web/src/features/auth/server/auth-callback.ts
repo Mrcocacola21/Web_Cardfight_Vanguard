@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import {
   deriveInitialProfileDraft,
   readMetadataDisplayName,
-} from '@/features/profiles/server/profile-provisioning'
+} from '@/features/profiles/application/profile-provisioning-use-cases'
 
 export const defaultPostAuthRedirect = '/profile'
 

@@ -1,9 +1,8 @@
-import {
-  createProfilesRepository,
-  type ProfileRecord,
-  type PublicProfileRecord,
-  type RepositoryResult,
-} from '@web-vg/db'
+import { createProfilesRepository, type RepositoryResult } from '@web-vg/db'
+import type {
+  ProfileRecord,
+  PublicProfileRecord,
+} from '@web-vg/db/repositories/profiles'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getCurrentAuthState } from '@/features/auth/server/auth-session'

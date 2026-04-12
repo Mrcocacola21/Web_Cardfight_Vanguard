@@ -15,10 +15,38 @@ export default defineConfig({
         rootDir,
         '../../packages/catalog/src/index.ts',
       ),
+      '@web-vg/db/repositories': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/index.ts',
+      ),
+      '@web-vg/db/repositories/catalog': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/catalog/index.ts',
+      ),
+      '@web-vg/db/repositories/decks': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/decks/index.ts',
+      ),
+      '@web-vg/db/repositories/importer': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/importer/index.ts',
+      ),
+      '@web-vg/db/repositories/profiles': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/profiles/index.ts',
+      ),
       '@web-vg/db': path.resolve(rootDir, '../../packages/db/src/index.ts'),
+      '@web-vg/deck-validation': path.resolve(
+        rootDir,
+        '../../packages/deck-validation/src/index.ts',
+      ),
       '@web-vg/decks': path.resolve(
         rootDir,
         '../../packages/decks/src/index.ts',
+      ),
+      '@web-vg/legality': path.resolve(
+        rootDir,
+        '../../packages/legality/src/index.ts',
       ),
       '@web-vg/shared': path.resolve(
         rootDir,

@@ -21,6 +21,20 @@
     "paths": {
       "@web-vg/catalog": ["packages/catalog/src/index.ts"],
       "@web-vg/db": ["packages/db/src/index.ts"],
+      "@web-vg/db/repositories": ["packages/db/src/repositories/index.ts"],
+      "@web-vg/db/repositories/catalog": [
+        "packages/db/src/repositories/catalog/index.ts"
+      ],
+      "@web-vg/db/repositories/decks": [
+        "packages/db/src/repositories/decks/index.ts"
+      ],
+      "@web-vg/db/repositories/importer": [
+        "packages/db/src/repositories/importer/index.ts"
+      ],
+      "@web-vg/db/repositories/profiles": [
+        "packages/db/src/repositories/profiles/index.ts"
+      ],
+      "@web-vg/deck-validation": ["packages/deck-validation/src/index.ts"],
       "@web-vg/decks": ["packages/decks/src/index.ts"],
       "@web-vg/importer": ["packages/importer/src/index.ts"],
       "@web-vg/legality": ["packages/legality/src/index.ts"],

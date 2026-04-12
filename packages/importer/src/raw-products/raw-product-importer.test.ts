@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import type { RepositoryResult } from '@web-vg/db'
 import type {
   CardPrintingNormalizationResultRecord,
   CatalogCardEntityNormalizationRecord,
@@ -9,8 +10,7 @@ import type {
   ImportJobRecord,
   ManualReviewItemRecord,
   RawProductRecord,
-  RepositoryResult,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import { createRawProductImporter } from './raw-product-importer'
 

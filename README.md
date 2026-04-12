@@ -3,8 +3,9 @@
 Monorepo for a Cardfight!! Vanguard web client / companion platform.
 
 The repository is no longer just a shell. It now contains a working catalog,
-an importer -> publication content pipeline, baseline auth/RLS, and the first
-real deck builder workflow.
+an importer -> publication content pipeline, baseline auth/RLS, the first
+real deck builder workflow, format-aware deck validation, and an explicit
+application-layer separation across features.
 
 ## Prerequisites
 
@@ -95,7 +96,7 @@ corepack pnpm importer:dev-json -- ./packages/importer/fixtures/dev-json/sample-
 
 - `apps/web` - Next.js frontend app
 - `packages/*` - domain and infrastructure packages
-- `docs/` - product, engineering, and architecture documents
+- `docs/` - product, engineering, architecture, and domain documents
 
 Current package set:
 
@@ -104,6 +105,7 @@ Current package set:
 - `packages/shared`
 - `packages/catalog`
 - `packages/decks`
+- `packages/deck-validation`
 - `packages/importer`
 - `packages/legality`
 - `packages/rules-core`
@@ -180,12 +182,20 @@ Available now:
   - add/remove/quantity controls
   - draft state + autosave
   - metadata editing
+- deck validation:
+  - `packages/deck-validation` with format-aware validation pipeline
+  - common, standard, premium, and V-Premium rule sets
+  - restriction-list validation
+  - validation UI panel in the deck builder
+- application-layer refactoring:
+  - explicit application/use-case layer split from server actions
+  - DTO-to-domain mapping at feature boundaries
+  - extracted authorization helpers
 - importer/runtime checkpoint scripts and focused review docs
 - linting, formatting, typecheck, and pre-commit checks
 
 Not implemented yet:
 
-- deck validation rules and deck legality UX
 - collection/binder product flow
 - social product workflows
 - match history product workflows

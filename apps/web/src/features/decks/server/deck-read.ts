@@ -1,9 +1,8 @@
-import {
-  createDecksRepository,
-  type DeckDetailRecord,
-  type DeckListItemRecord,
-  type RepositoryResult,
-} from '@web-vg/db'
+import { createDecksRepository, type RepositoryResult } from '@web-vg/db'
+import type {
+  DeckDetailRecord,
+  DeckListItemRecord,
+} from '@web-vg/db/repositories/decks'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 

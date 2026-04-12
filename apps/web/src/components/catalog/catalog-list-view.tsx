@@ -6,7 +6,7 @@ import {
   getDefaultCatalogSort,
   type CatalogQuery,
 } from '@web-vg/catalog'
-import type { CatalogCardEntityListRecord } from '@web-vg/db'
+import type { CatalogCardEntityListRecord } from '@web-vg/db/repositories/catalog'
 import { ArrowLeft, ArrowRight, FilterX } from 'lucide-react'
 
 import {

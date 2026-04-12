@@ -1,4 +1,4 @@
-import type { ProfileVisibility } from '@web-vg/db'
+import type { ProfileVisibility } from '@web-vg/db/repositories/profiles'
 
 export interface ProfileDraft {
   readonly displayName: string

@@ -1,14 +1,15 @@
 'use server'
 
+import { createProfilesRepository } from '@web-vg/db'
 import { redirect } from 'next/navigation'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { buildAuthCallbackUrl } from '@/features/auth/server/auth-callback'
 import {
   deriveInitialProfileDraft,
-  ensureProfileForAuthUser,
+  ensureProfileForAuthUserUseCase,
   readMetadataDisplayName,
-} from '@/features/profiles/server/profile-provisioning'
+} from '@/features/profiles/application/profile-provisioning-use-cases'
 
 import { validateSignInDraft, validateSignUpDraft } from './auth-validation'
 import type { AuthFormState } from './auth-form-state'
@@ -83,14 +84,18 @@ export async function signInAction(
     preferredDisplayName: readMetadataDisplayName(data.user.user_metadata),
     email: data.user.email ?? validation.data.email,
   })
-  const profileResult = await ensureProfileForAuthUser({
-    client,
-    authUserId: data.user.id,
-    displayName: initialProfileDraft.displayName,
-    avatarUrl: initialProfileDraft.avatarUrl,
-    bio: initialProfileDraft.bio,
-    visibility: initialProfileDraft.visibility,
-  })
+  const profileResult = await ensureProfileForAuthUserUseCase(
+    {
+      repository: createProfilesRepository(client),
+    },
+    {
+      authUserId: data.user.id,
+      displayName: initialProfileDraft.displayName,
+      avatarUrl: initialProfileDraft.avatarUrl,
+      bio: initialProfileDraft.bio,
+      visibility: initialProfileDraft.visibility,
+    },
+  )
 
   if (!profileResult.ok) {
     redirect('/profile')
@@ -170,14 +175,18 @@ export async function signUpAction(
     preferredDisplayName: validation.data.displayName,
     email: data.user.email ?? validation.data.email,
   })
-  const profileResult = await ensureProfileForAuthUser({
-    client,
-    authUserId: data.user.id,
-    displayName: initialProfileDraft.displayName,
-    avatarUrl: initialProfileDraft.avatarUrl,
-    bio: initialProfileDraft.bio,
-    visibility: initialProfileDraft.visibility,
-  })
+  const profileResult = await ensureProfileForAuthUserUseCase(
+    {
+      repository: createProfilesRepository(client),
+    },
+    {
+      authUserId: data.user.id,
+      displayName: initialProfileDraft.displayName,
+      avatarUrl: initialProfileDraft.avatarUrl,
+      bio: initialProfileDraft.bio,
+      visibility: initialProfileDraft.visibility,
+    },
+  )
 
   if (!profileResult.ok) {
     if (data.session) {

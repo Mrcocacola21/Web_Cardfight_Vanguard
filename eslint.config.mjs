@@ -7,9 +7,13 @@ import tseslint from 'typescript-eslint'
 
 const publicWorkspaceImportPatterns = [
   {
-    group: ['@web-vg/*/*'],
+    group: [
+      '@web-vg/*/*',
+      '!@web-vg/db/repositories',
+      '!@web-vg/db/repositories/*',
+    ],
     message:
-      'Import workspace packages only through their public root entrypoint.',
+      'Import workspace packages only through their public root entrypoint, except documented @web-vg/db repository subpaths.',
   },
   {
     group: ['../**/src', '../**/src/**'],

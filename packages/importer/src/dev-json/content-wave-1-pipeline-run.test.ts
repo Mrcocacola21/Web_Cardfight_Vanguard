@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
+import type { RepositoryResult } from '@web-vg/db'
 import type {
   CardPrintingNormalizationResultRecord,
   CatalogCardEntityNormalizationRecord,
@@ -12,8 +13,7 @@ import type {
   ManualReviewItemRecord,
   RawCardPrintingRecord,
   RawProductRecord,
-  RepositoryResult,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import {
   createDevJsonImportRunner,

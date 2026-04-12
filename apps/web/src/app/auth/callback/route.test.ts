@@ -2,7 +2,8 @@
 
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ProfileProvisioningModule from '@/features/profiles/server/profile-provisioning'
+import type * as DbModule from '@web-vg/db'
+import type * as ProfileProvisioningUseCasesModule from '@/features/profiles/application/profile-provisioning-use-cases'
 
 type CookieWrite = {
   readonly name: string
@@ -30,12 +31,15 @@ type EnsureProfileResponse =
   | {
       readonly ok: true
       readonly data: {
-        readonly id: string
+        readonly profileId: string
       }
     }
   | {
       readonly ok: false
-      readonly error: string
+      readonly error: {
+        readonly code: string
+        readonly message: string
+      }
     }
 
 type CookieAdapter = {
@@ -49,7 +53,8 @@ const mocks = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn<(code: string) => Promise<ExchangeResponse>>(),
   verifyOtp: vi.fn<(input: unknown) => Promise<ExchangeResponse>>(),
   signOut: vi.fn<() => Promise<void>>(),
-  ensureProfileForAuthUser:
+  createProfilesRepository: vi.fn(),
+  ensureProfileForAuthUserUseCase:
     vi.fn<(input: unknown) => Promise<EnsureProfileResponse>>(),
 }))
 
@@ -57,16 +62,28 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: mocks.createServerClient,
 }))
 
-vi.mock('@/features/profiles/server/profile-provisioning', async () => {
-  const actual = await vi.importActual<typeof ProfileProvisioningModule>(
-    '@/features/profiles/server/profile-provisioning',
-  )
+vi.mock('@web-vg/db', async () => {
+  const actual = await vi.importActual<typeof DbModule>('@web-vg/db')
 
   return {
     ...actual,
-    ensureProfileForAuthUser: mocks.ensureProfileForAuthUser,
+    createProfilesRepository: mocks.createProfilesRepository,
   }
 })
+
+vi.mock(
+  '@/features/profiles/application/profile-provisioning-use-cases',
+  async () => {
+    const actual = await vi.importActual<
+      typeof ProfileProvisioningUseCasesModule
+    >('@/features/profiles/application/profile-provisioning-use-cases')
+
+    return {
+      ...actual,
+      ensureProfileForAuthUserUseCase: mocks.ensureProfileForAuthUserUseCase,
+    }
+  },
+)
 
 import { GET } from './route'
 
@@ -75,6 +92,10 @@ describe('GET /auth/callback', () => {
     vi.clearAllMocks()
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321'
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'test-publishable-key'
+    mocks.createProfilesRepository.mockReturnValue({
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    })
 
     mocks.createServerClient.mockImplementation(
       (_url: string, _key: string, options: CookieAdapter) => ({
@@ -125,6 +146,11 @@ describe('GET /auth/callback', () => {
   })
 
   it('exchanges the auth code, ensures the profile, and redirects with session cookies', async () => {
+    const repository = {
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    }
+    mocks.createProfilesRepository.mockReturnValueOnce(repository)
     mocks.exchangeCodeForSession.mockResolvedValueOnce({
       data: {
         user: {
@@ -137,10 +163,10 @@ describe('GET /auth/callback', () => {
       },
       error: null,
     })
-    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+    mocks.ensureProfileForAuthUserUseCase.mockResolvedValueOnce({
       ok: true,
       data: {
-        id: 'profile-1',
+        profileId: 'profile-1',
       },
     })
 
@@ -158,16 +184,18 @@ describe('GET /auth/callback', () => {
     expect(response.headers.get('set-cookie')).toContain(
       'sb-access-token=token',
     )
-    const ensureProfileInput = mocks.ensureProfileForAuthUser.mock.calls[0]?.[0]
-
-    expect(ensureProfileInput).toMatchObject({
-      authUserId: 'auth-user-1',
-      displayName: 'Azure Pilot',
-      avatarUrl: null,
-      bio: null,
-      visibility: 'private',
-    })
-    expect(ensureProfileInput).toHaveProperty('client')
+    expect(mocks.ensureProfileForAuthUserUseCase).toHaveBeenCalledWith(
+      {
+        repository,
+      },
+      {
+        authUserId: 'auth-user-1',
+        displayName: 'Azure Pilot',
+        avatarUrl: null,
+        bio: null,
+        visibility: 'private',
+      },
+    )
   })
 
   it('redirects missing callback parameters to login with an explicit error', async () => {

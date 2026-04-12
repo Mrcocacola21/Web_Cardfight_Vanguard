@@ -1,5 +1,6 @@
 import { normalizeCatalogQuery } from '@web-vg/catalog'
-import type { CatalogCardEntityListRecord, RepositoryResult } from '@web-vg/db'
+import type { RepositoryResult } from '@web-vg/db'
+import type { CatalogCardEntityListRecord } from '@web-vg/db/repositories/catalog'
 
 import { listCatalogCards } from '@/features/catalog/server/catalog-read'
 

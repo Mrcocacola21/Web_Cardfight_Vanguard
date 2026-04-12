@@ -2,11 +2,8 @@ import {
   normalizeProductCanonicalKey,
   productLookupByCanonicalKey,
 } from '@web-vg/catalog'
-import {
-  createCatalogRepository,
-  type CatalogProductPrintingRecord,
-  type RepositoryResult,
-} from '@web-vg/db'
+import { createCatalogRepository, type RepositoryResult } from '@web-vg/db'
+import type { CatalogProductPrintingRecord } from '@web-vg/db/repositories/catalog'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type {

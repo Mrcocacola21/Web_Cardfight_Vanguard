@@ -3,6 +3,7 @@
 import { createProfilesRepository } from '@web-vg/db'
 import { revalidatePath } from 'next/cache'
 
+import { saveCurrentProfileUseCase } from '@/features/profiles/application/profile-management-use-cases'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getCurrentAuthState } from '@/features/auth/server/auth-session'
 
@@ -45,14 +46,18 @@ export async function saveCurrentProfileAction(
     }
   }
 
-  const repository = createProfilesRepository(client)
-  const result = await repository.upsertProfileByAuthUserId({
-    authUserId: authState.user.id,
-    displayName: validation.data.displayName,
-    avatarUrl: validation.data.avatarUrl,
-    bio: validation.data.bio,
-    visibility: validation.data.visibility,
-  })
+  const result = await saveCurrentProfileUseCase(
+    {
+      repository: createProfilesRepository(client),
+    },
+    {
+      authUserId: authState.user.id,
+      displayName: validation.data.displayName,
+      avatarUrl: validation.data.avatarUrl,
+      bio: validation.data.bio,
+      visibility: validation.data.visibility,
+    },
+  )
 
   if (!result.ok) {
     return {
@@ -63,7 +68,7 @@ export async function saveCurrentProfileAction(
   }
 
   revalidatePath('/profile')
-  revalidatePath(`/users/${result.data.id}`)
+  revalidatePath(`/users/${result.data.profileId}`)
 
   return {
     status: 'success',

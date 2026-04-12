@@ -3,7 +3,7 @@ import type {
   ImportJobRecord,
   RawCardPrintingRecord,
   RawProductRecord,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import {
   createPayloadFingerprint,

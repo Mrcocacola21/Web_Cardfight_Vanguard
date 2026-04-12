@@ -2,7 +2,7 @@ import type {
   CatalogCardEntityRecord,
   CatalogCardLegalityRecord,
   CatalogCardPrintingRecord,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/catalog'
 
 export interface CatalogCardRulesRecord {
   readonly effectReferences: readonly string[]

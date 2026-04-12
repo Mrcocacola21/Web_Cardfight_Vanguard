@@ -1,8 +1,5 @@
-import {
-  createProfilesRepository,
-  type ProfileRecord,
-  type RepositoryResult,
-} from '@web-vg/db'
+import { createProfilesRepository, type RepositoryResult } from '@web-vg/db'
+import type { ProfileRecord } from '@web-vg/db/repositories/profiles'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import {

@@ -1,4 +1,7 @@
-import type { ProfileRecord, PublicProfileRecord } from '@web-vg/db'
+import type {
+  ProfileRecord,
+  PublicProfileRecord,
+} from '@web-vg/db/repositories/profiles'
 import { describe, expect, it } from 'vitest'
 
 import { resolvePublicProfilePageState } from './public-profile-read'

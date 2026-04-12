@@ -1,5 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { DeckBuilderValidationData } from '@/features/decks/deck-builder-validation'
+import type { FormatId } from '@web-vg/shared'
 
 import { createDeckBuilderDraft } from '@/features/decks/deck-builder-draft'
 import { saveDeckBuilderDraftBackup } from '@/features/decks/deck-builder-draft-storage'
@@ -71,6 +73,106 @@ describe('DeckBuilderView', () => {
     )
 
     expect(screen.getByText(/deck is empty/i)).toBeInTheDocument()
+  })
+
+  it('renders the validation panel from the current draft without a second UI state', () => {
+    render(
+      <DeckBuilderView
+        initialDeck={createEmptyDeckDetail()}
+        catalogCards={[createCatalogCard()]}
+        catalogErrorMessage={null}
+        validationData={createValidationData()}
+        query={{
+          searchText: null,
+        }}
+      />,
+    )
+
+    expect(screen.getByText(/^validation$/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /deck must contain at least one card before validation can succeed/i,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('updates the validation panel after draft mutations in the builder UI', () => {
+    render(
+      <DeckBuilderView
+        initialDeck={createEmptyDeckDetail()}
+        catalogCards={[createCatalogCard()]}
+        catalogErrorMessage={null}
+        validationData={createValidationData()}
+        query={{
+          searchText: null,
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        /deck must contain at least one card before validation can succeed/i,
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /add apex ruler, bastion/i }),
+    )
+
+    expect(
+      screen.queryByText(
+        /deck must contain at least one card before validation can succeed/i,
+      ),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/standard decks must contain a ride deck/i),
+    ).toBeInTheDocument()
+  })
+
+  it('highlights deck rows when validation attributes card-level issues to them', () => {
+    render(
+      <DeckBuilderView
+        initialDeck={createDeckDetail({
+          currentVersion: {
+            ...createDeckDetail().currentVersion,
+            totalCards: 5,
+            sectionCounts: { main: 5, ride: 0, g: 0 },
+            cards: [{ ...createDeckCard(), quantity: 5 }],
+            sections: [
+              {
+                key: 'main',
+                totalCards: 5,
+                cards: [{ ...createDeckCard(), quantity: 5 }],
+              },
+              { key: 'ride', totalCards: 0, cards: [] },
+              { key: 'g', totalCards: 0, cards: [] },
+            ],
+          },
+        })}
+        catalogCards={[createCatalogCard()]}
+        catalogErrorMessage={null}
+        validationData={createValidationData()}
+        query={{
+          searchText: null,
+        }}
+      />,
+    )
+
+    expect(screen.getByText(/5 copies of entity-bastion/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /go to card/i })).toHaveAttribute(
+      'href',
+      '#deck-row-main-entity-bastion',
+    )
+
+    const highlightedDeckRow = screen
+      .getAllByText('Apex Ruler, Bastion')
+      .map((entry) => entry.closest('[data-validation-severity]'))
+      .find((entry) => entry != null)
+
+    expect(highlightedDeckRow).toHaveAttribute(
+      'data-validation-severity',
+      'error',
+    )
   })
 
   it('marks changes as unsaved and autosaves back to saved after add from catalog', async () => {
@@ -635,6 +737,42 @@ function createCatalogCard() {
     baseShield: null,
     keywords: [],
     effectRefs: [],
+  }
+}
+
+function createValidationData(): DeckBuilderValidationData {
+  return {
+    cards: [
+      {
+        cardEntityId: 'entity-bastion',
+        canonicalKey: 'card.apex-ruler-bastion',
+        name: 'Apex Ruler, Bastion',
+        grade: 3,
+        cardType: 'normal-unit',
+        nation: 'Keter Sanctuary',
+        clan: null,
+        triggerType: null,
+        legalInFormats: ['standard', 'v-premium', 'premium'],
+        premiumGDeckEligible: null,
+      },
+    ],
+    restrictionLists: [
+      {
+        formatId: 'standard' as FormatId,
+        version: 'standard-baseline-v1',
+        rules: [],
+      },
+      {
+        formatId: 'v-premium' as FormatId,
+        version: 'v-premium-baseline-v1',
+        rules: [],
+      },
+      {
+        formatId: 'premium' as FormatId,
+        version: 'premium-baseline-v1',
+        rules: [],
+      },
+    ],
   }
 }
 

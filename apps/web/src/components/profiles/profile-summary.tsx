@@ -1,4 +1,4 @@
-import type { ProfileRecord } from '@web-vg/db'
+import type { ProfileRecord } from '@web-vg/db/repositories/profiles'
 
 import { Badge } from '@/components/ui/badge'
 import {

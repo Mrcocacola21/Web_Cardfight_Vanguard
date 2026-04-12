@@ -8,7 +8,7 @@ import type {
   ImporterRepository,
   ImportSourceRecord,
   ManualReviewItemRecord,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import {
   createPayloadFingerprint,

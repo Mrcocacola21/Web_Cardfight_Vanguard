@@ -2,11 +2,17 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CatalogCardEntityRecord, DeckDetailRecord } from '@web-vg/db'
+import type {
+  DeckValidationIssue,
+  DeckValidationIssueSeverity,
+} from '@web-vg/deck-validation'
+import type { CatalogCardEntityRecord } from '@web-vg/db/repositories/catalog'
+import type { DeckDetailRecord } from '@web-vg/db/repositories/decks'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Minus, Plus, Search, Tag, Trash2, X } from 'lucide-react'
 
 import { SearchBar } from '@/components/data-display'
+import { DeckValidationPanel } from '@/components/decks/deck-validation-panel'
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { DashboardPageLayout, PageHeader } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +32,7 @@ import {
   createDeckBuilderDraftSignature,
   getDeckBuilderDraftQuantity,
   updateDeckBuilderDraftMetadata,
+  type DeckBuilderDraftCard,
   type DeckBuilderDraft,
   type DeckBuilderDraftMutationInput,
 } from '@/features/decks/deck-builder-draft'
@@ -37,10 +44,17 @@ import {
 import { DECK_BUILDER_MAX_COPIES } from '@/features/decks/deck-builder-limits'
 import { supportedDeckFormats } from '@/features/decks/deck-format-options'
 import {
+  createEmptyDeckBuilderValidationData,
+  createDeckBuilderValidationCardNameMap,
+  type DeckBuilderValidationData,
+  validateDeckBuilderDraft,
+} from '@/features/decks/deck-builder-validation'
+import {
   buildDeckBuilderHref,
   type DeckBuilderQuery,
 } from '@/features/decks/deck-builder-query'
 import { saveDeckDraftAction } from '@/features/decks/server/deck-builder-actions'
+import { cn } from '@/lib/utils'
 
 const autosaveDelayMs = 800
 
@@ -50,6 +64,7 @@ interface DeckBuilderViewProps {
   readonly initialDeck: DeckDetailRecord
   readonly catalogCards: readonly CatalogCardEntityRecord[]
   readonly catalogErrorMessage: string | null
+  readonly validationData?: DeckBuilderValidationData
   readonly query: DeckBuilderQuery
 }
 
@@ -57,6 +72,7 @@ export function DeckBuilderView({
   initialDeck,
   catalogCards,
   catalogErrorMessage,
+  validationData = createEmptyDeckBuilderValidationData(),
   query,
 }: DeckBuilderViewProps) {
   const router = useRouter()
@@ -86,6 +102,22 @@ export function DeckBuilderView({
   const currentFormatOption =
     supportedDeckFormats.find((format) => format.id === draft.formatId) ??
     supportedDeckFormats[0]
+  const validation = useMemo(
+    () => validateDeckBuilderDraft(draft, validationData),
+    [draft, validationData],
+  )
+  const validationCardNamesById = useMemo(
+    () => createDeckBuilderValidationCardNameMap(draft, validationData),
+    [draft, validationData],
+  )
+  const rowValidationSummaryByKey = useMemo(
+    () => createRowValidationSummaryByKey(draft.cards, validation.issues),
+    [draft.cards, validation.issues],
+  )
+  const validationRowAnchorIndex = useMemo(
+    () => createValidationRowAnchorIndex(draft.cards),
+    [draft.cards],
+  )
   const catalogCardsWithCounts = useMemo(
     () =>
       catalogCards.map((card) => ({
@@ -358,8 +390,8 @@ export function DeckBuilderView({
           <CardTitle>Deck metadata</CardTitle>
           <CardDescription>
             Metadata stays inside the same draft and autosave pipeline as deck
-            cards. Format changes remain lightweight for now and full
-            format-aware validation still lands in the next phase.
+            cards. Validation reads the same draft beneath this block and does
+            not introduce a competing deck state.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -410,8 +442,9 @@ export function DeckBuilderView({
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">
-                Changing format updates the deck field only. Rule validation
-                follows later and does not run here yet.
+                Changing format updates the draft immediately. Validation
+                re-evaluates against the same draft state rather than waiting on
+                a separate UI model.
               </p>
             </div>
           </div>
@@ -521,14 +554,23 @@ export function DeckBuilderView({
         </CardContent>
       </Card>
 
+      <DeckValidationPanel
+        className="lg:col-span-2"
+        validation={validation}
+        cardNamesById={validationCardNamesById}
+        resolveIssueHref={(issue) =>
+          resolveValidationIssueHref(issue, validationRowAnchorIndex)
+        }
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Catalog</CardTitle>
           <CardDescription>
             Search published card entities for this deck format and add them to
             the current composition. Builder copy counts stop at{' '}
-            {DECK_BUILDER_MAX_COPIES} per canonical card until full validation
-            lands.
+            {DECK_BUILDER_MAX_COPIES} per canonical card as an early guard; the
+            validation panel remains the formal reporting layer.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -641,8 +683,8 @@ export function DeckBuilderView({
           <CardTitle>Current deck</CardTitle>
           <CardDescription>
             Current canonical-card composition for this deck. Changes stay local
-            first, autosave persists the full draft, and builder copy counts use
-            a temporary cap of {DECK_BUILDER_MAX_COPIES} per card.
+            first, autosave persists the full draft, and card rows surface the
+            validation issues already attributed to them.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -654,88 +696,128 @@ export function DeckBuilderView({
             />
           ) : (
             <div className="space-y-3">
-              {draft.cards.map((card) => (
-                <div
-                  key={`${card.sectionKey}-${card.cardEntityId}`}
-                  className="rounded-xl border border-border/70 bg-background-elevated/72 p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">x{card.quantity}</Badge>
-                        {card.quantity >= DECK_BUILDER_MAX_COPIES ? (
-                          <Badge variant="secondary">
-                            Max {DECK_BUILDER_MAX_COPIES}
+              {draft.cards.map((card) => {
+                const rowKey = buildValidationRowKey(
+                  card.sectionKey,
+                  card.cardEntityId,
+                )
+                const rowValidationSummary =
+                  rowValidationSummaryByKey.get(rowKey) ?? null
+
+                return (
+                  <div
+                    key={rowKey}
+                    id={buildValidationRowId(
+                      card.sectionKey,
+                      card.cardEntityId,
+                    )}
+                    data-validation-severity={
+                      rowValidationSummary?.highestSeverity ?? 'none'
+                    }
+                    tabIndex={-1}
+                    className={cn(
+                      'scroll-mt-28 rounded-xl border border-border/70 bg-background-elevated/72 p-3 transition-colors',
+                      getRowValidationClasses(rowValidationSummary),
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">x{card.quantity}</Badge>
+                          {card.quantity >= DECK_BUILDER_MAX_COPIES ? (
+                            <Badge variant="secondary">
+                              Max {DECK_BUILDER_MAX_COPIES}
+                            </Badge>
+                          ) : null}
+                          <Badge variant="outline">
+                            {formatDeckSectionLabel(card.sectionKey)}
                           </Badge>
-                        ) : null}
-                        <Badge variant="outline">
-                          {formatDeckSectionLabel(card.sectionKey)}
-                        </Badge>
-                        <Badge variant="outline">Grade {card.grade}</Badge>
-                        <Badge variant="outline">
-                          {formatCardType(card.cardType)}
-                        </Badge>
+                          <Badge variant="outline">Grade {card.grade}</Badge>
+                          <Badge variant="outline">
+                            {formatCardType(card.cardType)}
+                          </Badge>
+                          {rowValidationSummary?.errorCount ? (
+                            <Badge variant="destructive">
+                              {rowValidationSummary.errorCount} error
+                              {rowValidationSummary.errorCount === 1 ? '' : 's'}
+                            </Badge>
+                          ) : null}
+                          {rowValidationSummary?.warningCount ? (
+                            <Badge variant="warning">
+                              {rowValidationSummary.warningCount} warning
+                              {rowValidationSummary.warningCount === 1
+                                ? ''
+                                : 's'}
+                            </Badge>
+                          ) : null}
+                          {rowValidationSummary?.infoCount ? (
+                            <Badge variant="outline">
+                              {rowValidationSummary.infoCount} info
+                              {rowValidationSummary.infoCount === 1 ? '' : 's'}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-medium text-foreground">
+                            {card.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {card.canonicalKey}
+                          </p>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <p className="font-medium text-foreground">
-                          {card.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {card.canonicalKey}
-                        </p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          onClick={() =>
+                            applyLocalMutation({
+                              cardEntityId: card.cardEntityId,
+                              mutation: 'decrement',
+                              sectionKey: card.sectionKey,
+                            })
+                          }
+                          aria-label={`Decrease ${card.name}`}
+                        >
+                          <Minus className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          disabled={card.quantity >= DECK_BUILDER_MAX_COPIES}
+                          onClick={() =>
+                            applyLocalMutation({
+                              cardEntityId: card.cardEntityId,
+                              mutation: 'increment',
+                              sectionKey: card.sectionKey,
+                            })
+                          }
+                          aria-label={`Increase ${card.name}`}
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon-sm"
+                          onClick={() =>
+                            applyLocalMutation({
+                              cardEntityId: card.cardEntityId,
+                              mutation: 'remove',
+                              sectionKey: card.sectionKey,
+                            })
+                          }
+                          aria-label={`Remove ${card.name}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() =>
-                          applyLocalMutation({
-                            cardEntityId: card.cardEntityId,
-                            mutation: 'decrement',
-                            sectionKey: card.sectionKey,
-                          })
-                        }
-                        aria-label={`Decrease ${card.name}`}
-                      >
-                        <Minus className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        disabled={card.quantity >= DECK_BUILDER_MAX_COPIES}
-                        onClick={() =>
-                          applyLocalMutation({
-                            cardEntityId: card.cardEntityId,
-                            mutation: 'increment',
-                            sectionKey: card.sectionKey,
-                          })
-                        }
-                        aria-label={`Increase ${card.name}`}
-                      >
-                        <Plus className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon-sm"
-                        onClick={() =>
-                          applyLocalMutation({
-                            cardEntityId: card.cardEntityId,
-                            mutation: 'remove',
-                            sectionKey: card.sectionKey,
-                          })
-                        }
-                        aria-label={`Remove ${card.name}`}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -807,4 +889,167 @@ function formatDeckSectionLabel(sectionKey: 'main' | 'ride' | 'g'): string {
   }
 
   return 'Main'
+}
+
+interface ValidationRowAnchorIndex {
+  readonly byCardId: ReadonlyMap<string, string>
+  readonly byCardAndSection: ReadonlyMap<string, string>
+}
+
+interface ValidationRowIssueSummary {
+  readonly highestSeverity: DeckValidationIssueSeverity
+  readonly errorCount: number
+  readonly warningCount: number
+  readonly infoCount: number
+}
+
+function createValidationRowAnchorIndex(
+  cards: readonly DeckBuilderDraftCard[],
+): ValidationRowAnchorIndex {
+  const byCardId = new Map<string, string>()
+  const byCardAndSection = new Map<string, string>()
+
+  for (const card of cards) {
+    const rowId = buildValidationRowId(card.sectionKey, card.cardEntityId)
+
+    if (!byCardId.has(card.cardEntityId)) {
+      byCardId.set(card.cardEntityId, rowId)
+    }
+
+    byCardAndSection.set(
+      buildValidationTargetKey(card.cardEntityId, card.sectionKey),
+      rowId,
+    )
+  }
+
+  return {
+    byCardId,
+    byCardAndSection,
+  }
+}
+
+function resolveValidationIssueHref(
+  issue: DeckValidationIssue,
+  index: ValidationRowAnchorIndex,
+): string | null {
+  if (issue.target.type !== 'card') {
+    return null
+  }
+
+  if (issue.target.section) {
+    const scopedRowId = index.byCardAndSection.get(
+      buildValidationTargetKey(issue.target.cardEntityId, issue.target.section),
+    )
+
+    if (scopedRowId) {
+      return `#${scopedRowId}`
+    }
+  }
+
+  const rowId = index.byCardId.get(issue.target.cardEntityId)
+
+  return rowId ? `#${rowId}` : null
+}
+
+function createRowValidationSummaryByKey(
+  cards: readonly DeckBuilderDraftCard[],
+  issues: readonly DeckValidationIssue[],
+): ReadonlyMap<string, ValidationRowIssueSummary> {
+  const summaries = new Map<
+    string,
+    {
+      highestSeverity: DeckValidationIssueSeverity
+      errorCount: number
+      warningCount: number
+      infoCount: number
+    }
+  >()
+
+  for (const card of cards) {
+    const matchingIssues = issues.filter((issue) => {
+      if (issue.target.type !== 'card') {
+        return false
+      }
+
+      if (issue.target.cardEntityId !== card.cardEntityId) {
+        return false
+      }
+
+      return !issue.target.section || issue.target.section === card.sectionKey
+    })
+
+    if (matchingIssues.length === 0) {
+      continue
+    }
+
+    const summary = {
+      highestSeverity: 'info' as DeckValidationIssueSeverity,
+      errorCount: 0,
+      warningCount: 0,
+      infoCount: 0,
+    }
+
+    for (const issue of matchingIssues) {
+      if (issue.severity === 'error') {
+        summary.highestSeverity = 'error'
+        summary.errorCount += 1
+        continue
+      }
+
+      if (issue.severity === 'warning') {
+        if (summary.highestSeverity !== 'error') {
+          summary.highestSeverity = 'warning'
+        }
+
+        summary.warningCount += 1
+        continue
+      }
+
+      summary.infoCount += 1
+    }
+
+    summaries.set(
+      buildValidationRowKey(card.sectionKey, card.cardEntityId),
+      summary,
+    )
+  }
+
+  return summaries
+}
+
+function getRowValidationClasses(
+  summary: ValidationRowIssueSummary | null,
+): string | null {
+  if (!summary) {
+    return null
+  }
+
+  if (summary.highestSeverity === 'error') {
+    return 'border-destructive/45 bg-destructive/10'
+  }
+
+  if (summary.highestSeverity === 'warning') {
+    return 'border-accent/45 bg-accent/10'
+  }
+
+  return 'border-border/80 bg-background'
+}
+
+function buildValidationRowKey(section: string, cardEntityId: string): string {
+  return `${section}:${cardEntityId}`
+}
+
+function buildValidationTargetKey(
+  cardEntityId: string,
+  section: string,
+): string {
+  return `${cardEntityId}:${section}`
+}
+
+function buildValidationRowId(section: string, cardEntityId: string): string {
+  return `deck-row-${sanitizeValidationRowPart(section)}-${sanitizeValidationRowPart(cardEntityId)}`
+}
+
+function sanitizeValidationRowPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-')
 }

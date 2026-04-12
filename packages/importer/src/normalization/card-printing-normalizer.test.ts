@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { RepositoryResult } from '@web-vg/db'
 import type {
   CardPrintingNormalizationResultRecord,
   CatalogCardEntityNormalizationRecord,
@@ -7,8 +8,7 @@ import type {
   ImportJobRecord,
   ManualReviewItemRecord,
   RawCardPrintingRecord,
-  RepositoryResult,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import { createCardPrintingNormalizer } from './card-printing-normalizer'
 

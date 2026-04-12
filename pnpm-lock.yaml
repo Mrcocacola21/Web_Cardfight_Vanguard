@@ -139,13 +139,29 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
 
+  packages/deck-validation:
+    dependencies:
+      '@web-vg/decks':
+        specifier: workspace:*
+        version: link:../decks
+      '@web-vg/legality':
+        specifier: workspace:*
+        version: link:../legality
+      '@web-vg/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/decks:
     dependencies:
       '@web-vg/shared':
         specifier: workspace:*
         version: link:../shared
 
-  packages/importer: {}
+  packages/importer:
+    dependencies:
+      '@web-vg/db':
+        specifier: workspace:*
+        version: link:../db
 
   packages/legality:
     dependencies:

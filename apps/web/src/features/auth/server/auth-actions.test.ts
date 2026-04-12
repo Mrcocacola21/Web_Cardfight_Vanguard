@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AuthCallbackModule from '@/features/auth/server/auth-callback'
-import type * as ProfileProvisioningModule from '@/features/profiles/server/profile-provisioning'
+import type * as ProfileProvisioningUseCasesModule from '@/features/profiles/application/profile-provisioning-use-cases'
 
 import { initialAuthFormState } from './auth-form-state'
 
@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   }),
   createSupabaseServerClient: vi.fn(),
   buildAuthCallbackUrl: vi.fn(),
-  ensureProfileForAuthUser: vi.fn(),
+  createProfilesRepository: vi.fn(),
+  ensureProfileForAuthUserUseCase: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -21,6 +22,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
+}))
+
+vi.mock('@web-vg/db', () => ({
+  createProfilesRepository: mocks.createProfilesRepository,
 }))
 
 vi.mock('@/features/auth/server/auth-callback', async () => {
@@ -34,16 +39,19 @@ vi.mock('@/features/auth/server/auth-callback', async () => {
   }
 })
 
-vi.mock('@/features/profiles/server/profile-provisioning', async () => {
-  const actual = await vi.importActual<typeof ProfileProvisioningModule>(
-    '@/features/profiles/server/profile-provisioning',
-  )
+vi.mock(
+  '@/features/profiles/application/profile-provisioning-use-cases',
+  async () => {
+    const actual = await vi.importActual<
+      typeof ProfileProvisioningUseCasesModule
+    >('@/features/profiles/application/profile-provisioning-use-cases')
 
-  return {
-    ...actual,
-    ensureProfileForAuthUser: mocks.ensureProfileForAuthUser,
-  }
-})
+    return {
+      ...actual,
+      ensureProfileForAuthUserUseCase: mocks.ensureProfileForAuthUserUseCase,
+    }
+  },
+)
 
 import { signInAction, signOutAction, signUpAction } from './auth-actions'
 
@@ -70,11 +78,20 @@ function createSupabaseClientMock() {
 describe('auth actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.createProfilesRepository.mockReturnValue({
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    })
   })
 
   it('completes sign up with email-confirmation messaging when no session is returned', async () => {
     const client = createSupabaseClientMock()
+    const repository = {
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    }
     mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    mocks.createProfilesRepository.mockReturnValueOnce(repository)
     mocks.buildAuthCallbackUrl.mockResolvedValueOnce(
       'http://127.0.0.1:3000/auth/callback',
     )
@@ -88,10 +105,10 @@ describe('auth actions', () => {
       },
       error: null,
     })
-    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+    mocks.ensureProfileForAuthUserUseCase.mockResolvedValueOnce({
       ok: true,
       data: {
-        id: 'profile-1',
+        profileId: 'profile-1',
       },
     })
 
@@ -115,14 +132,18 @@ describe('auth actions', () => {
         },
       },
     })
-    expect(mocks.ensureProfileForAuthUser).toHaveBeenCalledWith({
-      client,
-      authUserId: 'auth-user-1',
-      displayName: 'Azure Pilot',
-      avatarUrl: null,
-      bio: null,
-      visibility: 'private',
-    })
+    expect(mocks.ensureProfileForAuthUserUseCase).toHaveBeenCalledWith(
+      {
+        repository,
+      },
+      {
+        authUserId: 'auth-user-1',
+        displayName: 'Azure Pilot',
+        avatarUrl: null,
+        bio: null,
+        visibility: 'private',
+      },
+    )
     expect(result).toEqual({
       status: 'success',
       message:
@@ -159,7 +180,12 @@ describe('auth actions', () => {
 
   it('redirects to profile when sign-up created a session but profile provisioning still failed', async () => {
     const client = createSupabaseClientMock()
+    const repository = {
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    }
     mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    mocks.createProfilesRepository.mockReturnValueOnce(repository)
     mocks.buildAuthCallbackUrl.mockResolvedValueOnce(
       'http://127.0.0.1:3000/auth/callback',
     )
@@ -175,10 +201,10 @@ describe('auth actions', () => {
       },
       error: null,
     })
-    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+    mocks.ensureProfileForAuthUserUseCase.mockResolvedValueOnce({
       ok: false,
       error: {
-        code: 'profile-failed',
+        code: 'repository-failed',
         message: 'Failed to ensure profile.',
       },
     })
@@ -201,7 +227,12 @@ describe('auth actions', () => {
 
   it('redirects to the protected profile route after a successful sign in', async () => {
     const client = createSupabaseClientMock()
+    const repository = {
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    }
     mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    mocks.createProfilesRepository.mockReturnValueOnce(repository)
     client.auth.signInWithPassword.mockResolvedValueOnce({
       data: {
         user: {
@@ -214,10 +245,10 @@ describe('auth actions', () => {
       },
       error: null,
     })
-    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+    mocks.ensureProfileForAuthUserUseCase.mockResolvedValueOnce({
       ok: true,
       data: {
-        id: 'profile-1',
+        profileId: 'profile-1',
       },
     })
 
@@ -235,20 +266,29 @@ describe('auth actions', () => {
       email: 'pilot@example.com',
       password: 'vanguard-pass-123',
     })
-    expect(mocks.ensureProfileForAuthUser).toHaveBeenCalledWith({
-      client,
-      authUserId: 'auth-user-1',
-      displayName: 'Azure Pilot',
-      avatarUrl: null,
-      bio: null,
-      visibility: 'private',
-    })
+    expect(mocks.ensureProfileForAuthUserUseCase).toHaveBeenCalledWith(
+      {
+        repository,
+      },
+      {
+        authUserId: 'auth-user-1',
+        displayName: 'Azure Pilot',
+        avatarUrl: null,
+        bio: null,
+        visibility: 'private',
+      },
+    )
     expect(mocks.redirect).toHaveBeenCalledWith('/profile')
   })
 
   it('redirects to profile even when sign-in profile provisioning fails after auth succeeds', async () => {
     const client = createSupabaseClientMock()
+    const repository = {
+      upsertProfileByAuthUserId: vi.fn(),
+      ensureProfileByAuthUserId: vi.fn(),
+    }
     mocks.createSupabaseServerClient.mockResolvedValueOnce(client)
+    mocks.createProfilesRepository.mockReturnValueOnce(repository)
     client.auth.signInWithPassword.mockResolvedValueOnce({
       data: {
         user: {
@@ -261,10 +301,10 @@ describe('auth actions', () => {
       },
       error: null,
     })
-    mocks.ensureProfileForAuthUser.mockResolvedValueOnce({
+    mocks.ensureProfileForAuthUserUseCase.mockResolvedValueOnce({
       ok: false,
       error: {
-        code: 'profile-failed',
+        code: 'repository-failed',
         message: 'Failed to ensure profile.',
       },
     })

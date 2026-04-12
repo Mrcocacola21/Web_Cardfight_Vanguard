@@ -10,7 +10,10 @@ import {
   setDeckTags,
   type Deck,
 } from '@web-vg/decks'
-import type { DeckDetailRecord, DeckSectionKey } from '@web-vg/db'
+import type {
+  DeckDetailRecord,
+  DeckSectionKey,
+} from '@web-vg/db/repositories/decks'
 import type {
   CardId,
   DeckId,

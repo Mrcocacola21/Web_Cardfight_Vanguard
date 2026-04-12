@@ -6,6 +6,7 @@ import { PageContainer } from '@/components/layout'
 import { resolveDeckBuilderQuery } from '@/features/decks/deck-builder-query'
 import { listDeckBuilderCatalogCards } from '@/features/decks/server/deck-builder-read'
 import { getDeckDetailById } from '@/features/decks/server/deck-read'
+import { getDeckBuilderValidationData } from '@/features/decks/server/deck-builder-validation-read'
 import { getCurrentProfileState } from '@/features/profiles/server/profile-read'
 
 interface DeckDetailPageProps {
@@ -93,6 +94,10 @@ export default async function DeckDetailPage({
     formatId: deckResult.data.format.id,
     searchText: query.searchText,
   })
+  const validationData = await getDeckBuilderValidationData({
+    initialDeck: deckResult.data,
+    catalogCards: catalogResult.ok ? catalogResult.data.items : [],
+  })
 
   return (
     <DeckBuilderView
@@ -103,6 +108,7 @@ export default async function DeckDetailPage({
           ? null
           : 'The published catalog cards could not be loaded for this builder session.'
       }
+      validationData={validationData}
       query={query}
     />
   )

@@ -1,4 +1,4 @@
-import type { DeckListItemRecord } from '@web-vg/db'
+import type { DeckListItemRecord } from '@web-vg/db/repositories/decks'
 import { isSupportedDeckFormatId } from '@/features/decks/deck-format-options'
 
 export type DeckListFormatFilter = 'all' | 'standard' | 'v-premium' | 'premium'

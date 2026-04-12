@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import type { PublicProfileRecord } from '@web-vg/db'
+import type { PublicProfileRecord } from '@web-vg/db/repositories/profiles'
 
 import { DetailPageLayout, PageSection } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'

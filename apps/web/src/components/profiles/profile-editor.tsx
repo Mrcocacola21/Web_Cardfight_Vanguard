@@ -1,6 +1,6 @@
 'use client'
 
-import type { ProfileVisibility } from '@web-vg/db'
+import type { ProfileVisibility } from '@web-vg/db/repositories/profiles'
 import { useActionState } from 'react'
 
 import { ErrorState, SuccessState } from '@/components/feedback'

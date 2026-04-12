@@ -1,4 +1,7 @@
-import type { ImporterRepository, ImportJobRecord } from '@web-vg/db'
+import type {
+  ImporterRepository,
+  ImportJobRecord,
+} from '@web-vg/db/repositories/importer'
 
 import {
   createPayloadFingerprint,

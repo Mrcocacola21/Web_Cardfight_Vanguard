@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentProfileState: vi.fn(),
   getDeckDetailById: vi.fn(),
   listDeckBuilderCatalogCards: vi.fn(),
+  getDeckBuilderValidationData: vi.fn(),
   notFound: vi.fn(() => {
     throw notFoundError
   }),
@@ -24,6 +25,10 @@ vi.mock('@/features/decks/server/deck-builder-read', () => ({
   listDeckBuilderCatalogCards: mocks.listDeckBuilderCatalogCards,
 }))
 
+vi.mock('@/features/decks/server/deck-builder-validation-read', () => ({
+  getDeckBuilderValidationData: mocks.getDeckBuilderValidationData,
+}))
+
 vi.mock('next/navigation', () => ({
   notFound: mocks.notFound,
 }))
@@ -33,6 +38,7 @@ vi.mock('@/components/decks/deck-builder-view', () => ({
     initialDeck,
     catalogCards,
     catalogErrorMessage,
+    validationData,
     query,
   }: {
     initialDeck: {
@@ -40,6 +46,10 @@ vi.mock('@/components/decks/deck-builder-view', () => ({
     }
     catalogCards: readonly unknown[]
     catalogErrorMessage: string | null
+    validationData: {
+      cards: readonly unknown[]
+      restrictionLists: readonly unknown[]
+    }
     query: {
       searchText: string | null
     }
@@ -48,6 +58,7 @@ vi.mock('@/components/decks/deck-builder-view', () => ({
       <span>{initialDeck.title}</span>
       <span>{catalogCards.length}</span>
       <span>{catalogErrorMessage ?? 'catalog-ok'}</span>
+      <span>{validationData.cards.length}</span>
       <span>{query.searchText ?? 'no-search'}</span>
     </div>
   ),
@@ -63,6 +74,10 @@ describe('DeckDetailPage', () => {
       profile: {
         id: 'profile-1',
       },
+    })
+    mocks.getDeckBuilderValidationData.mockResolvedValue({
+      cards: [],
+      restrictionLists: [],
     })
   })
 
@@ -109,6 +124,29 @@ describe('DeckDetailPage', () => {
       formatId: 'standard',
       searchText: 'bastion',
     })
+    const validationInput = mocks.getDeckBuilderValidationData.mock
+      .calls[0]?.[0] as
+      | {
+          initialDeck: {
+            id: string
+            ownerProfileId: string
+            title: string
+            format: {
+              id: string
+            }
+          }
+          catalogCards: readonly {
+            id: string
+          }[]
+        }
+      | undefined
+
+    expect(validationInput).toBeDefined()
+    expect(validationInput?.initialDeck.id).toBe('deck-1')
+    expect(validationInput?.initialDeck.ownerProfileId).toBe('profile-1')
+    expect(validationInput?.initialDeck.title).toBe('Azure Bastion')
+    expect(validationInput?.initialDeck.format.id).toBe('standard')
+    expect(validationInput?.catalogCards[0]?.id).toBe('entity-bastion')
     expect(screen.getByTestId('deck-builder')).toHaveTextContent(
       'Azure Bastion',
     )

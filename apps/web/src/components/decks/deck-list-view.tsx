@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import type { DeckListItemRecord, ProfileRecord } from '@web-vg/db'
+import type { DeckListItemRecord } from '@web-vg/db/repositories/decks'
+import type { ProfileRecord } from '@web-vg/db/repositories/profiles'
 import { ArrowRight, Copy, Plus, Trash2 } from 'lucide-react'
 
 import {

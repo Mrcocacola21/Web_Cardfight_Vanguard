@@ -1,12 +1,12 @@
+import type { RepositoryError } from '@web-vg/db'
 import type {
   CardPrintingNormalizationResultRecord,
   ImporterRepository,
   ManualReviewItemRecord,
   ManualReviewReason,
   ManualReviewResolutionKind,
-  RepositoryError,
   UpsertManualReviewItemInput,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 
 import { normalizeOptionalText, type JsonObject } from '../raw/shared'
 

@@ -21,7 +21,7 @@
     "test:auth:e2e": "node apps/web/scripts/test-auth-e2e.mjs",
     "test:decks:e2e": "node apps/web/scripts/test-decks-e2e.mjs",
     "test:db": "corepack pnpm --filter @web-vg/db run test:db && corepack pnpm --filter @web-vg/db run test",
-    "test:unit": "corepack pnpm --filter @web-vg/db --filter @web-vg/shared --filter @web-vg/catalog --filter @web-vg/decks --filter @web-vg/importer --filter @web-vg/legality --filter @web-vg/rules-core --filter @web-vg/social -r run test",
+    "test:unit": "corepack pnpm --filter @web-vg/db --filter @web-vg/shared --filter @web-vg/catalog --filter @web-vg/decks --filter @web-vg/deck-validation --filter @web-vg/importer --filter @web-vg/legality --filter @web-vg/rules-core --filter @web-vg/social -r run test",
     "test:web": "corepack pnpm --filter @web-vg/web run test",
     "test:e2e": "corepack pnpm exec playwright test",
     "typecheck": "corepack pnpm -r --if-present run typecheck",

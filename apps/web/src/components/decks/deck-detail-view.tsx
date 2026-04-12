@@ -1,5 +1,8 @@
 import Link from 'next/link'
-import type { DeckDetailRecord, DeckSectionKey } from '@web-vg/db'
+import type {
+  DeckDetailRecord,
+  DeckSectionKey,
+} from '@web-vg/db/repositories/decks'
 import { ArrowLeft } from 'lucide-react'
 
 import { ItemCard, StatBlock, StatGrid } from '@/components/data-display'

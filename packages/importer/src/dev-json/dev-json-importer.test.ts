@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import type { RepositoryResult } from '@web-vg/db'
 import type {
   CreateImportJobInput,
   FinalizeImportJobInput,
@@ -12,9 +13,8 @@ import type {
   ImportSourceRecord,
   ImporterRepository,
   ManualReviewItemRecord,
-  RepositoryResult,
   UpsertImportSourceInput,
-} from '@web-vg/db'
+} from '@web-vg/db/repositories/importer'
 import type { NormalizeCardPrintingCandidatesInput } from '../normalization'
 import type { ImportRawCardPrintingsInput } from '../raw-printings'
 import type { ImportRawProductsInput } from '../raw-products'
