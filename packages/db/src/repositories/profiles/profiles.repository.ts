@@ -11,12 +11,19 @@ import type {
 const profileSelect =
   'id, username, display_name, bio, avatar_url, visibility, created_at, updated_at'
 const publicProfileSelect = 'id, display_name, avatar_url, bio'
+const publicProfileSearchMinTokenLength = 2
+const publicProfileSearchMaxTokenCount = 4
+const publicProfileSearchMaxLimit = 50
 
 export interface ProfilesRepository {
   getProfileById(id: string): Promise<RepositoryResult<ProfileRecord | null>>
   getPublicProfileById(
     id: string,
   ): Promise<RepositoryResult<PublicProfileRecord | null>>
+  searchPublicProfiles(
+    searchText: string,
+    limit: number,
+  ): Promise<RepositoryResult<readonly PublicProfileRecord[]>>
   getProfileByAuthUserId(
     authUserId: string,
   ): Promise<RepositoryResult<ProfileRecord | null>>
@@ -36,6 +43,30 @@ export function createProfilesRepository(client: DbClient): ProfilesRepository {
       .select(profileSelect)
       .eq('auth_user_id', authUserId)
       .maybeSingle()
+  }
+
+  function normalizePublicProfileSearchTokens(searchText: string) {
+    return searchText
+      .trim()
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= publicProfileSearchMinTokenLength)
+      .slice(0, publicProfileSearchMaxTokenCount)
+  }
+
+  function normalizePublicProfileSearchLimit(limit: number) {
+    if (!Number.isFinite(limit)) {
+      return 1
+    }
+
+    return Math.max(1, Math.min(Math.trunc(limit), publicProfileSearchMaxLimit))
+  }
+
+  function escapeIlikePattern(value: string) {
+    return value
+      .replaceAll('\\', '\\\\')
+      .replaceAll('%', '\\%')
+      .replaceAll('_', '\\_')
   }
 
   return {
@@ -67,6 +98,36 @@ export function createProfilesRepository(client: DbClient): ProfilesRepository {
       }
 
       return ok(data ? mapPublicProfileRow(data) : null)
+    },
+
+    async searchPublicProfiles(searchText, limit) {
+      const tokens = normalizePublicProfileSearchTokens(searchText)
+
+      if (tokens.length === 0) {
+        return ok([])
+      }
+
+      const normalizedLimit = normalizePublicProfileSearchLimit(limit)
+      let query = client
+        .schema('user_data')
+        .from('public_profiles')
+        .select(publicProfileSelect)
+
+      for (const token of tokens) {
+        query = query.ilike('display_name', `%${escapeIlikePattern(token)}%`)
+      }
+
+      const { data, error } = await query
+        .order('display_name', {
+          ascending: true,
+        })
+        .range(0, normalizedLimit - 1)
+
+      if (error) {
+        return err(mapQueryError(error, 'Failed to search public profiles.'))
+      }
+
+      return ok((data ?? []).map(mapPublicProfileRow))
     },
 
     async getProfileByAuthUserId(authUserId) {

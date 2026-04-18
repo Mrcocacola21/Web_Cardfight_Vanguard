@@ -121,6 +121,68 @@ describe('profiles repository', () => {
     })
   })
 
+  it('searches only the public profile view with token filters and a result limit', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.schema).toBe('user_data')
+          expect(query.table).toBe('public_profiles')
+          expect(query.cardinality).toBe('many')
+          expect(query.filters).toEqual([
+            {
+              type: 'ilike',
+              column: 'display_name',
+              value: '%Azure%',
+            },
+            {
+              type: 'ilike',
+              column: 'display_name',
+              value: '%Pilot%',
+            },
+          ])
+          expect(query.orders).toEqual([
+            {
+              column: 'display_name',
+              ascending: true,
+            },
+          ])
+          expect(query.range).toEqual({
+            from: 0,
+            to: 11,
+          })
+        },
+        response: {
+          data: [
+            {
+              id: 'profile-public-2',
+              display_name: 'Azure Pilot',
+              bio: 'Public pilot bio.',
+              avatar_url: 'https://images.example/avatar.png',
+            },
+          ],
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createProfilesRepository(mock.client)
+    const result = await repository.searchPublicProfiles('Azure Pilot', 12)
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          id: 'profile-public-2',
+          displayName: 'Azure Pilot',
+          avatarUrl: 'https://images.example/avatar.png',
+          bio: 'Public pilot bio.',
+        },
+      ],
+    })
+  })
+
   it('upserts profile fields and returns the mapped profile record', async () => {
     const mock = createSequentialMockDbClient([
       {

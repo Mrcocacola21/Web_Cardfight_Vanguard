@@ -1,6 +1,10 @@
 import type { DeckId, MatchId, UserId } from '@web-vg/shared'
 
-export type FriendRelationStatus = 'pending' | 'accepted' | 'blocked'
+export type FriendRelationStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'cancelled'
 
 export interface User {
   readonly id: UserId

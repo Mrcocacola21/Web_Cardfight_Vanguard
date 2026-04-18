@@ -63,15 +63,30 @@ function assert(condition, message) {
   }
 }
 
+let activeTransactionClient = null
+
 async function queryScalar(client, sql) {
   const result = await client.query(sql)
   return Number(result.rows[0]?.count ?? 0)
 }
 
 async function expectPgError(name, operation, expectedCode) {
+  const client = activeTransactionClient
+
+  if (!client) {
+    throw new Error('expectPgError requires an active transaction client.')
+  }
+
+  const savepointName = `sp_${randomUUID().replaceAll('-', '_')}`
+
+  await client.query(`savepoint ${savepointName}`)
+
   try {
     await operation()
   } catch (error) {
+    await client.query(`rollback to savepoint ${savepointName}`)
+    await client.query(`release savepoint ${savepointName}`)
+
     if (error?.code === expectedCode) {
       console.log(`  ok ${name}`)
       return
@@ -80,10 +95,15 @@ async function expectPgError(name, operation, expectedCode) {
     throw error
   }
 
+  await client.query(`release savepoint ${savepointName}`)
+
   throw new Error(`${name} did not fail with ${expectedCode}.`)
 }
 
 async function withRollback(client, name, callback) {
+  const previousTransactionClient = activeTransactionClient
+  activeTransactionClient = client
+
   await client.query('begin')
 
   try {
@@ -91,6 +111,7 @@ async function withRollback(client, name, callback) {
     console.log(`  ok ${name}`)
   } finally {
     await client.query('rollback')
+    activeTransactionClient = previousTransactionClient
   }
 }
 
@@ -1258,6 +1279,437 @@ async function verifyAuthorizationRls(client) {
                 [ownerMatchId, stranger.profileId],
               ),
             '42501',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'friend requests stay recipient-owned and accepted requests create explicit friendships',
+    async () => {
+      const sender = await createProfileFixture(client, {
+        displayName: 'Private Sender',
+        visibility: 'private',
+      })
+      const recipient = await createProfileFixture(client, {
+        displayName: 'Public Recipient',
+        visibility: 'public',
+      })
+      const outsider = await createProfileFixture(client, {
+        displayName: 'Outsider Pilot',
+        visibility: 'private',
+      })
+
+      let requestId = null
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: sender.authUserId },
+        async () => {
+          const insertResult = await client.query(
+            `
+              insert into social.friend_relationships (
+                requester_profile_id,
+                addressee_profile_id,
+                status
+              ) values (
+                $1,
+                $2,
+                'pending'
+              )
+              returning id
+            `,
+            [sender.profileId, recipient.profileId],
+          )
+
+          requestId = insertResult.rows[0]?.id ?? null
+
+          assert(
+            requestId,
+            'Sender should be able to create a pending request.',
+          )
+
+          const senderMutationAttempt = await client.query(
+            `
+              update social.friend_relationships
+              set status = 'accepted', responded_at = now()
+              where id = $1
+              returning id
+            `,
+            [requestId],
+          )
+
+          assert(
+            senderMutationAttempt.rowCount === 0,
+            'Sender must not accept their own request.',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: outsider.authUserId },
+        async () => {
+          const foreignInbox = await client.query(
+            `
+              select request_id
+              from social.incoming_pending_friend_requests
+            `,
+          )
+
+          assert(
+            foreignInbox.rowCount === 0,
+            'Non-recipient must not see another user incoming requests.',
+          )
+
+          const foreignMutationAttempt = await client.query(
+            `
+              update social.friend_relationships
+              set status = 'accepted', responded_at = now()
+              where id = $1
+              returning id
+            `,
+            [requestId],
+          )
+
+          assert(
+            foreignMutationAttempt.rowCount === 0,
+            'Non-recipient must not mutate another user friend request.',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: recipient.authUserId },
+        async () => {
+          const incomingRequests = await client.query(
+            `
+              select
+                request_id,
+                requester_profile_id,
+                requester_display_name
+              from social.incoming_pending_friend_requests
+            `,
+          )
+
+          assert(
+            incomingRequests.rowCount === 1,
+            'Recipient should see exactly one incoming pending request.',
+          )
+          assert(
+            incomingRequests.rows[0]?.request_id === requestId,
+            'Recipient inbox should expose the pending request id.',
+          )
+          assert(
+            incomingRequests.rows[0]?.requester_profile_id === sender.profileId,
+            'Recipient inbox should expose the sender profile id.',
+          )
+          assert(
+            incomingRequests.rows[0]?.requester_display_name ===
+              'Private Sender',
+            'Recipient inbox should expose a minimal sender summary even for private senders.',
+          )
+
+          const acceptResult = await client.query(
+            `
+              update social.friend_relationships
+              set status = 'accepted', responded_at = now()
+              where id = $1
+              returning id
+            `,
+            [requestId],
+          )
+
+          assert(
+            acceptResult.rowCount === 1,
+            'Recipient should be able to accept a pending request.',
+          )
+
+          const friendshipResult = await client.query(
+            `
+              select
+                first_profile_id,
+                second_profile_id,
+                friend_request_id
+              from social.friendships
+              where friend_request_id = $1
+            `,
+            [requestId],
+          )
+
+          assert(
+            friendshipResult.rowCount === 1,
+            'Accepted requests should create exactly one explicit friendship edge.',
+          )
+          assert(
+            [sender.profileId, recipient.profileId].includes(
+              friendshipResult.rows[0]?.first_profile_id,
+            ) &&
+              [sender.profileId, recipient.profileId].includes(
+                friendshipResult.rows[0]?.second_profile_id,
+              ),
+            'Friendship edge should connect the sender and recipient profiles.',
+          )
+
+          const handledInbox = await client.query(
+            `
+              select request_id
+              from social.incoming_pending_friend_requests
+            `,
+          )
+
+          assert(
+            handledInbox.rowCount === 0,
+            'Accepted requests must disappear from the pending inbox view.',
+          )
+
+          const repeatedMutation = await client.query(
+            `
+              update social.friend_relationships
+              set status = 'declined', responded_at = now()
+              where id = $1
+              returning id
+            `,
+            [requestId],
+          )
+
+          assert(
+            repeatedMutation.rowCount === 0,
+            'Handled requests must not transition again through the recipient update path.',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'declined friend requests do not create friendship edges',
+    async () => {
+      const sender = await createProfileFixture(client, {
+        displayName: 'Public Challenger',
+        visibility: 'private',
+      })
+      const recipient = await createProfileFixture(client, {
+        displayName: 'Public Defender',
+        visibility: 'public',
+      })
+
+      let requestId = null
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: sender.authUserId },
+        async () => {
+          const insertResult = await client.query(
+            `
+              insert into social.friend_relationships (
+                requester_profile_id,
+                addressee_profile_id,
+                status
+              ) values (
+                $1,
+                $2,
+                'pending'
+              )
+              returning id
+            `,
+            [sender.profileId, recipient.profileId],
+          )
+
+          requestId = insertResult.rows[0]?.id ?? null
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: recipient.authUserId },
+        async () => {
+          const declineResult = await client.query(
+            `
+              update social.friend_relationships
+              set status = 'declined', responded_at = now()
+              where id = $1
+              returning id
+            `,
+            [requestId],
+          )
+
+          assert(
+            declineResult.rowCount === 1,
+            'Recipient should be able to decline a pending request.',
+          )
+
+          const friendshipResult = await client.query(
+            `
+              select id
+              from social.friendships
+              where friend_request_id = $1
+            `,
+            [requestId],
+          )
+
+          assert(
+            friendshipResult.rowCount === 0,
+            'Declined requests must not create friendship edges.',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'friendship removal deletes only the active edge while keeping accepted request history',
+    async () => {
+      const sender = await createProfileFixture(client, {
+        displayName: 'Removal Sender',
+        visibility: 'private',
+      })
+      const recipient = await createProfileFixture(client, {
+        displayName: 'Removal Recipient',
+        visibility: 'public',
+      })
+      const outsider = await createProfileFixture(client, {
+        displayName: 'Removal Outsider',
+        visibility: 'private',
+      })
+
+      let requestId = null
+      let friendshipId = null
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: sender.authUserId },
+        async () => {
+          const insertResult = await client.query(
+            `
+              insert into social.friend_relationships (
+                requester_profile_id,
+                addressee_profile_id,
+                status
+              ) values (
+                $1,
+                $2,
+                'pending'
+              )
+              returning id
+            `,
+            [sender.profileId, recipient.profileId],
+          )
+
+          requestId = insertResult.rows[0]?.id ?? null
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: recipient.authUserId },
+        async () => {
+          await client.query(
+            `
+              update social.friend_relationships
+              set status = 'accepted', responded_at = now()
+              where id = $1
+            `,
+            [requestId],
+          )
+
+          const friendshipResult = await client.query(
+            `
+              select id
+              from social.friendships
+              where friend_request_id = $1
+            `,
+            [requestId],
+          )
+
+          friendshipId = friendshipResult.rows[0]?.id ?? null
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: outsider.authUserId },
+        async () => {
+          const outsiderDelete = await client.query(
+            `
+              delete from social.friendships
+              where id = $1
+              returning id
+            `,
+            [friendshipId],
+          )
+
+          assert(
+            outsiderDelete.rowCount === 0,
+            'Non-participant must not be able to delete a friendship edge.',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: sender.authUserId },
+        async () => {
+          const deleteResult = await client.query(
+            `
+              delete from social.friendships
+              where id = $1
+              returning id
+            `,
+            [friendshipId],
+          )
+
+          assert(
+            deleteResult.rowCount === 1,
+            'Either participant should be able to remove the active friendship edge.',
+          )
+
+          const remainingFriendship = await client.query(
+            `
+              select id
+              from social.friendships
+              where id = $1
+            `,
+            [friendshipId],
+          )
+
+          assert(
+            remainingFriendship.rowCount === 0,
+            'Friendship removal should delete the active edge for both sides.',
+          )
+
+          const requestHistory = await client.query(
+            `
+              select status
+              from social.friend_relationships
+              where id = $1
+            `,
+            [requestId],
+          )
+
+          assert(
+            requestHistory.rowCount === 1 &&
+              requestHistory.rows[0]?.status === 'accepted',
+            'Accepted request history must remain intact after friendship removal.',
+          )
+
+          const repeatedDelete = await client.query(
+            `
+              delete from social.friendships
+              where id = $1
+              returning id
+            `,
+            [friendshipId],
+          )
+
+          assert(
+            repeatedDelete.rowCount === 0,
+            'Repeated friendship removal should not recreate or half-delete state.',
           )
         },
       )

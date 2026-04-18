@@ -7,6 +7,7 @@ describe('PublicProfileView', () => {
   it('renders only the public profile fields', () => {
     render(
       <PublicProfileView
+        viewerProfileId="profile-viewer"
         profile={{
           id: 'profile-1',
           displayName: 'Azure Pilot',
@@ -30,6 +31,7 @@ describe('PublicProfileView', () => {
     render(
       <PublicProfileView
         isOwnerViewer
+        viewerProfileId="profile-1"
         profile={{
           id: 'profile-1',
           displayName: 'Azure Pilot',
@@ -43,5 +45,44 @@ describe('PublicProfileView', () => {
     expect(
       screen.getByRole('link', { name: /manage your profile/i }),
     ).toHaveAttribute('href', '/profile')
+  })
+
+  it('renders a guest sign-in entry point for friend requests when no viewer profile is available', () => {
+    render(
+      <PublicProfileView
+        profile={{
+          id: 'profile-2',
+          displayName: 'Nova Player',
+          avatarUrl: null,
+          bio: null,
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByRole('link', { name: /sign in to add friend/i }),
+    ).toHaveAttribute('href', '/login')
+  })
+
+  it('renders remove-friend controls when the viewer already has an active friendship', () => {
+    render(
+      <PublicProfileView
+        viewerProfileId="profile-viewer"
+        relationshipState={{
+          kind: 'friend',
+          friendshipId: 'friendship-1',
+        }}
+        profile={{
+          id: 'profile-2',
+          displayName: 'Nova Player',
+          avatarUrl: null,
+          bio: null,
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByRole('button', { name: /remove friend/i }),
+    ).toBeInTheDocument()
   })
 })

@@ -3,6 +3,8 @@ import Link from 'next/link'
 import type { PublicProfileRecord } from '@web-vg/db/repositories/profiles'
 
 import { DetailPageLayout, PageSection } from '@/components/layout'
+import { FriendshipControlsCard } from '@/components/social/friendship-controls-card'
+import type { PublicProfileRelationshipState } from '@/features/social/relationship-state'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -15,6 +17,8 @@ import {
 interface PublicProfileViewProps {
   readonly profile: PublicProfileRecord
   readonly isOwnerViewer?: boolean
+  readonly viewerProfileId?: string | null
+  readonly relationshipState?: PublicProfileRelationshipState
 }
 
 function getAvatarFallbackLabel(displayName: string) {
@@ -28,6 +32,18 @@ function getAvatarFallbackLabel(displayName: string) {
 export function PublicProfileView({
   profile,
   isOwnerViewer = false,
+  viewerProfileId = null,
+  relationshipState = isOwnerViewer
+    ? {
+        kind: 'self',
+      }
+    : viewerProfileId
+      ? {
+          kind: 'none',
+        }
+      : {
+          kind: 'guest',
+        },
 }: PublicProfileViewProps) {
   return (
     <DetailPageLayout
@@ -116,15 +132,12 @@ export function PublicProfileView({
       }
       aside={
         <PageSection className="grid gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Friends</CardTitle>
-              <CardDescription>
-                Social graph is not implemented yet. This slot is reserved for
-                future friend and relationship views.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <FriendshipControlsCard
+            recipientProfileId={profile.id}
+            recipientDisplayName={profile.displayName}
+            viewerProfileId={viewerProfileId}
+            relationshipState={relationshipState}
+          />
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Decks</CardTitle>

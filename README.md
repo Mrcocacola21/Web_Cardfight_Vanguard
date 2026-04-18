@@ -5,7 +5,8 @@ Monorepo for a Cardfight!! Vanguard web client / companion platform.
 The repository is no longer just a shell. It now contains a working catalog,
 an importer -> publication content pipeline, baseline auth/RLS, the first
 real deck builder workflow, format-aware deck validation, and an explicit
-application-layer separation across features.
+application-layer separation across features, plus the first explicit social
+foundation on top of the profile layer.
 
 ## Prerequisites
 
@@ -157,6 +158,13 @@ Available now:
 - SSR-friendly auth/session foundation
 - baseline owner-based authorization and RLS for profiles, decks, collections, and matches
 - protected and public profile surfaces
+- social foundation:
+  - public user search at `/users`
+  - public profile route at `/users/[profileId]`
+  - explicit friend requests
+  - accept / decline request lifecycle
+  - explicit active friendship edges
+  - controlled friendship removal
 - catalog read-side:
   - `/catalog`
   - `/catalog/[cardKey]`
@@ -197,7 +205,7 @@ Available now:
 Not implemented yet:
 
 - collection/binder product flow
-- social product workflows
+- friends page and richer social graph/product workflows
 - match history product workflows
 - gameplay engine and effect system
 - advanced sharing/visibility authorization beyond the baseline owner model

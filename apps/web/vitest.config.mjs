@@ -35,6 +35,10 @@ export default defineConfig({
         rootDir,
         '../../packages/db/src/repositories/profiles/index.ts',
       ),
+      '@web-vg/db/repositories/social': path.resolve(
+        rootDir,
+        '../../packages/db/src/repositories/social/index.ts',
+      ),
       '@web-vg/db': path.resolve(rootDir, '../../packages/db/src/index.ts'),
       '@web-vg/deck-validation': path.resolve(
         rootDir,

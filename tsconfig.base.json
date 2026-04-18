@@ -34,6 +34,9 @@
       "@web-vg/db/repositories/profiles": [
         "packages/db/src/repositories/profiles/index.ts"
       ],
+      "@web-vg/db/repositories/social": [
+        "packages/db/src/repositories/social/index.ts"
+      ],
       "@web-vg/deck-validation": ["packages/deck-validation/src/index.ts"],
       "@web-vg/decks": ["packages/decks/src/index.ts"],
       "@web-vg/importer": ["packages/importer/src/index.ts"],

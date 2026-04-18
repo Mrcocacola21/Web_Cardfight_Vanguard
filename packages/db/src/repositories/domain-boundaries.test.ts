@@ -111,6 +111,7 @@ describe('domain boundaries', () => {
       './importer/importer.repository.ts',
       './decks/decks.repository.ts',
       './profiles/profiles.repository.ts',
+      './social/social.repository.ts',
     ]
 
     for (const relativePath of repositoryFiles) {

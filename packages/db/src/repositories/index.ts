@@ -12,3 +12,4 @@ export {
 export { createDecksRepository } from './decks'
 export { createImporterRepository } from './importer'
 export { createProfilesRepository } from './profiles'
+export { createSocialRepository } from './social'

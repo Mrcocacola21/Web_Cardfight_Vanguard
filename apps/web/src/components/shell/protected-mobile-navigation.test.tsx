@@ -29,9 +29,9 @@ describe('ProtectedMobileNavigation', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/pilot@example.com/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /catalog/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /profile/i })).toHaveAttribute(
-      'aria-current',
-      'page',
+    expect(screen.getByRole('link', { current: 'page' })).toHaveAttribute(
+      'href',
+      '/profile',
     )
     expect(document.body).toHaveClass('overflow-hidden')
   })

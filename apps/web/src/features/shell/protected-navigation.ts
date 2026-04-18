@@ -3,6 +3,7 @@ import {
   House,
   Layers3,
   UserRound,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -37,6 +38,12 @@ export const protectedNavItems: readonly ProtectedNavItem[] = [
     label: 'Profile',
     description: 'Manage your own profile and visibility settings.',
     icon: UserRound,
+  },
+  {
+    href: '/users',
+    label: 'Users',
+    description: 'Search public profiles and open their public profile pages.',
+    icon: UsersRound,
   },
 ] as const
 

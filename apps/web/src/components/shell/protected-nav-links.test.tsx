@@ -6,13 +6,29 @@ import { ProtectedNavLinks } from './protected-nav-links'
 describe('ProtectedNavLinks', () => {
   it('marks the current deck route as active for nested deck paths', () => {
     render(<ProtectedNavLinks pathname="/decks/deck-123" />)
+    const deckLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/decks')
+    const profileLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/profile')
 
-    expect(screen.getByRole('link', { name: /decks/i })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
-    expect(screen.getByRole('link', { name: /profile/i })).not.toHaveAttribute(
-      'aria-current',
-    )
+    expect(
+      deckLinks.some((link) => link.getAttribute('aria-current') === 'page'),
+    ).toBe(true)
+    expect(
+      profileLinks.some((link) => link.getAttribute('aria-current') === 'page'),
+    ).toBe(false)
+  })
+
+  it('includes the public user search route in the protected app navigation', () => {
+    render(<ProtectedNavLinks pathname="/users" />)
+    const usersLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/users')
+
+    expect(
+      usersLinks.some((link) => link.getAttribute('aria-current') === 'page'),
+    ).toBe(true)
   })
 })

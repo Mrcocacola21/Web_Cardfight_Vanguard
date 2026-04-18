@@ -8,6 +8,8 @@ import {
 import { ProfileEditor } from '@/components/profiles/profile-editor'
 import { ProfileSummary } from '@/components/profiles/profile-summary'
 import { getCurrentProfileState } from '@/features/profiles/server/profile-read'
+import { IncomingFriendRequestsCard } from '@/components/social/incoming-friend-requests-card'
+import { getIncomingFriendRequestsState } from '@/features/social/server/incoming-friend-request-read'
 
 export default async function ProfilePage() {
   const state = await getCurrentProfileState()
@@ -39,6 +41,9 @@ export default async function ProfilePage() {
     bio: state.profile?.bio ?? '',
     visibility: state.profile?.visibility ?? 'private',
   }
+  const incomingFriendRequestsState = state.profile
+    ? await getIncomingFriendRequestsState(state.profile.id)
+    : null
 
   return (
     <DetailPageLayout
@@ -57,18 +62,32 @@ export default async function ProfilePage() {
         />
       }
       main={
-        state.profile ? (
-          <ProfileSummary
-            profile={state.profile}
-            title="Current persisted profile"
-            description="Current user-facing profile data resolved from the server-side repository path."
-          />
-        ) : (
-          <EmptyState
-            title="No profile row yet"
-            description={`The authenticated session exists for ${state.authUser.email ?? 'this user'}, but no persisted profile record exists yet. The first save below will create it.`}
-          />
-        )
+        <div className="space-y-6">
+          {state.profile ? (
+            <ProfileSummary
+              profile={state.profile}
+              title="Current persisted profile"
+              description="Current user-facing profile data resolved from the server-side repository path."
+            />
+          ) : (
+            <EmptyState
+              title="No profile row yet"
+              description={`The authenticated session exists for ${state.authUser.email ?? 'this user'}, but no persisted profile record exists yet. The first save below will create it.`}
+            />
+          )}
+          {state.profile ? (
+            incomingFriendRequestsState?.kind === 'error' ? (
+              <ErrorState
+                title="Incoming requests are unavailable"
+                description={incomingFriendRequestsState.message}
+              />
+            ) : (
+              <IncomingFriendRequestsCard
+                requests={incomingFriendRequestsState?.requests ?? []}
+              />
+            )
+          ) : null}
+        </div>
       }
       aside={<ProfileEditor initialValues={initialValues} />}
     />

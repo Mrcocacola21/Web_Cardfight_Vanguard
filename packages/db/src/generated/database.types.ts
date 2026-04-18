@@ -1519,6 +1519,30 @@ export type Database = {
   }
   social: {
     Tables: {
+      friendships: {
+        Row: {
+          created_at: string
+          first_profile_id: string
+          friend_request_id: string
+          id: string
+          second_profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          first_profile_id: string
+          friend_request_id: string
+          id?: string
+          second_profile_id: string
+        }
+        Update: {
+          created_at?: string
+          first_profile_id?: string
+          friend_request_id?: string
+          id?: string
+          second_profile_id?: string
+        }
+        Relationships: []
+      }
       friend_relationships: {
         Row: {
           addressee_profile_id: string
@@ -1619,7 +1643,17 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      incoming_pending_friend_requests: {
+        Row: {
+          recipient_profile_id: string
+          request_id: string
+          requested_at: string
+          requester_avatar_url: string | null
+          requester_display_name: string
+          requester_profile_id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
