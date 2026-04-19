@@ -1,11 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useState } from 'react'
-import { UserMinus } from 'lucide-react'
 
-import { ErrorState, SuccessState } from '@/components/feedback'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -17,13 +14,9 @@ import type {
   HistoricalRelationshipStatus,
   PublicProfileRelationshipState,
 } from '@/features/social/relationship-state'
-import {
-  initialFriendRemovalFormState,
-  type FriendRemovalFormState,
-} from '@/features/social/server/friend-removal-form-state'
-import { removeFriendAction } from '@/features/social/server/friendship-actions'
 
 import { FriendRequestCard } from './friend-request-card'
+import { FriendshipRemovalAction } from './friendship-removal-action'
 
 interface FriendshipControlsCardProps {
   readonly recipientProfileId: string
@@ -46,7 +39,7 @@ export function FriendshipControlsCard({
             <CardTitle className="text-lg">Friends</CardTitle>
             <CardDescription>
               Friendship actions are only available when viewing another
-              user&apos;s public profile.
+              user&apos;s visible profile route.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -87,7 +80,7 @@ export function FriendshipControlsCard({
             <CardDescription>
               {relationshipState.direction === 'outgoing'
                 ? `A friend request to ${recipientDisplayName} is still pending.`
-                : `${recipientDisplayName} already sent you a friend request. Accept or decline it from your profile inbox.`}
+                : `${recipientDisplayName} already sent you a friend request. Accept or decline it from your friends dashboard.`}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -127,14 +120,6 @@ function RemoveFriendCard({
   recipientProfileId,
   recipientDisplayName,
 }: RemoveFriendCardProps) {
-  const [isConfirmingRemoval, setIsConfirmingRemoval] = useState(false)
-  const [state, formAction, isPending] = useActionState<
-    FriendRemovalFormState,
-    FormData
-  >(removeFriendAction, initialFriendRemovalFormState)
-
-  const actionBlocked = isPending || state.status === 'success'
-
   return (
     <Card>
       <CardHeader>
@@ -146,63 +131,10 @@ function RemoveFriendCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isConfirmingRemoval ? (
-          <div className="space-y-3 rounded-2xl border border-border/70 bg-background-elevated/60 p-4">
-            <p className="text-sm text-muted-foreground">
-              Remove {recipientDisplayName} from your friends? This disconnects
-              the active friendship for both sides.
-            </p>
-            <form action={formAction} className="flex flex-wrap gap-2">
-              <input
-                type="hidden"
-                name="targetProfileId"
-                value={recipientProfileId}
-              />
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={actionBlocked}
-              >
-                <UserMinus className="size-4" />
-                {isPending ? 'Removing...' : 'Confirm removal'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={actionBlocked}
-                onClick={() => setIsConfirmingRemoval(false)}
-              >
-                Keep friend
-              </Button>
-            </form>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={actionBlocked}
-            onClick={() => setIsConfirmingRemoval(true)}
-          >
-            <UserMinus className="size-4" />
-            Remove friend
-          </Button>
-        )}
-
-        {state.message ? (
-          state.status === 'success' ? (
-            <SuccessState
-              compact
-              title="Friend removed"
-              description={state.message}
-            />
-          ) : (
-            <ErrorState
-              compact
-              title="Friend removal unavailable"
-              description={state.message}
-            />
-          )
-        ) : null}
+        <FriendshipRemovalAction
+          targetProfileId={recipientProfileId}
+          targetDisplayName={recipientDisplayName}
+        />
       </CardContent>
     </Card>
   )

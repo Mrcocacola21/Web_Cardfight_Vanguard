@@ -24,7 +24,8 @@ export function ProfileSummary({
     <Card>
       <CardHeader className="gap-3">
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{profile.visibility}</Badge>
+          <Badge variant="outline">Profile: {profile.visibility}</Badge>
+          <Badge variant="secondary">Bio: {profile.bioVisibility}</Badge>
           {profile.username ? (
             <Badge variant="secondary">@{profile.username}</Badge>
           ) : null}

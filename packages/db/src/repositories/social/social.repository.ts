@@ -1,15 +1,19 @@
 import type { DbClient } from '../shared/client'
 import { err, mapQueryError, ok, type RepositoryResult } from '../shared/result'
 import {
+  mapActiveFriendRow,
   mapFriendRelationshipRow,
   mapFriendshipRow,
   mapIncomingFriendRequestRow,
+  mapOutgoingFriendRequestRow,
 } from './social.mappers'
 import type {
+  ActiveFriendRecord,
   CreateFriendRequestInput,
   FriendRelationshipRecord,
   FriendshipRecord,
   IncomingFriendRequestRecord,
+  OutgoingFriendRequestRecord,
   RemoveFriendshipInput,
   RespondToFriendRequestInput,
 } from './social.types'
@@ -18,9 +22,13 @@ const friendRelationshipSelect =
   'id, requester_profile_id, addressee_profile_id, status, requested_at, responded_at'
 const friendshipSelect =
   'id, first_profile_id, second_profile_id, friend_request_id, created_at'
+const activeFriendshipSelect =
+  'friendship_id, friends_since, friend_profile_id, friend_display_name, friend_avatar_url, friend_bio, friend_profile_visible'
 const incomingFriendRequestSelect =
-  'request_id, requested_at, requester_profile_id, recipient_profile_id, requester_display_name, requester_avatar_url'
-const incomingFriendRequestMaxLimit = 50
+  'request_id, requested_at, requester_profile_id, recipient_profile_id, requester_display_name, requester_avatar_url, requester_bio, requester_profile_visible'
+const outgoingFriendRequestSelect =
+  'request_id, requested_at, requester_profile_id, recipient_profile_id, recipient_display_name, recipient_avatar_url, recipient_bio, recipient_profile_visible'
+const socialProjectionMaxLimit = 50
 
 export interface SocialRepository {
   getFriendRelationshipBetweenProfiles(
@@ -46,22 +54,36 @@ export interface SocialRepository {
   removeFriendship(
     input: RemoveFriendshipInput,
   ): Promise<RepositoryResult<FriendshipRecord | null>>
+  listActiveFriendships(
+    ownerProfileId: string,
+    limit: number,
+    offset?: number,
+  ): Promise<RepositoryResult<readonly ActiveFriendRecord[]>>
   listIncomingPendingFriendRequests(
     recipientProfileId: string,
     limit: number,
   ): Promise<RepositoryResult<readonly IncomingFriendRequestRecord[]>>
+  listOutgoingPendingFriendRequests(
+    requesterProfileId: string,
+    limit: number,
+  ): Promise<RepositoryResult<readonly OutgoingFriendRequestRecord[]>>
 }
 
 export function createSocialRepository(client: DbClient): SocialRepository {
-  function normalizeIncomingFriendRequestLimit(limit: number) {
+  function normalizeSocialProjectionLimit(limit: number) {
     if (!Number.isFinite(limit)) {
       return 1
     }
 
-    return Math.max(
-      1,
-      Math.min(Math.trunc(limit), incomingFriendRequestMaxLimit),
-    )
+    return Math.max(1, Math.min(Math.trunc(limit), socialProjectionMaxLimit))
+  }
+
+  function normalizeSocialProjectionOffset(offset: number | undefined) {
+    if (typeof offset !== 'number' || !Number.isFinite(offset)) {
+      return 0
+    }
+
+    return Math.max(0, Math.trunc(offset))
   }
 
   function normalizeFriendshipPair(
@@ -246,8 +268,28 @@ export function createSocialRepository(client: DbClient): SocialRepository {
       return ok(data ? mapFriendshipRow(data) : null)
     },
 
+    async listActiveFriendships(ownerProfileId, limit, offset = 0) {
+      const normalizedLimit = normalizeSocialProjectionLimit(limit)
+      const normalizedOffset = normalizeSocialProjectionOffset(offset)
+      const { data, error } = await client
+        .schema('social')
+        .from('active_friendships_overview')
+        .select(activeFriendshipSelect)
+        .eq('owner_profile_id', ownerProfileId)
+        .order('friends_since', {
+          ascending: false,
+        })
+        .range(normalizedOffset, normalizedOffset + normalizedLimit - 1)
+
+      if (error) {
+        return err(mapQueryError(error, 'Failed to load active friendships.'))
+      }
+
+      return ok((data ?? []).map(mapActiveFriendRow))
+    },
+
     async listIncomingPendingFriendRequests(recipientProfileId, limit) {
-      const normalizedLimit = normalizeIncomingFriendRequestLimit(limit)
+      const normalizedLimit = normalizeSocialProjectionLimit(limit)
       const { data, error } = await client
         .schema('social')
         .from('incoming_pending_friend_requests')
@@ -265,6 +307,27 @@ export function createSocialRepository(client: DbClient): SocialRepository {
       }
 
       return ok((data ?? []).map(mapIncomingFriendRequestRow))
+    },
+
+    async listOutgoingPendingFriendRequests(requesterProfileId, limit) {
+      const normalizedLimit = normalizeSocialProjectionLimit(limit)
+      const { data, error } = await client
+        .schema('social')
+        .from('outgoing_pending_friend_requests')
+        .select(outgoingFriendRequestSelect)
+        .eq('requester_profile_id', requesterProfileId)
+        .order('requested_at', {
+          ascending: false,
+        })
+        .range(0, normalizedLimit - 1)
+
+      if (error) {
+        return err(
+          mapQueryError(error, 'Failed to load outgoing friend requests.'),
+        )
+      }
+
+      return ok((data ?? []).map(mapOutgoingFriendRequestRow))
     },
   }
 }

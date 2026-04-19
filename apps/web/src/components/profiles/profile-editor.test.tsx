@@ -12,16 +12,18 @@ describe('ProfileEditor', () => {
           avatarUrl: 'https://images.example/avatar.png',
           bio: 'Deck analyst and test pilot.',
           visibility: 'private',
+          bioVisibility: 'friends',
         }}
       />,
     )
 
     expect(screen.getByLabelText(/display name/i)).toHaveValue('Azure Pilot')
     expect(screen.getByLabelText(/profile visibility/i)).toHaveValue('private')
+    expect(screen.getByLabelText(/bio visibility/i)).toHaveValue('friends')
     expect(screen.getByLabelText(/avatar url/i)).toHaveValue(
       'https://images.example/avatar.png',
     )
-    expect(screen.getByLabelText(/bio/i)).toHaveValue(
+    expect(screen.getByLabelText(/^bio$/i)).toHaveValue(
       'Deck analyst and test pilot.',
     )
     expect(

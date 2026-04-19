@@ -16,6 +16,7 @@ describe('ProfileSummary', () => {
           avatarUrl: 'https://images.example/avatar.png',
           bio: 'Deck analyst and test pilot.',
           visibility: 'public',
+          bioVisibility: 'friends',
           createdAt: '2026-04-08T00:00:00.000Z',
           updatedAt: '2026-04-08T01:00:00.000Z',
         }}
@@ -28,6 +29,8 @@ describe('ProfileSummary', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/deck analyst and test pilot/i)).toBeInTheDocument()
     expect(screen.getByText(/@azurepilot/i)).toBeInTheDocument()
+    expect(screen.getByText(/profile: public/i)).toBeInTheDocument()
+    expect(screen.getByText(/bio: friends/i)).toBeInTheDocument()
   })
 
   it('renders sane fallbacks for missing avatar and bio', () => {
@@ -42,6 +45,7 @@ describe('ProfileSummary', () => {
           avatarUrl: null,
           bio: null,
           visibility: 'public',
+          bioVisibility: 'private',
           createdAt: '2026-04-08T00:00:00.000Z',
           updatedAt: '2026-04-08T01:00:00.000Z',
         }}

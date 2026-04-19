@@ -21,6 +21,7 @@ describe('saveCurrentProfileUseCase', () => {
         avatarUrl: 'https://example.com/avatar.png',
         bio: 'Ride the Vanguard.',
         visibility: 'public',
+        bioVisibility: 'friends',
       },
     )
 
@@ -30,6 +31,7 @@ describe('saveCurrentProfileUseCase', () => {
       avatarUrl: 'https://example.com/avatar.png',
       bio: 'Ride the Vanguard.',
       visibility: 'public',
+      bioVisibility: 'friends',
     })
     expect(result).toEqual({
       ok: true,
@@ -56,6 +58,7 @@ describe('saveCurrentProfileUseCase', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
 

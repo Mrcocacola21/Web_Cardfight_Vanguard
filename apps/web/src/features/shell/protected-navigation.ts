@@ -1,7 +1,9 @@
 import {
   BookOpenText,
   House,
+  Handshake,
   Layers3,
+  Swords,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -38,6 +40,20 @@ export const protectedNavItems: readonly ProtectedNavItem[] = [
     label: 'Profile',
     description: 'Manage your own profile and visibility settings.',
     icon: UserRound,
+  },
+  {
+    href: '/friends',
+    label: 'Friends',
+    description:
+      'Review active friendships plus incoming and outgoing requests.',
+    icon: Handshake,
+  },
+  {
+    href: '/matches',
+    label: 'Matches',
+    description:
+      'Review owner-owned match history and branch into manual entry before gameplay automation exists.',
+    icon: Swords,
   },
   {
     href: '/users',

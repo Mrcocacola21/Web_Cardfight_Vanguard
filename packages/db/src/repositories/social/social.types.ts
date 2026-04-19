@@ -31,6 +31,16 @@ export interface FriendshipRecord {
   readonly createdAt: string
 }
 
+export interface ActiveFriendRecord {
+  readonly friendshipId: string
+  readonly friendsSince: string
+  readonly friendProfileId: string
+  readonly friendDisplayName: string
+  readonly friendAvatarUrl: string | null
+  readonly friendBio: string | null
+  readonly friendProfileVisible: boolean
+}
+
 export interface IncomingFriendRequestRecord {
   readonly requestId: string
   readonly requestedAt: string
@@ -38,6 +48,19 @@ export interface IncomingFriendRequestRecord {
   readonly recipientProfileId: string
   readonly requesterDisplayName: string
   readonly requesterAvatarUrl: string | null
+  readonly requesterBio: string | null
+  readonly requesterProfileVisible: boolean
+}
+
+export interface OutgoingFriendRequestRecord {
+  readonly requestId: string
+  readonly requestedAt: string
+  readonly requesterProfileId: string
+  readonly recipientProfileId: string
+  readonly recipientDisplayName: string
+  readonly recipientAvatarUrl: string | null
+  readonly recipientBio: string | null
+  readonly recipientProfileVisible: boolean
 }
 
 export interface RemoveFriendshipInput {

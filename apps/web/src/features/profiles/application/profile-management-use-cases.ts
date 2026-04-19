@@ -12,6 +12,7 @@ export interface SaveCurrentProfileCommand {
   readonly avatarUrl: string | null
   readonly bio: string | null
   readonly visibility: ProfileVisibility
+  readonly bioVisibility: ProfileVisibility
 }
 
 export type SaveCurrentProfileResult = ProfileApplicationResult<{
@@ -28,6 +29,7 @@ export async function saveCurrentProfileUseCase(
     avatarUrl: command.avatarUrl,
     bio: command.bio,
     visibility: command.visibility,
+    bioVisibility: command.bioVisibility,
   })
 
   if (!result.ok) {

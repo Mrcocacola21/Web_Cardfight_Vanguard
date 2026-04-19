@@ -1611,45 +1611,79 @@ export type Database = {
       matches: {
         Row: {
           created_at: string
+          entry_source: string
           format_id: string
           id: string
           notes: string | null
           occurred_at: string
-          recorded_by_profile_id: string | null
+          recorded_by_profile_id: string
           status: string
+          updated_at: string
           visibility: string
         }
         Insert: {
           created_at?: string
+          entry_source?: string
           format_id: string
           id?: string
           notes?: string | null
           occurred_at?: string
-          recorded_by_profile_id?: string | null
+          recorded_by_profile_id: string
           status?: string
+          updated_at?: string
           visibility?: string
         }
         Update: {
           created_at?: string
+          entry_source?: string
           format_id?: string
           id?: string
           notes?: string | null
           occurred_at?: string
-          recorded_by_profile_id?: string | null
+          recorded_by_profile_id?: string
           status?: string
+          updated_at?: string
           visibility?: string
         }
         Relationships: []
       }
     }
     Views: {
+      active_friendships_overview: {
+        Row: {
+          friend_avatar_url: string | null
+          friend_bio: string | null
+          friend_display_name: string
+          friend_profile_id: string
+          friend_profile_visible: boolean
+          friends_since: string
+          friendship_id: string
+          owner_profile_id: string
+        }
+        Relationships: []
+      }
       incoming_pending_friend_requests: {
         Row: {
           recipient_profile_id: string
           request_id: string
           requested_at: string
           requester_avatar_url: string | null
+          requester_bio: string | null
           requester_display_name: string
+          requester_profile_id: string
+          requester_profile_visible: boolean
+        }
+        Relationships: []
+      }
+      outgoing_pending_friend_requests: {
+        Row: {
+          recipient_avatar_url: string | null
+          recipient_bio: string | null
+          recipient_display_name: string
+          recipient_profile_id: string
+          recipient_profile_visible: boolean
+          request_id: string
+          requested_at: string
           requester_profile_id: string
         }
         Relationships: []
@@ -1888,6 +1922,7 @@ export type Database = {
           auth_user_id: string | null
           avatar_url: string | null
           bio: string | null
+          bio_visibility: string
           created_at: string
           display_name: string
           id: string
@@ -1899,6 +1934,7 @@ export type Database = {
           auth_user_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          bio_visibility?: string
           created_at?: string
           display_name: string
           id?: string
@@ -1910,6 +1946,7 @@ export type Database = {
           auth_user_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          bio_visibility?: string
           created_at?: string
           display_name?: string
           id?: string
@@ -1927,6 +1964,18 @@ export type Database = {
           bio: string | null
           display_name: string
           id: string
+        }
+        Relationships: []
+      }
+      visible_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          bio_visibility: string
+          bio_visible: boolean
+          display_name: string
+          id: string
+          visibility: string
         }
         Relationships: []
       }

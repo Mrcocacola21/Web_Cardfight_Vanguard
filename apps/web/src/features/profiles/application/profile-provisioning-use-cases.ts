@@ -11,6 +11,7 @@ export interface InitialProfileDraft {
   readonly avatarUrl: string | null
   readonly bio: string | null
   readonly visibility: ProfileVisibility
+  readonly bioVisibility: ProfileVisibility
 }
 
 export interface EnsureProfileForAuthUserCommand {
@@ -19,6 +20,7 @@ export interface EnsureProfileForAuthUserCommand {
   readonly avatarUrl: string | null
   readonly bio: string | null
   readonly visibility: ProfileVisibility
+  readonly bioVisibility: ProfileVisibility
 }
 
 export type EnsureProfileForAuthUserResult = ProfileApplicationResult<{
@@ -53,6 +55,7 @@ export function deriveInitialProfileDraft(input: {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     }
   }
 
@@ -65,6 +68,7 @@ export function deriveInitialProfileDraft(input: {
     avatarUrl: null,
     bio: null,
     visibility: 'private',
+    bioVisibility: 'private',
   }
 }
 
@@ -78,6 +82,7 @@ export async function ensureProfileForAuthUserUseCase(
     avatarUrl: command.avatarUrl,
     bio: command.bio,
     visibility: command.visibility,
+    bioVisibility: command.bioVisibility,
   })
 
   if (!result.ok) {

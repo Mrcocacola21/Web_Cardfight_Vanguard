@@ -112,6 +112,12 @@ export function FoundationHome() {
                   Users
                 </Link>
                 <Link
+                  href="/friends"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Friends
+                </Link>
+                <Link
                   href="/decks"
                   className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
                 >

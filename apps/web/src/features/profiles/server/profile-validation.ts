@@ -1,10 +1,16 @@
 import type { ProfileVisibility } from '@web-vg/db/repositories/profiles'
 
+import {
+  isProfileVisibilityValue,
+  isVisibilityAtLeastAsRestrictive,
+} from '@/features/profiles/profile-privacy'
+
 export interface ProfileDraft {
   readonly displayName: string
   readonly avatarUrl: string | null
   readonly bio: string | null
   readonly visibility: ProfileVisibility
+  readonly bioVisibility: ProfileVisibility
 }
 
 export interface ProfileValidationErrors {
@@ -12,6 +18,7 @@ export interface ProfileValidationErrors {
   readonly avatarUrl?: string
   readonly bio?: string
   readonly visibility?: string
+  readonly bioVisibility?: string
 }
 
 export type ProfileValidationResult =
@@ -29,16 +36,19 @@ export function validateProfileDraft(input: {
   readonly avatarUrl: string
   readonly bio: string
   readonly visibility: string
+  readonly bioVisibility: string
 }): ProfileValidationResult {
   const displayName = input.displayName.trim()
   const avatarUrlValue = input.avatarUrl.trim()
   const bioValue = input.bio.trim()
   const visibilityValue = input.visibility.trim()
+  const bioVisibilityValue = input.bioVisibility.trim()
   const errors: {
     displayName?: string
     avatarUrl?: string
     bio?: string
     visibility?: string
+    bioVisibility?: string
   } = {}
 
   if (displayName.length === 0) {
@@ -59,15 +69,31 @@ export function validateProfileDraft(input: {
     }
   }
 
-  if (visibilityValue !== 'public' && visibilityValue !== 'private') {
-    errors.visibility = 'Profile visibility must be public or private.'
+  if (!isProfileVisibilityValue(visibilityValue)) {
+    errors.visibility =
+      'Profile visibility must be public, friends-only, or private.'
+  }
+
+  if (!isProfileVisibilityValue(bioVisibilityValue)) {
+    errors.bioVisibility =
+      'Bio visibility must be public, friends-only, or private.'
+  }
+
+  if (
+    isProfileVisibilityValue(visibilityValue) &&
+    isProfileVisibilityValue(bioVisibilityValue) &&
+    !isVisibilityAtLeastAsRestrictive(bioVisibilityValue, visibilityValue)
+  ) {
+    errors.bioVisibility =
+      'Bio visibility cannot be broader than profile visibility.'
   }
 
   if (
     errors.displayName ||
     errors.avatarUrl ||
     errors.bio ||
-    errors.visibility
+    errors.visibility ||
+    errors.bioVisibility
   ) {
     return {
       ok: false,
@@ -81,10 +107,12 @@ export function validateProfileDraft(input: {
       displayName,
       avatarUrl: avatarUrlValue.length > 0 ? avatarUrlValue : null,
       bio: bioValue.length > 0 ? bioValue : null,
-      visibility:
-        visibilityValue === 'public' || visibilityValue === 'private'
-          ? visibilityValue
-          : 'private',
+      visibility: isProfileVisibilityValue(visibilityValue)
+        ? visibilityValue
+        : 'private',
+      bioVisibility: isProfileVisibilityValue(bioVisibilityValue)
+        ? bioVisibilityValue
+        : 'private',
     },
   }
 }

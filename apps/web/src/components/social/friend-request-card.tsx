@@ -44,7 +44,7 @@ export function FriendRequestCard({
           <CardTitle className="text-lg">Friends</CardTitle>
           <CardDescription>
             Friend requests are only available when viewing another user&apos;s
-            public profile.
+            visible profile route.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -84,7 +84,7 @@ export function FriendRequestCard({
         <CardDescription>
           Send an explicit friend request through the social relationship
           foundation. The recipient can accept or decline it from their own
-          profile inbox.
+          friends dashboard.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

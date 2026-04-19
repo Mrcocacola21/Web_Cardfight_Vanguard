@@ -5,7 +5,7 @@ import {
 } from '@web-vg/db'
 import type {
   ProfileRecord,
-  PublicProfileRecord,
+  VisibleProfileRecord,
 } from '@web-vg/db/repositories/profiles'
 import type {
   FriendRelationshipRecord,
@@ -14,14 +14,19 @@ import type {
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getCurrentAuthState } from '@/features/auth/server/auth-session'
+import {
+  resolveProfileViewerCategory,
+  type ProfileViewerCategory,
+} from '@/features/profiles/profile-privacy'
 import type { PublicProfileRelationshipState } from '@/features/social/relationship-state'
 
 export type PublicProfilePageState =
   | {
       readonly kind: 'ready'
-      readonly profile: PublicProfileRecord
+      readonly profile: VisibleProfileRecord
       readonly isOwnerViewer: boolean
       readonly viewerProfileId: string | null
+      readonly viewerCategory: ProfileViewerCategory
       readonly relationshipState: PublicProfileRelationshipState
     }
   | {
@@ -37,9 +42,9 @@ interface PublicProfilePageDependencies {
   readonly getProfileById: (
     profileId: string,
   ) => Promise<RepositoryResult<ProfileRecord | null>>
-  readonly getPublicProfileById: (
+  readonly getVisibleProfileById: (
     profileId: string,
-  ) => Promise<RepositoryResult<PublicProfileRecord | null>>
+  ) => Promise<RepositoryResult<VisibleProfileRecord | null>>
   readonly getFriendRelationshipBetweenProfiles: (
     firstProfileId: string,
     secondProfileId: string,
@@ -50,14 +55,20 @@ interface PublicProfilePageDependencies {
   ) => Promise<RepositoryResult<FriendshipRecord | null>>
 }
 
-function mapProfileRecordToPublicProfile(
-  profile: Pick<ProfileRecord, 'id' | 'displayName' | 'avatarUrl' | 'bio'>,
-): PublicProfileRecord {
+function mapOwnerProfileRecordToVisibleProfile(
+  profile: Pick<
+    ProfileRecord,
+    'id' | 'displayName' | 'avatarUrl' | 'bio' | 'visibility' | 'bioVisibility'
+  >,
+): VisibleProfileRecord {
   return {
     id: profile.id,
     displayName: profile.displayName,
     avatarUrl: profile.avatarUrl,
     bio: profile.bio,
+    visibility: profile.visibility,
+    bioVisibility: profile.bioVisibility,
+    bioVisible: true,
   }
 }
 
@@ -85,25 +96,26 @@ export async function resolvePublicProfilePageState(
 
     return {
       kind: 'ready',
-      profile: mapProfileRecordToPublicProfile(ownerResult.data),
+      profile: mapOwnerProfileRecordToVisibleProfile(ownerResult.data),
       isOwnerViewer: true,
       viewerProfileId,
+      viewerCategory: 'owner',
       relationshipState: {
         kind: 'self',
       },
     }
   }
 
-  const publicResult = await dependencies.getPublicProfileById(profileId)
+  const visibleResult = await dependencies.getVisibleProfileById(profileId)
 
-  if (!publicResult.ok) {
+  if (!visibleResult.ok) {
     return {
       kind: 'error',
-      message: publicResult.error.message,
+      message: visibleResult.error.message,
     }
   }
 
-  if (!publicResult.data) {
+  if (!visibleResult.data) {
     return {
       kind: 'not-found',
     }
@@ -124,9 +136,14 @@ export async function resolvePublicProfilePageState(
 
   return {
     kind: 'ready',
-    profile: publicResult.data,
+    profile: visibleResult.data,
     isOwnerViewer: false,
     viewerProfileId,
+    viewerCategory: resolveProfileViewerCategory({
+      viewerProfileId,
+      ownerProfileId: visibleResult.data.id,
+      isFriend: relationshipState.kind === 'friend',
+    }),
     relationshipState,
   }
 }
@@ -208,30 +225,24 @@ export async function getPublicProfilePageState(
   const client = await createSupabaseServerClient()
   const repository = createProfilesRepository(client)
   const socialRepository = createSocialRepository(client)
+  const viewerProfileState = await resolveViewerProfileState(repository, client)
+
+  if (!viewerProfileState.ok) {
+    return {
+      kind: 'error',
+      message: viewerProfileState.message,
+    }
+  }
 
   return resolvePublicProfilePageState(profileId, {
-    async getViewerProfileId() {
-      const authState = await getCurrentAuthState({ client })
-
-      if (authState.kind !== 'ready') {
-        return null
-      }
-
-      const viewerProfileResult = await repository.getProfileByAuthUserId(
-        authState.user.id,
-      )
-
-      if (!viewerProfileResult.ok) {
-        return null
-      }
-
-      return viewerProfileResult.data?.id ?? null
+    getViewerProfileId() {
+      return viewerProfileState.viewerProfileId
     },
     getProfileById(profileIdToLoad) {
       return repository.getProfileById(profileIdToLoad)
     },
-    getPublicProfileById(profileIdToLoad) {
-      return repository.getPublicProfileById(profileIdToLoad)
+    getVisibleProfileById(profileIdToLoad) {
+      return repository.getVisibleProfileById(profileIdToLoad)
     },
     getFriendRelationshipBetweenProfiles(firstProfileId, secondProfileId) {
       return socialRepository.getFriendRelationshipBetweenProfiles(
@@ -246,4 +257,54 @@ export async function getPublicProfilePageState(
       )
     },
   })
+}
+
+async function resolveViewerProfileState(
+  repository: Pick<PublicProfilePageDependencies, never> & {
+    getProfileByAuthUserId: (
+      authUserId: string,
+    ) => Promise<RepositoryResult<ProfileRecord | null>>
+  },
+  client: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+): Promise<
+  | {
+      readonly ok: true
+      readonly viewerProfileId: string | null
+    }
+  | {
+      readonly ok: false
+      readonly message: string
+    }
+> {
+  const authState = await getCurrentAuthState({ client })
+
+  if (authState.kind === 'signed-out') {
+    return {
+      ok: true,
+      viewerProfileId: null,
+    }
+  }
+
+  if (authState.kind === 'error') {
+    return {
+      ok: false,
+      message: authState.message,
+    }
+  }
+
+  const viewerProfileResult = await repository.getProfileByAuthUserId(
+    authState.user.id,
+  )
+
+  if (!viewerProfileResult.ok) {
+    return {
+      ok: false,
+      message: viewerProfileResult.error.message,
+    }
+  }
+
+  return {
+    ok: true,
+    viewerProfileId: viewerProfileResult.data?.id ?? null,
+  }
 }

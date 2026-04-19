@@ -31,6 +31,9 @@
       "@web-vg/db/repositories/importer": [
         "packages/db/src/repositories/importer/index.ts"
       ],
+      "@web-vg/db/repositories/matches": [
+        "packages/db/src/repositories/matches/index.ts"
+      ],
       "@web-vg/db/repositories/profiles": [
         "packages/db/src/repositories/profiles/index.ts"
       ],

@@ -31,4 +31,26 @@ describe('ProtectedNavLinks', () => {
       usersLinks.some((link) => link.getAttribute('aria-current') === 'page'),
     ).toBe(true)
   })
+
+  it('marks the friends dashboard route as active for the dedicated social dashboard', () => {
+    render(<ProtectedNavLinks pathname="/friends" />)
+    const friendsLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/friends')
+
+    expect(
+      friendsLinks.some((link) => link.getAttribute('aria-current') === 'page'),
+    ).toBe(true)
+  })
+
+  it('marks nested manual match entry routes as active in the protected navigation', () => {
+    render(<ProtectedNavLinks pathname="/matches/new" />)
+    const matchLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/matches')
+
+    expect(
+      matchLinks.some((link) => link.getAttribute('aria-current') === 'page'),
+    ).toBe(true)
+  })
 })

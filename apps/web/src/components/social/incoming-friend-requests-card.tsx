@@ -1,11 +1,12 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import { useActionState } from 'react'
 import type { IncomingFriendRequestRecord } from '@web-vg/db/repositories/social'
 
 import { EmptyState, ErrorState, SuccessState } from '@/components/feedback'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -92,7 +93,7 @@ function IncomingFriendRequestItem({
           <div>
             <p className="font-medium">{request.requesterDisplayName}</p>
             <p className="text-sm text-muted-foreground">
-              Sent you a friend request.
+              {getRequesterSummaryCopy(request)}
             </p>
           </div>
 
@@ -117,6 +118,17 @@ function IncomingFriendRequestItem({
             >
               Decline
             </Button>
+            {request.requesterProfileVisible ? (
+              <Link
+                href={`/users/${encodeURIComponent(request.requesterProfileId)}`}
+                className={buttonVariants({
+                  variant: 'ghost',
+                  size: 'sm',
+                })}
+              >
+                View profile
+              </Link>
+            ) : null}
           </form>
 
           {state.message ? (
@@ -159,4 +171,20 @@ function isFriendRequestResponseBlocked(state: FriendRequestResponseFormState) {
     state.code === 'forbidden' ||
     state.code === 'unavailable'
   )
+}
+
+function getRequesterSummaryCopy(request: IncomingFriendRequestRecord) {
+  if (!request.requesterProfileVisible) {
+    return 'This request is still pending, but the sender is not currently visible through the public profile surface.'
+  }
+
+  if (request.requesterBio) {
+    return getPublicBioSnippet(request.requesterBio)
+  }
+
+  return 'Sent you a friend request.'
+}
+
+function getPublicBioSnippet(bio: string) {
+  return bio.length > 140 ? `${bio.slice(0, 137)}...` : bio
 }

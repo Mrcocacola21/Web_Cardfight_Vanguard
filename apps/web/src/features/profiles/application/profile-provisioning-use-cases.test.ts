@@ -19,6 +19,7 @@ describe('deriveInitialProfileDraft', () => {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     })
   })
 
@@ -33,6 +34,7 @@ describe('deriveInitialProfileDraft', () => {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     })
   })
 })
@@ -70,6 +72,7 @@ describe('ensureProfileForAuthUserUseCase', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
 
@@ -79,6 +82,7 @@ describe('ensureProfileForAuthUserUseCase', () => {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     })
     expect(result).toEqual({
       ok: true,
@@ -105,6 +109,7 @@ describe('ensureProfileForAuthUserUseCase', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
 

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -7,9 +9,15 @@ import {
 } from '@/components/layout'
 import { ProfileEditor } from '@/components/profiles/profile-editor'
 import { ProfileSummary } from '@/components/profiles/profile-summary'
+import { buttonVariants } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { getCurrentProfileState } from '@/features/profiles/server/profile-read'
-import { IncomingFriendRequestsCard } from '@/components/social/incoming-friend-requests-card'
-import { getIncomingFriendRequestsState } from '@/features/social/server/incoming-friend-request-read'
 
 export default async function ProfilePage() {
   const state = await getCurrentProfileState()
@@ -40,10 +48,8 @@ export default async function ProfilePage() {
     avatarUrl: state.profile?.avatarUrl ?? '',
     bio: state.profile?.bio ?? '',
     visibility: state.profile?.visibility ?? 'private',
+    bioVisibility: state.profile?.bioVisibility ?? 'private',
   }
-  const incomingFriendRequestsState = state.profile
-    ? await getIncomingFriendRequestsState(state.profile.id)
-    : null
 
   return (
     <DetailPageLayout
@@ -75,21 +81,34 @@ export default async function ProfilePage() {
               description={`The authenticated session exists for ${state.authUser.email ?? 'this user'}, but no persisted profile record exists yet. The first save below will create it.`}
             />
           )}
-          {state.profile ? (
-            incomingFriendRequestsState?.kind === 'error' ? (
-              <ErrorState
-                title="Incoming requests are unavailable"
-                description={incomingFriendRequestsState.message}
-              />
-            ) : (
-              <IncomingFriendRequestsCard
-                requests={incomingFriendRequestsState?.requests ?? []}
-              />
-            )
-          ) : null}
+          {state.profile ? <FriendsDashboardEntryCard /> : null}
         </div>
       }
       aside={<ProfileEditor initialValues={initialValues} />}
     />
+  )
+}
+
+function FriendsDashboardEntryCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Friends dashboard</CardTitle>
+        <CardDescription>
+          Active friends plus incoming and outgoing requests now live on the
+          dedicated social dashboard route.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Link
+          href="/friends"
+          className={buttonVariants({
+            variant: 'outline',
+          })}
+        >
+          Open friends dashboard
+        </Link>
+      </CardContent>
+    </Card>
   )
 }

@@ -497,6 +497,96 @@ describe('social repository', () => {
     })
   })
 
+  it('lists active friendships for the current owner profile', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.schema).toBe('social')
+          expect(query.table).toBe('active_friendships_overview')
+          expect(query.cardinality).toBe('many')
+          expect(query.filters).toEqual([
+            {
+              type: 'eq',
+              column: 'owner_profile_id',
+              value: 'profile-1',
+            },
+          ])
+          expect(query.orders).toEqual([
+            {
+              column: 'friends_since',
+              ascending: false,
+            },
+          ])
+          expect(query.range).toEqual({
+            from: 0,
+            to: 7,
+          })
+        },
+        response: {
+          data: [
+            {
+              friendship_id: 'friendship-3',
+              friends_since: '2026-04-18T13:00:00.000Z',
+              friend_profile_id: 'profile-2',
+              friend_display_name: 'Nova Player',
+              friend_avatar_url: null,
+              friend_bio: 'Public deck enjoyer.',
+              friend_profile_visible: true,
+            },
+          ],
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createSocialRepository(mock.client)
+    const result = await repository.listActiveFriendships('profile-1', 8)
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          friendshipId: 'friendship-3',
+          friendsSince: '2026-04-18T13:00:00.000Z',
+          friendProfileId: 'profile-2',
+          friendDisplayName: 'Nova Player',
+          friendAvatarUrl: null,
+          friendBio: 'Public deck enjoyer.',
+          friendProfileVisible: true,
+        },
+      ],
+    })
+  })
+
+  it('supports offset pagination for active friendships', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.range).toEqual({
+            from: 50,
+            to: 74,
+          })
+        },
+        response: {
+          data: [],
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createSocialRepository(mock.client)
+    const result = await repository.listActiveFriendships('profile-1', 25, 50)
+
+    expect(result).toEqual({
+      ok: true,
+      data: [],
+    })
+  })
+
   it('lists incoming pending friend requests for the current recipient profile', async () => {
     const mock = createSequentialMockDbClient([
       {
@@ -531,6 +621,8 @@ describe('social repository', () => {
               recipient_profile_id: 'profile-2',
               requester_display_name: 'Azure Pilot',
               requester_avatar_url: 'https://images.example/avatar.png',
+              requester_bio: 'Ready to test Brandt Gate.',
+              requester_profile_visible: true,
             },
           ],
           error: null,
@@ -556,6 +648,76 @@ describe('social repository', () => {
           recipientProfileId: 'profile-2',
           requesterDisplayName: 'Azure Pilot',
           requesterAvatarUrl: 'https://images.example/avatar.png',
+          requesterBio: 'Ready to test Brandt Gate.',
+          requesterProfileVisible: true,
+        },
+      ],
+    })
+  })
+
+  it('lists outgoing pending friend requests for the current requester profile', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.schema).toBe('social')
+          expect(query.table).toBe('outgoing_pending_friend_requests')
+          expect(query.cardinality).toBe('many')
+          expect(query.filters).toEqual([
+            {
+              type: 'eq',
+              column: 'requester_profile_id',
+              value: 'profile-1',
+            },
+          ])
+          expect(query.orders).toEqual([
+            {
+              column: 'requested_at',
+              ascending: false,
+            },
+          ])
+          expect(query.range).toEqual({
+            from: 0,
+            to: 5,
+          })
+        },
+        response: {
+          data: [
+            {
+              request_id: 'friend-8',
+              requested_at: '2026-04-18T14:00:00.000Z',
+              requester_profile_id: 'profile-1',
+              recipient_profile_id: 'profile-3',
+              recipient_display_name: 'Stealth Rival',
+              recipient_avatar_url: null,
+              recipient_bio: null,
+              recipient_profile_visible: false,
+            },
+          ],
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createSocialRepository(mock.client)
+    const result = await repository.listOutgoingPendingFriendRequests(
+      'profile-1',
+      6,
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          requestId: 'friend-8',
+          requestedAt: '2026-04-18T14:00:00.000Z',
+          requesterProfileId: 'profile-1',
+          recipientProfileId: 'profile-3',
+          recipientDisplayName: 'Stealth Rival',
+          recipientAvatarUrl: null,
+          recipientBio: null,
+          recipientProfileVisible: false,
         },
       ],
     })

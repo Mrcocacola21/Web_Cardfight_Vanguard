@@ -5,8 +5,9 @@ Monorepo for a Cardfight!! Vanguard web client / companion platform.
 The repository is no longer just a shell. It now contains a working catalog,
 an importer -> publication content pipeline, baseline auth/RLS, the first
 real deck builder workflow, format-aware deck validation, and an explicit
-application-layer separation across features, plus the first explicit social
-foundation on top of the profile layer.
+application-layer separation across features, plus an explicit social
+foundation on top of the profile layer and an owner-owned match history /
+stats foundation.
 
 ## Prerequisites
 
@@ -140,7 +141,9 @@ Current practical coverage is strongest around:
 - catalog read-side and publication-related repository/service flows
 - importer pipeline and publication lifecycle checkpoints
 - auth/profile baseline
+- social foundation and protected profile/public-profile flows
 - deck domain, deck builder UI, autosave, and metadata flows
+- owner-owned match history, filters, and stats aggregation
 
 The browser/runtime layer is still lighter than unit/component coverage and is
 best treated as checkpoint confidence, not a full e2e matrix.
@@ -161,10 +164,21 @@ Available now:
 - social foundation:
   - public user search at `/users`
   - public profile route at `/users/[profileId]`
+  - friends dashboard at `/friends`
   - explicit friend requests
   - accept / decline request lifecycle
   - explicit active friendship edges
   - controlled friendship removal
+  - privacy flags baseline across public / friends / owner-only profile reads
+- match history and stats foundation:
+  - match history at `/matches`
+  - manual match entry at `/matches/new`
+  - personal stats at `/matches/stats`
+  - friend-opponent stats at `/matches/friends`
+  - owner-owned match records linked to persisted deck versions
+  - opponent linkage through the app-facing profile surface
+  - result / played date / notes storage for manual match records
+  - protected list filters, personal stats, and friend-scoped stats slices
 - catalog read-side:
   - `/catalog`
   - `/catalog/[cardKey]`
@@ -205,10 +219,10 @@ Available now:
 Not implemented yet:
 
 - collection/binder product flow
-- friends page and richer social graph/product workflows
-- match history product workflows
+- notifications, recommendations, and richer social graph/product workflows
+- public/shared match history workflows and richer match-detail editing flows
 - gameplay engine and effect system
-- advanced sharing/visibility authorization beyond the baseline owner model
+- advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the
 persisted pipeline runtime path:

@@ -23,8 +23,10 @@ Search participates in privacy enforcement.
 
 - only public profiles are searchable
 - private profiles do not appear in results
+- friends-only profiles do not appear in results
 - owner, other signed-in users, and guests all get the same search result set
 - search results contain only public-safe profile summary fields
+- `bio` is present only when the profile bio itself is `public`
 
 This keeps search honest with the current visibility semantics instead of
 creating a search-only exception path.
@@ -50,7 +52,8 @@ Each result contains:
 - `avatarUrl`
 - `bio`
 
-Those fields are already part of the existing public profile surface.
+Those fields are already part of the existing public profile surface, but the
+bio remains filtered to public-only visibility.
 
 ## 6. Integration with public profiles
 

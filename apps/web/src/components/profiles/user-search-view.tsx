@@ -54,7 +54,7 @@ export function UserSearchView({ inputValue, state }: UserSearchViewProps) {
               <span aria-hidden="true">|</span>
               <span>Public-safe results only</span>
               <span aria-hidden="true">|</span>
-              <span>No friend/request state yet</span>
+              <span>Search-first social surface</span>
             </div>
           }
         />

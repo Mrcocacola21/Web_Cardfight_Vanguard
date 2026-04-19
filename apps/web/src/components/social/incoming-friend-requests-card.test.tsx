@@ -54,6 +54,10 @@ describe('IncomingFriendRequestsCard', () => {
     expect(screen.getByText('Azure Pilot')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /accept/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /decline/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view profile/i })).toHaveAttribute(
+      'href',
+      '/users/profile-1',
+    )
   })
 
   it('shows success feedback after accepting a request', async () => {
@@ -106,6 +110,30 @@ describe('IncomingFriendRequestsCard', () => {
 
     expect(screen.getByRole('button', { name: /accept/i })).toBeDisabled()
   })
+
+  it('keeps hidden request senders out of the public-profile link surface', () => {
+    render(
+      <IncomingFriendRequestsCard
+        requests={[
+          {
+            ...buildRequest(),
+            requesterDisplayName: 'Private profile',
+            requesterBio: null,
+            requesterProfileVisible: false,
+          },
+        ]}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        /not currently visible through the public profile surface/i,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /view profile/i }),
+    ).not.toBeInTheDocument()
+  })
 })
 
 function buildRequest() {
@@ -116,5 +144,7 @@ function buildRequest() {
     recipientProfileId: 'profile-2',
     requesterDisplayName: 'Azure Pilot',
     requesterAvatarUrl: null,
+    requesterBio: 'Ready to test Brandt Gate.',
+    requesterProfileVisible: true,
   }
 }

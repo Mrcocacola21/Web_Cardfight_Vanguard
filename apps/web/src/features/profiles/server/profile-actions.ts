@@ -30,12 +30,15 @@ export async function saveCurrentProfileAction(
   const avatarUrlValue = formData.get('avatarUrl')
   const bioValue = formData.get('bio')
   const visibilityValue = formData.get('visibility')
+  const bioVisibilityValue = formData.get('bioVisibility')
 
   const validation = validateProfileDraft({
     displayName: typeof displayNameValue === 'string' ? displayNameValue : '',
     avatarUrl: typeof avatarUrlValue === 'string' ? avatarUrlValue : '',
     bio: typeof bioValue === 'string' ? bioValue : '',
     visibility: typeof visibilityValue === 'string' ? visibilityValue : '',
+    bioVisibility:
+      typeof bioVisibilityValue === 'string' ? bioVisibilityValue : '',
   })
 
   if (!validation.ok) {
@@ -56,6 +59,7 @@ export async function saveCurrentProfileAction(
       avatarUrl: validation.data.avatarUrl,
       bio: validation.data.bio,
       visibility: validation.data.visibility,
+      bioVisibility: validation.data.bioVisibility,
     },
   )
 
@@ -68,6 +72,8 @@ export async function saveCurrentProfileAction(
   }
 
   revalidatePath('/profile')
+  revalidatePath('/friends')
+  revalidatePath('/users')
   revalidatePath(`/users/${result.data.profileId}`)
 
   return {

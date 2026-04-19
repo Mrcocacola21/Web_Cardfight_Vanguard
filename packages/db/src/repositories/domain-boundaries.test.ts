@@ -110,6 +110,7 @@ describe('domain boundaries', () => {
       './catalog/catalog.repository.ts',
       './importer/importer.repository.ts',
       './decks/decks.repository.ts',
+      './matches/matches.repository.ts',
       './profiles/profiles.repository.ts',
       './social/social.repository.ts',
     ]
@@ -124,5 +125,15 @@ describe('domain boundaries', () => {
         /\.schema\('catalog'\)[\s\S]{0,400}?\.(insert|upsert|update|delete)\(/,
       )
     }
+  })
+
+  it('keeps user-facing match history persistence out of gameplay runtime tables', () => {
+    const matchesRepositorySource = readFileSync(
+      new URL('./matches/matches.repository.ts', import.meta.url),
+      'utf8',
+    )
+
+    expect(matchesRepositorySource).toContain(".schema('social')")
+    expect(matchesRepositorySource).not.toContain(".schema('gameplay')")
   })
 })

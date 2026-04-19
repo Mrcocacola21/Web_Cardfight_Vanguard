@@ -29,6 +29,8 @@ describe('ProtectedMobileNavigation', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/pilot@example.com/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /catalog/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /friends/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /matches/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { current: 'page' })).toHaveAttribute(
       'href',
       '/profile',

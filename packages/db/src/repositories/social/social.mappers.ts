@@ -1,10 +1,12 @@
 import type { Tables } from '../../generated/database.types'
 
 import type {
+  ActiveFriendRecord,
   FriendRelationshipRecord,
   FriendRelationshipStatus,
   FriendshipRecord,
   IncomingFriendRequestRecord,
+  OutgoingFriendRequestRecord,
 } from './social.types'
 
 type FriendRelationshipRow = Pick<
@@ -26,6 +28,17 @@ type FriendshipRow = Pick<
   | 'created_at'
 >
 
+type ActiveFriendRow = Pick<
+  Tables<{ schema: 'social' }, 'active_friendships_overview'>,
+  | 'friendship_id'
+  | 'friends_since'
+  | 'friend_profile_id'
+  | 'friend_display_name'
+  | 'friend_avatar_url'
+  | 'friend_bio'
+  | 'friend_profile_visible'
+>
+
 type IncomingFriendRequestRow = Pick<
   Tables<{ schema: 'social' }, 'incoming_pending_friend_requests'>,
   | 'request_id'
@@ -34,6 +47,20 @@ type IncomingFriendRequestRow = Pick<
   | 'recipient_profile_id'
   | 'requester_display_name'
   | 'requester_avatar_url'
+  | 'requester_bio'
+  | 'requester_profile_visible'
+>
+
+type OutgoingFriendRequestRow = Pick<
+  Tables<{ schema: 'social' }, 'outgoing_pending_friend_requests'>,
+  | 'request_id'
+  | 'requested_at'
+  | 'requester_profile_id'
+  | 'recipient_profile_id'
+  | 'recipient_display_name'
+  | 'recipient_avatar_url'
+  | 'recipient_bio'
+  | 'recipient_profile_visible'
 >
 
 export function mapFriendRelationshipRow(
@@ -59,6 +86,18 @@ export function mapFriendshipRow(row: FriendshipRow): FriendshipRecord {
   }
 }
 
+export function mapActiveFriendRow(row: ActiveFriendRow): ActiveFriendRecord {
+  return {
+    friendshipId: row.friendship_id,
+    friendsSince: row.friends_since,
+    friendProfileId: row.friend_profile_id,
+    friendDisplayName: row.friend_display_name,
+    friendAvatarUrl: row.friend_avatar_url,
+    friendBio: row.friend_bio,
+    friendProfileVisible: row.friend_profile_visible,
+  }
+}
+
 export function mapIncomingFriendRequestRow(
   row: IncomingFriendRequestRow,
 ): IncomingFriendRequestRecord {
@@ -69,6 +108,23 @@ export function mapIncomingFriendRequestRow(
     recipientProfileId: row.recipient_profile_id,
     requesterDisplayName: row.requester_display_name,
     requesterAvatarUrl: row.requester_avatar_url,
+    requesterBio: row.requester_bio,
+    requesterProfileVisible: row.requester_profile_visible,
+  }
+}
+
+export function mapOutgoingFriendRequestRow(
+  row: OutgoingFriendRequestRow,
+): OutgoingFriendRequestRecord {
+  return {
+    requestId: row.request_id,
+    requestedAt: row.requested_at,
+    requesterProfileId: row.requester_profile_id,
+    recipientProfileId: row.recipient_profile_id,
+    recipientDisplayName: row.recipient_display_name,
+    recipientAvatarUrl: row.recipient_avatar_url,
+    recipientBio: row.recipient_bio,
+    recipientProfileVisible: row.recipient_profile_visible,
   }
 }
 

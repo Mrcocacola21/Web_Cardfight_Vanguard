@@ -11,6 +11,7 @@ describe('profile mappers', () => {
       bio: 'Testing profile read model',
       avatar_url: null,
       visibility: 'public',
+      bio_visibility: 'friends',
       created_at: '2026-04-08T00:00:00.000Z',
       updated_at: '2026-04-08T01:00:00.000Z',
     })
@@ -22,6 +23,7 @@ describe('profile mappers', () => {
       bio: 'Testing profile read model',
       avatarUrl: null,
       visibility: 'public',
+      bioVisibility: 'friends',
       createdAt: '2026-04-08T00:00:00.000Z',
       updatedAt: '2026-04-08T01:00:00.000Z',
     })
@@ -29,7 +31,7 @@ describe('profile mappers', () => {
     expect('authUserId' in mapped).toBe(false)
   })
 
-  it('normalizes legacy non-public visibility values to private', () => {
+  it('keeps explicit friends visibility instead of collapsing it into private', () => {
     const mapped = mapProfileRow({
       id: 'profile-2',
       username: null,
@@ -37,10 +39,12 @@ describe('profile mappers', () => {
       bio: null,
       avatar_url: null,
       visibility: 'friends',
+      bio_visibility: 'private',
       created_at: '2026-04-08T00:00:00.000Z',
       updated_at: '2026-04-08T01:00:00.000Z',
     })
 
-    expect(mapped.visibility).toBe('private')
+    expect(mapped.visibility).toBe('friends')
+    expect(mapped.bioVisibility).toBe('private')
   })
 })

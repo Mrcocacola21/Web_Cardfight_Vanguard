@@ -9,6 +9,7 @@
     "./repositories/catalog": "./src/repositories/catalog/index.ts",
     "./repositories/decks": "./src/repositories/decks/index.ts",
     "./repositories/importer": "./src/repositories/importer/index.ts",
+    "./repositories/matches": "./src/repositories/matches/index.ts",
     "./repositories/profiles": "./src/repositories/profiles/index.ts",
     "./repositories/social": "./src/repositories/social/index.ts"
   },

@@ -68,7 +68,9 @@ describe('sendFriendRequestAction', () => {
       acceptFriendRequest: vi.fn(),
       declineFriendRequest: vi.fn(),
       getFriendshipBetweenProfiles: vi.fn(),
+      listActiveFriendships: vi.fn(),
       listIncomingPendingFriendRequests: vi.fn(),
+      listOutgoingPendingFriendRequests: vi.fn(),
     })
   })
 
@@ -141,6 +143,7 @@ describe('sendFriendRequestAction', () => {
       senderProfileId: 'profile-1',
       recipientProfileId: 'profile-2',
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/friends')
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/users/profile-2')
     expect(result).toEqual({
       status: 'success',
@@ -170,7 +173,9 @@ describe('respondToFriendRequestAction', () => {
       acceptFriendRequest: vi.fn(),
       declineFriendRequest: vi.fn(),
       getFriendshipBetweenProfiles: vi.fn(),
+      listActiveFriendships: vi.fn(),
       listIncomingPendingFriendRequests: vi.fn(),
+      listOutgoingPendingFriendRequests: vi.fn(),
     })
   })
 
@@ -238,7 +243,8 @@ describe('respondToFriendRequestAction', () => {
       recipientProfileId: 'profile-2',
       requestId: 'friend-2',
     })
-    expect(mocks.revalidatePath).toHaveBeenCalledWith('/profile')
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/friends')
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/users/profile-1')
     expect(result).toEqual({
       status: 'success',
       code: 'accepted',

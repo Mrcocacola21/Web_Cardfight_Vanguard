@@ -49,6 +49,7 @@ export default async function PublicProfilePage({
       profile={state.profile}
       isOwnerViewer={state.isOwnerViewer}
       viewerProfileId={state.viewerProfileId}
+      viewerCategory={state.viewerCategory}
       relationshipState={state.relationshipState}
     />
   )

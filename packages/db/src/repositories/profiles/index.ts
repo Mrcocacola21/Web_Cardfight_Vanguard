@@ -7,5 +7,6 @@ export type {
   ProfileRecord,
   ProfileVisibility,
   PublicProfileRecord,
+  VisibleProfileRecord,
   UpsertProfileByAuthUserIdInput,
 } from './profiles.types'

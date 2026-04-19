@@ -88,6 +88,55 @@ describe('profiles repository', () => {
     })
   })
 
+  it('returns a viewer-filtered visible profile read model by id', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.schema).toBe('user_data')
+          expect(query.table).toBe('visible_profiles')
+          expect(query.cardinality).toBe('maybeSingle')
+          expect(query.filters).toEqual([
+            {
+              type: 'eq',
+              column: 'id',
+              value: 'profile-visible-1',
+            },
+          ])
+        },
+        response: {
+          data: {
+            id: 'profile-visible-1',
+            display_name: 'Azure Pilot',
+            avatar_url: 'https://images.example/avatar.png',
+            bio: null,
+            visibility: 'public',
+            bio_visibility: 'friends',
+            bio_visible: false,
+          },
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createProfilesRepository(mock.client)
+    const result = await repository.getVisibleProfileById('profile-visible-1')
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'profile-visible-1',
+        displayName: 'Azure Pilot',
+        avatarUrl: 'https://images.example/avatar.png',
+        bio: null,
+        visibility: 'public',
+        bioVisibility: 'friends',
+        bioVisible: false,
+      },
+    })
+  })
+
   it('returns null when a public profile is missing', async () => {
     const mock = createSequentialMockDbClient([
       {
@@ -183,6 +232,74 @@ describe('profiles repository', () => {
     })
   })
 
+  it('searches the viewer-filtered visible profile view for protected flows', async () => {
+    const mock = createSequentialMockDbClient([
+      {
+        assert(query) {
+          expect(query.schema).toBe('user_data')
+          expect(query.table).toBe('visible_profiles')
+          expect(query.cardinality).toBe('many')
+          expect(query.filters).toEqual([
+            {
+              type: 'ilike',
+              column: 'display_name',
+              value: '%Azure%',
+            },
+            {
+              type: 'ilike',
+              column: 'display_name',
+              value: '%Pilot%',
+            },
+          ])
+          expect(query.orders).toEqual([
+            {
+              column: 'display_name',
+              ascending: true,
+            },
+          ])
+          expect(query.range).toEqual({
+            from: 0,
+            to: 7,
+          })
+        },
+        response: {
+          data: [
+            {
+              id: 'profile-visible-2',
+              display_name: 'Azure Pilot',
+              avatar_url: 'https://images.example/avatar.png',
+              bio: 'Visible to the current viewer.',
+              visibility: 'friends',
+              bio_visibility: 'friends',
+              bio_visible: true,
+            },
+          ],
+          error: null,
+        },
+      },
+    ])
+
+    cleanups.push(mock.assertConsumed)
+
+    const repository = createProfilesRepository(mock.client)
+    const result = await repository.searchVisibleProfiles('Azure Pilot', 8)
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          id: 'profile-visible-2',
+          displayName: 'Azure Pilot',
+          avatarUrl: 'https://images.example/avatar.png',
+          bio: 'Visible to the current viewer.',
+          visibility: 'friends',
+          bioVisibility: 'friends',
+          bioVisible: true,
+        },
+      ],
+    })
+  })
+
   it('upserts profile fields and returns the mapped profile record', async () => {
     const mock = createSequentialMockDbClient([
       {
@@ -199,6 +316,7 @@ describe('profiles repository', () => {
             avatar_url: 'https://images.example/avatar.png',
             bio: 'Testing profile persistence.',
             visibility: 'private',
+            bio_visibility: 'friends',
           })
         },
         response: {
@@ -209,6 +327,7 @@ describe('profiles repository', () => {
             bio: 'Testing profile persistence.',
             avatar_url: null,
             visibility: 'private',
+            bio_visibility: 'friends',
             created_at: '2026-04-08T00:00:00.000Z',
             updated_at: '2026-04-08T01:00:00.000Z',
           },
@@ -226,6 +345,7 @@ describe('profiles repository', () => {
       avatarUrl: 'https://images.example/avatar.png',
       bio: 'Testing profile persistence.',
       visibility: 'private',
+      bioVisibility: 'friends',
     })
 
     expect(result).toEqual({
@@ -237,6 +357,7 @@ describe('profiles repository', () => {
         bio: 'Testing profile persistence.',
         avatarUrl: null,
         visibility: 'private',
+        bioVisibility: 'friends',
         createdAt: '2026-04-08T00:00:00.000Z',
         updatedAt: '2026-04-08T01:00:00.000Z',
       },
@@ -272,6 +393,7 @@ describe('profiles repository', () => {
             avatar_url: null,
             bio: null,
             visibility: 'private',
+            bio_visibility: 'private',
           })
         },
         response: {
@@ -282,6 +404,7 @@ describe('profiles repository', () => {
             bio: null,
             avatar_url: null,
             visibility: 'private',
+            bio_visibility: 'private',
             created_at: '2026-04-08T00:00:00.000Z',
             updated_at: '2026-04-08T01:00:00.000Z',
           },
@@ -299,6 +422,7 @@ describe('profiles repository', () => {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     })
 
     expect(result).toEqual({
@@ -310,6 +434,7 @@ describe('profiles repository', () => {
         bio: null,
         avatarUrl: null,
         visibility: 'private',
+        bioVisibility: 'private',
         createdAt: '2026-04-08T00:00:00.000Z',
         updatedAt: '2026-04-08T01:00:00.000Z',
       },
@@ -350,6 +475,7 @@ describe('profiles repository', () => {
             bio: null,
             avatar_url: null,
             visibility: 'private',
+            bio_visibility: 'private',
             created_at: '2026-04-08T00:00:00.000Z',
             updated_at: '2026-04-08T01:00:00.000Z',
           },
@@ -367,6 +493,7 @@ describe('profiles repository', () => {
       avatarUrl: null,
       bio: null,
       visibility: 'private',
+      bioVisibility: 'private',
     })
 
     expect(result).toEqual({
@@ -378,6 +505,7 @@ describe('profiles repository', () => {
         bio: null,
         avatarUrl: null,
         visibility: 'private',
+        bioVisibility: 'private',
         createdAt: '2026-04-08T00:00:00.000Z',
         updatedAt: '2026-04-08T01:00:00.000Z',
       },

@@ -77,7 +77,7 @@ describe('removeFriendAction', () => {
     expect(mocks.removeFriendUseCase).not.toHaveBeenCalled()
   })
 
-  it('passes actor and target context into the use case and revalidates the public profile page', async () => {
+  it('passes actor and target context into the use case and revalidates the dashboard plus public profile page', async () => {
     mocks.getCurrentAuthState.mockResolvedValueOnce({
       kind: 'ready',
       user: {
@@ -106,6 +106,7 @@ describe('removeFriendAction', () => {
       actorProfileId: 'profile-1',
       targetProfileId: 'profile-2',
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/friends')
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/users/profile-2')
     expect(result).toEqual({
       status: 'success',

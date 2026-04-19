@@ -78,6 +78,7 @@ export async function removeFriendAction(
     )
   }
 
+  revalidatePath('/friends')
   revalidatePath(`/users/${targetProfileId}`)
 
   return {

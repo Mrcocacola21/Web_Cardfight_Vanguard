@@ -89,6 +89,7 @@ export async function sendFriendRequestAction(
     )
   }
 
+  revalidatePath('/friends')
   revalidatePath(`/users/${recipientProfileId}`)
 
   return {
@@ -175,7 +176,8 @@ export async function respondToFriendRequestAction(
     )
   }
 
-  revalidatePath('/profile')
+  revalidatePath('/friends')
+  revalidatePath(`/users/${result.data.requesterProfileId}`)
 
   return {
     status: 'success',

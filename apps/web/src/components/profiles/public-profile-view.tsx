@@ -1,9 +1,10 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import type { PublicProfileRecord } from '@web-vg/db/repositories/profiles'
+import type { VisibleProfileRecord } from '@web-vg/db/repositories/profiles'
 
 import { DetailPageLayout, PageSection } from '@/components/layout'
 import { FriendshipControlsCard } from '@/components/social/friendship-controls-card'
+import type { ProfileViewerCategory } from '@/features/profiles/profile-privacy'
 import type { PublicProfileRelationshipState } from '@/features/social/relationship-state'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -15,9 +16,10 @@ import {
 } from '@/components/ui/card'
 
 interface PublicProfileViewProps {
-  readonly profile: PublicProfileRecord
+  readonly profile: VisibleProfileRecord
   readonly isOwnerViewer?: boolean
   readonly viewerProfileId?: string | null
+  readonly viewerCategory?: ProfileViewerCategory
   readonly relationshipState?: PublicProfileRelationshipState
 }
 
@@ -33,6 +35,11 @@ export function PublicProfileView({
   profile,
   isOwnerViewer = false,
   viewerProfileId = null,
+  viewerCategory = isOwnerViewer
+    ? 'owner'
+    : viewerProfileId
+      ? 'authenticated-non-friend'
+      : 'guest',
   relationshipState = isOwnerViewer
     ? {
         kind: 'self',
@@ -53,8 +60,10 @@ export function PublicProfileView({
       header={
         <PageSection as="header" spacing="compact" className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Public Profile</Badge>
-            {isOwnerViewer ? <Badge>Viewer is owner</Badge> : null}
+            <Badge variant="outline">Profile</Badge>
+            <Badge variant="secondary">Surface: {profile.visibility}</Badge>
+            <Badge variant="secondary">Bio: {profile.bioVisibility}</Badge>
+            <Badge>{formatViewerCategory(viewerCategory)}</Badge>
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-start">
             {profile.avatarUrl ? (
@@ -77,17 +86,18 @@ export function PublicProfileView({
                 {profile.displayName}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
-                Public user-facing profile surface. Only public profile fields
-                are rendered here.
+                Profile surface resolved through the server-side privacy model.
+                Public, friends-only, and owner-only visibility are enforced
+                before this view renders.
               </p>
               {isOwnerViewer ? (
                 <p className="text-sm text-muted-foreground">
-                  This is your public profile surface.{' '}
+                  This is your profile route view.{' '}
                   <Link
                     href="/profile"
                     className="font-medium text-foreground underline underline-offset-4"
                   >
-                    Manage your profile
+                    Manage your profile and privacy settings
                   </Link>
                   .
                 </p>
@@ -99,9 +109,9 @@ export function PublicProfileView({
       main={
         <Card>
           <CardHeader>
-            <CardTitle>Public details</CardTitle>
+            <CardTitle>Profile details</CardTitle>
             <CardDescription>
-              Public profile baseline for future social and community features.
+              Profile route data after server-side privacy filtering.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
@@ -124,7 +134,7 @@ export function PublicProfileView({
                 Bio
               </p>
               <p className="mt-1 text-muted-foreground">
-                {profile.bio ?? 'No public bio published yet.'}
+                {getBioDisplayCopy(profile, viewerCategory)}
               </p>
             </div>
           </CardContent>
@@ -159,4 +169,39 @@ export function PublicProfileView({
       }
     />
   )
+}
+
+function formatViewerCategory(viewerCategory: ProfileViewerCategory) {
+  switch (viewerCategory) {
+    case 'owner':
+      return 'Owner view'
+    case 'friend':
+      return 'Friend view'
+    case 'authenticated-non-friend':
+      return 'Signed-in non-friend'
+    case 'guest':
+    default:
+      return 'Guest view'
+  }
+}
+
+function getBioDisplayCopy(
+  profile: VisibleProfileRecord,
+  viewerCategory: ProfileViewerCategory,
+) {
+  if (profile.bioVisible) {
+    return profile.bio ?? 'No bio published yet.'
+  }
+
+  switch (profile.bioVisibility) {
+    case 'friends':
+      return viewerCategory === 'guest'
+        ? 'Bio is visible to friends only.'
+        : 'Bio is visible to friends only.'
+    case 'private':
+      return 'Bio is visible only to the profile owner.'
+    case 'public':
+    default:
+      return 'No bio published yet.'
+  }
 }

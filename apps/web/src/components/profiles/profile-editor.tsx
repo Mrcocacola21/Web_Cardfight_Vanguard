@@ -26,6 +26,7 @@ interface ProfileEditorProps {
     avatarUrl: string
     bio: string
     visibility: ProfileVisibility
+    bioVisibility: ProfileVisibility
   }
 }
 
@@ -41,6 +42,10 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
     ? 'profile-visibility-error'
     : undefined
   const visibilityHelpId = 'profile-visibility-help'
+  const bioVisibilityErrorId = state.fieldErrors.bioVisibility
+    ? 'profile-bio-visibility-error'
+    : undefined
+  const bioVisibilityHelpId = 'profile-bio-visibility-help'
   const avatarUrlErrorId = state.fieldErrors.avatarUrl
     ? 'profile-avatar-url-error'
     : undefined
@@ -95,11 +100,13 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
               className="flex h-11 w-full rounded-xl border border-input bg-background-elevated/75 px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
             >
               <option value="private">Private</option>
+              <option value="friends">Friends only</option>
               <option value="public">Public</option>
             </select>
             <p id={visibilityHelpId} className="text-xs text-muted-foreground">
-              Private profiles stay hidden from the public user route. Public
-              profiles are visible on `/users/[profileId]`.
+              This controls discoverability and whether `/users/[profileId]` can
+              be opened by strangers or friends. Private profiles stay out of
+              public routes and search.
             </p>
             {state.fieldErrors.visibility ? (
               <p id={visibilityErrorId} className="text-sm text-destructive">
@@ -149,6 +156,41 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
             ) : null}
           </div>
 
+          <div className="space-y-2">
+            <label htmlFor="bioVisibility" className="text-sm font-medium">
+              Bio visibility
+            </label>
+            <select
+              id="bioVisibility"
+              name="bioVisibility"
+              required
+              defaultValue={initialValues.bioVisibility}
+              aria-invalid={state.fieldErrors.bioVisibility ? 'true' : 'false'}
+              aria-describedby={
+                bioVisibilityErrorId
+                  ? `${bioVisibilityHelpId} ${bioVisibilityErrorId}`
+                  : bioVisibilityHelpId
+              }
+              className="flex h-11 w-full rounded-xl border border-input bg-background-elevated/75 px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+            >
+              <option value="private">Private</option>
+              <option value="friends">Friends only</option>
+              <option value="public">Public</option>
+            </select>
+            <p
+              id={bioVisibilityHelpId}
+              className="text-xs text-muted-foreground"
+            >
+              Bio visibility can stay equal to or stricter than the profile
+              surface. Pending requests do not unlock friends-only bio access.
+            </p>
+            {state.fieldErrors.bioVisibility ? (
+              <p id={bioVisibilityErrorId} className="text-sm text-destructive">
+                {state.fieldErrors.bioVisibility}
+              </p>
+            ) : null}
+          </div>
+
           {state.message ? (
             state.status === 'success' ? (
               <SuccessState
@@ -168,7 +210,8 @@ export function ProfileEditor({ initialValues }: ProfileEditorProps) {
         <CardFooter className="flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             First save creates the profile row if it does not exist yet. Saved
-            visibility applies immediately to the public profile route.
+            privacy settings apply immediately to search, profile, and social
+            summary reads.
           </p>
           <Button type="submit" disabled={isPending}>
             {isPending ? 'Saving...' : 'Save profile'}

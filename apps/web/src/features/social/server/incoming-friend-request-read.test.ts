@@ -32,6 +32,8 @@ describe('getIncomingFriendRequestsState', () => {
           recipientProfileId: 'profile-2',
           requesterDisplayName: 'Azure Pilot',
           requesterAvatarUrl: null,
+          requesterBio: 'Ready to test Brandt Gate.',
+          requesterProfileVisible: true,
         },
       ],
     })
@@ -68,6 +70,8 @@ describe('getIncomingFriendRequestsState', () => {
           recipientProfileId: 'profile-2',
           requesterDisplayName: 'Azure Pilot',
           requesterAvatarUrl: null,
+          requesterBio: 'Ready to test Brandt Gate.',
+          requesterProfileVisible: true,
         },
       ],
     })
