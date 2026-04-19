@@ -36,9 +36,13 @@ The nearest real cases are:
   - create initial `gameplay.room_snapshots`
   - possibly create initial `gameplay.pending_choices`
 
-Current `createDeck` is still a best-effort orchestration path with cleanup.
-That is acceptable as a temporary foundation signal, but it is not a durable
-strategy for write-heavy feature growth.
+The deck write path is now implemented through one DB-side transactional unit:
+
+- `user_data.save_deck_aggregate(...)`
+- called from the repository layer through Supabase RPC
+
+That is the concrete reference implementation for multi-table aggregate
+mutations in this project.
 
 ## 3. Write Consistency Principles
 
@@ -104,16 +108,16 @@ Repositories must not:
 ### `decks.createDeck`
 
 - Scope: multi-table aggregate creation.
-- Strategy: migrate to one transactional DB-side write unit before deck
-  write-side expands.
+- Strategy: implemented through `user_data.save_deck_aggregate(...)`.
 - Reason: `decks`, `deck_versions`, `deck_cards`, and
-  `decks.current_version_id` must succeed or fail together.
+  `decks.current_version_id` now succeed or fail together.
 
 ### `decks.replaceCurrentDeckVersion`
 
 - Scope: replace-style mutation.
-- Strategy: DB-side transactional unit is required.
-- Reason: half-applied composition replacement is not acceptable.
+- Strategy: implemented through the same atomic deck write RPC.
+- Reason: save/write semantics append a new version and repoint the current
+  version inside one transaction boundary.
 
 ### `gameplay.bootstrapMatchRoom`
 
@@ -149,7 +153,8 @@ Unacceptable best-effort:
 
 ## 8. Immediate Tactical Recommendations
 
-- Treat current `createDeck` as transitional, not as the pattern to copy.
+- Treat `user_data.save_deck_aggregate(...)` as the pattern to copy for future
+  multi-table aggregate writes.
 - For the next real multi-table write flow, add one explicit SQL function and
   call it via repository RPC instead of expanding best-effort orchestration.
 - Keep single-table writes simple; do not route everything through RPC.
@@ -169,5 +174,5 @@ Unacceptable best-effort:
 - Keep direct repository writes for single-table operations.
 - Use DB-side transactional units through RPC for multi-table aggregate writes.
 - Do not expand write-heavy features on top of best-effort cleanup patterns.
-- Introduce transaction-backed deck writes first, because `decks` is the
-  nearest aggregate with clear multi-table consistency requirements.
+- Use the deck write implementation as the reference pattern for the next
+  transaction-backed aggregate write.

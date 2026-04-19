@@ -11,6 +11,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, '..')
 const repoRoot = path.resolve(packageRoot, '../..')
 const localDbUrl = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+const atomicDeckMainCardId = '20000000-0000-4000-8000-000000000004'
+const atomicDeckRideCardId = '20000000-0000-4000-8000-000000000008'
 
 function quoteArg(arg) {
   return /[\s"]/u.test(arg) ? `"${arg.replaceAll('"', '\\"')}"` : arg
@@ -65,8 +67,8 @@ function assert(condition, message) {
 
 let activeTransactionClient = null
 
-async function queryScalar(client, sql) {
-  const result = await client.query(sql)
+async function queryScalar(client, sql, values = []) {
+  const result = await client.query(sql, values)
   return Number(result.rows[0]?.count ?? 0)
 }
 
@@ -219,6 +221,198 @@ async function runAsDatabaseRole(client, { role, authUserId }, callback) {
   )
 
   return callback()
+}
+
+async function resetDatabaseRole(client) {
+  await client.query('reset role')
+  await client.query(
+    `
+      select
+        set_config('request.jwt.claim.role', '', true),
+        set_config('request.jwt.claim.sub', '', true),
+        set_config('request.jwt.claims', '{}'::text, true)
+    `,
+  )
+}
+
+async function saveDeckAggregate(
+  client,
+  {
+    deckId = null,
+    ownerProfileId,
+    formatId,
+    title,
+    description = null,
+    tags = [],
+    isFavorite = null,
+    visibility = null,
+    archivedAt = null,
+    versionNote = null,
+    cards = [],
+  },
+) {
+  const result = await client.query(
+    `
+      select *
+      from user_data.save_deck_aggregate(
+        save_deck_id => $1::uuid,
+        save_owner_profile_id => $2::uuid,
+        save_format_id => $3::text,
+        save_title => $4::text,
+        save_description => $5::text,
+        save_tags => $6::text[],
+        save_is_favorite => $7::boolean,
+        save_visibility => $8::text,
+        save_archived_at => $9::timestamptz,
+        save_version_note => $10::text,
+        save_cards => $11::jsonb
+      )
+    `,
+    [
+      deckId,
+      ownerProfileId,
+      formatId,
+      title,
+      description,
+      tags,
+      isFavorite,
+      visibility,
+      archivedAt,
+      versionNote,
+      JSON.stringify(cards),
+    ],
+  )
+
+  assert(
+    result.rowCount === 1,
+    'Atomic deck write should return exactly one persisted aggregate row.',
+  )
+
+  return result.rows[0]
+}
+
+async function listDeckSummaries(client, { ownerProfileId }) {
+  const result = await client.query(
+    `
+      select *
+      from user_data.list_deck_summaries($1::uuid)
+    `,
+    [ownerProfileId],
+  )
+
+  return result.rows
+}
+
+async function getDeckDetailAggregate(client, { deckId }) {
+  const result = await client.query(
+    `
+      select *
+      from user_data.get_deck_detail_aggregate($1::uuid)
+    `,
+    [deckId],
+  )
+
+  assert(
+    result.rowCount <= 1,
+    'Dense deck detail read should return at most one aggregate row.',
+  )
+
+  return result.rows[0] ?? null
+}
+
+async function loadDeckGraphState(client, deckId) {
+  const result = await client.query(
+    `
+      select
+        (select count(*)::int from user_data.decks where id = $1) as deck_count,
+        (
+          select count(*)::int
+          from user_data.deck_versions
+          where deck_id = $1
+        ) as version_count,
+        (
+          select count(*)::int
+          from user_data.deck_cards
+          where deck_version_id in (
+            select id
+            from user_data.deck_versions
+            where deck_id = $1
+          )
+        ) as card_count,
+        (
+          select current_version_id
+          from user_data.decks
+          where id = $1
+        ) as current_version_id,
+        (
+          select deck_versions.version_number
+          from user_data.deck_versions
+          where deck_versions.id = (
+            select current_version_id
+            from user_data.decks
+            where id = $1
+          )
+        ) as current_version_number,
+        (
+          select title
+          from user_data.decks
+          where id = $1
+        ) as title,
+        (
+          select format_id
+          from user_data.decks
+          where id = $1
+        ) as format_id,
+        (
+          select is_favorite
+          from user_data.decks
+          where id = $1
+        ) as is_favorite,
+        (
+          select visibility
+          from user_data.decks
+          where id = $1
+        ) as visibility
+    `,
+    [deckId],
+  )
+
+  return result.rows[0]
+}
+
+async function loadDeckGraphCountsByTitle(client, { ownerProfileId, title }) {
+  const result = await client.query(
+    `
+      select
+        (
+          select count(*)::int
+          from user_data.decks
+          where owner_profile_id = $1
+            and title = $2
+        ) as deck_count,
+        (
+          select count(*)::int
+          from user_data.deck_versions
+          join user_data.decks
+            on decks.id = deck_versions.deck_id
+          where decks.owner_profile_id = $1
+            and decks.title = $2
+        ) as version_count,
+        (
+          select count(*)::int
+          from user_data.deck_cards
+          join user_data.deck_versions
+            on deck_versions.id = deck_cards.deck_version_id
+          join user_data.decks
+            on decks.id = deck_versions.deck_id
+          where decks.owner_profile_id = $1
+            and decks.title = $2
+        ) as card_count
+    `,
+    [ownerProfileId, title],
+  )
+
+  return result.rows[0]
 }
 
 async function verifySeedSmoke(client) {
@@ -786,6 +980,532 @@ async function verifyConstraints(client) {
   )
 }
 
+async function verifyDeckWriteAtomicity(client) {
+  console.log('Verifying deck write atomicity...')
+
+  await withRollback(
+    client,
+    'deck write RPC commits create and save flows as one aggregate unit',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Atomic Deck Owner',
+      })
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const createdDeck = await saveDeckAggregate(client, {
+            ownerProfileId: owner.profileId,
+            formatId: 'standard',
+            title: 'Atomic Create Deck',
+            description: 'Initial atomic version',
+            tags: ['atomic'],
+            isFavorite: true,
+            cards: [
+              {
+                section_key: 'main',
+                card_entity_id: atomicDeckMainCardId,
+                quantity: 4,
+              },
+              {
+                section_key: 'ride',
+                card_entity_id: atomicDeckRideCardId,
+                quantity: 1,
+              },
+            ],
+            versionNote: 'initial atomic write',
+          })
+
+          assert(
+            createdDeck.current_version_number === 1,
+            'Atomic create should persist version 1 as the current version.',
+          )
+          assert(
+            createdDeck.visibility === 'private',
+            'Atomic create should default deck visibility to private.',
+          )
+
+          const createdState = await loadDeckGraphState(
+            client,
+            createdDeck.deck_id,
+          )
+
+          assert(
+            createdState.deck_count === 1,
+            'Atomic create should persist exactly one deck row.',
+          )
+          assert(
+            createdState.version_count === 1,
+            'Atomic create should persist exactly one deck version row.',
+          )
+          assert(
+            createdState.card_count === 2,
+            'Atomic create should persist the full initial card graph.',
+          )
+          assert(
+            createdState.current_version_id === createdDeck.current_version_id,
+            'Atomic create should attach the created version as the deck current version.',
+          )
+          assert(
+            createdState.current_version_number === 1,
+            'Atomic create should expose version 1 on the persisted deck graph.',
+          )
+          assert(
+            createdState.title === 'Atomic Create Deck',
+            'Atomic create should persist deck metadata together with the version graph.',
+          )
+
+          const savedDeck = await saveDeckAggregate(client, {
+            deckId: createdDeck.deck_id,
+            ownerProfileId: owner.profileId,
+            formatId: 'premium',
+            title: 'Atomic Save Deck',
+            description: 'Second atomic version',
+            tags: ['atomic', 'premium'],
+            isFavorite: false,
+            visibility: 'private',
+            cards: [
+              {
+                section_key: 'main',
+                card_entity_id: atomicDeckMainCardId,
+                quantity: 3,
+              },
+              {
+                section_key: 'ride',
+                card_entity_id: atomicDeckRideCardId,
+                quantity: 2,
+              },
+            ],
+            versionNote: 'second atomic write',
+          })
+
+          assert(
+            savedDeck.deck_id === createdDeck.deck_id,
+            'Atomic save should update the existing deck aggregate in place.',
+          )
+          assert(
+            savedDeck.current_version_number === 2,
+            'Atomic save should append the next version number.',
+          )
+
+          const savedState = await loadDeckGraphState(
+            client,
+            createdDeck.deck_id,
+          )
+
+          assert(
+            savedState.deck_count === 1,
+            'Atomic save should keep exactly one parent deck row.',
+          )
+          assert(
+            savedState.version_count === 2,
+            'Atomic save should append exactly one additional deck version row.',
+          )
+          assert(
+            savedState.card_count === 4,
+            'Atomic save should keep both persisted version card slices consistent.',
+          )
+          assert(
+            savedState.current_version_id === savedDeck.current_version_id,
+            'Atomic save should repoint the deck current version to the new version row.',
+          )
+          assert(
+            savedState.current_version_number === 2,
+            'Atomic save should expose the new version as the current persisted revision.',
+          )
+          assert(
+            savedState.title === 'Atomic Save Deck',
+            'Atomic save should update deck metadata inside the same transaction boundary.',
+          )
+          assert(
+            savedState.format_id === 'premium',
+            'Atomic save should update the deck format together with the new current version.',
+          )
+          assert(
+            savedState.is_favorite === false,
+            'Atomic save should update deck favorite metadata inside the same commit.',
+          )
+          assert(
+            savedState.visibility === 'private',
+            'Atomic save should preserve deck visibility on the committed aggregate.',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'deck write RPC rolls back failed create attempts without orphan rows',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Atomic Create Failure Owner',
+      })
+      const failedDeckTitle = `Atomic Failed Create ${randomUUID()}`
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          await expectPgError(
+            'atomic create rejects invalid card references',
+            () =>
+              saveDeckAggregate(client, {
+                ownerProfileId: owner.profileId,
+                formatId: 'standard',
+                title: failedDeckTitle,
+                description: 'Should roll back completely',
+                tags: ['atomic'],
+                cards: [
+                  {
+                    section_key: 'main',
+                    card_entity_id: randomUUID(),
+                    quantity: 4,
+                  },
+                ],
+                versionNote: 'invalid create write',
+              }),
+            '23503',
+          )
+        },
+      )
+
+      await resetDatabaseRole(client)
+
+      const failedCreateCounts = await loadDeckGraphCountsByTitle(client, {
+        ownerProfileId: owner.profileId,
+        title: failedDeckTitle,
+      })
+
+      assert(
+        failedCreateCounts.deck_count === 0,
+        'Failed atomic create must not leave a deck row behind.',
+      )
+      assert(
+        failedCreateCounts.version_count === 0,
+        'Failed atomic create must not leave deck version rows behind.',
+      )
+      assert(
+        failedCreateCounts.card_count === 0,
+        'Failed atomic create must not leave deck card rows behind.',
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'deck write RPC leaves existing persisted state unchanged when save fails',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Atomic Save Failure Owner',
+      })
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const baselineDeck = await saveDeckAggregate(client, {
+            ownerProfileId: owner.profileId,
+            formatId: 'standard',
+            title: 'Atomic Failure Baseline',
+            description: 'Baseline persisted version',
+            tags: ['baseline'],
+            isFavorite: true,
+            cards: [
+              {
+                section_key: 'main',
+                card_entity_id: atomicDeckMainCardId,
+                quantity: 4,
+              },
+              {
+                section_key: 'ride',
+                card_entity_id: atomicDeckRideCardId,
+                quantity: 1,
+              },
+            ],
+            versionNote: 'baseline write',
+          })
+
+          const stateBeforeFailure = await loadDeckGraphState(
+            client,
+            baselineDeck.deck_id,
+          )
+
+          await expectPgError(
+            'atomic save rejects invalid replacement card references',
+            () =>
+              saveDeckAggregate(client, {
+                deckId: baselineDeck.deck_id,
+                ownerProfileId: owner.profileId,
+                formatId: 'premium',
+                title: 'Should Not Persist',
+                description: 'This write should roll back',
+                tags: ['invalid'],
+                isFavorite: false,
+                visibility: 'private',
+                cards: [
+                  {
+                    section_key: 'main',
+                    card_entity_id: randomUUID(),
+                    quantity: 4,
+                  },
+                ],
+                versionNote: 'broken save',
+              }),
+            '23503',
+          )
+
+          const stateAfterFailure = await loadDeckGraphState(
+            client,
+            baselineDeck.deck_id,
+          )
+
+          assert(
+            stateAfterFailure.deck_count === stateBeforeFailure.deck_count,
+            'Failed atomic save must not delete the existing deck row.',
+          )
+          assert(
+            stateAfterFailure.version_count ===
+              stateBeforeFailure.version_count,
+            'Failed atomic save must not append a new deck version row.',
+          )
+          assert(
+            stateAfterFailure.card_count === stateBeforeFailure.card_count,
+            'Failed atomic save must not leave extra deck card rows.',
+          )
+          assert(
+            stateAfterFailure.current_version_id ===
+              stateBeforeFailure.current_version_id,
+            'Failed atomic save must not repoint the current version.',
+          )
+          assert(
+            stateAfterFailure.current_version_number ===
+              stateBeforeFailure.current_version_number,
+            'Failed atomic save must keep the previous current version number intact.',
+          )
+          assert(
+            stateAfterFailure.title === stateBeforeFailure.title,
+            'Failed atomic save must not mutate deck metadata.',
+          )
+          assert(
+            stateAfterFailure.format_id === stateBeforeFailure.format_id,
+            'Failed atomic save must not mutate the persisted deck format.',
+          )
+          assert(
+            stateAfterFailure.is_favorite === stateBeforeFailure.is_favorite,
+            'Failed atomic save must not mutate persisted favorite metadata.',
+          )
+          assert(
+            stateAfterFailure.visibility === stateBeforeFailure.visibility,
+            'Failed atomic save must not mutate persisted visibility metadata.',
+          )
+        },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'deck write RPC rejects forged owner ids without partial writes',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Atomic Owner Check',
+      })
+      const foreignOwner = await createProfileFixture(client, {
+        displayName: 'Atomic Foreign Owner',
+      })
+      const forgedDeckTitle = `Atomic Forged Owner ${randomUUID()}`
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          await expectPgError(
+            'atomic create rejects forged owner profile ids',
+            () =>
+              saveDeckAggregate(client, {
+                ownerProfileId: foreignOwner.profileId,
+                formatId: 'standard',
+                title: forgedDeckTitle,
+                description: 'Owner mismatch should fail before any write.',
+                tags: ['forged-owner'],
+                cards: [
+                  {
+                    section_key: 'main',
+                    card_entity_id: atomicDeckMainCardId,
+                    quantity: 4,
+                  },
+                ],
+                versionNote: 'forged owner write',
+              }),
+            '42501',
+          )
+        },
+      )
+
+      await resetDatabaseRole(client)
+
+      const ownerCounts = await loadDeckGraphCountsByTitle(client, {
+        ownerProfileId: owner.profileId,
+        title: forgedDeckTitle,
+      })
+      const foreignOwnerCounts = await loadDeckGraphCountsByTitle(client, {
+        ownerProfileId: foreignOwner.profileId,
+        title: forgedDeckTitle,
+      })
+
+      assert(
+        ownerCounts.deck_count === 0 &&
+          ownerCounts.version_count === 0 &&
+          ownerCounts.card_count === 0,
+        'Forged owner writes must not create rows for the authenticated caller either.',
+      )
+      assert(
+        foreignOwnerCounts.deck_count === 0 &&
+          foreignOwnerCounts.version_count === 0 &&
+          foreignOwnerCounts.card_count === 0,
+        'Forged owner writes must not create rows for the targeted foreign owner.',
+      )
+    },
+  )
+}
+
+async function verifyDeckReadDensification(client) {
+  console.log('Verifying deck read path densification...')
+
+  await withRollback(
+    client,
+    'dense deck read RPCs return owner-scoped summaries and aggregate detail',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Dense Read Owner',
+      })
+      const foreignUser = await createProfileFixture(client, {
+        displayName: 'Dense Read Foreign User',
+      })
+
+      let persistedDeckId = null
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: owner.authUserId },
+        async () => {
+          const createdDeck = await saveDeckAggregate(client, {
+            ownerProfileId: owner.profileId,
+            formatId: 'standard',
+            title: 'Dense Read Deck',
+            description: 'Read-side aggregate verification',
+            tags: ['dense-read'],
+            isFavorite: true,
+            cards: [
+              {
+                section_key: 'main',
+                card_entity_id: atomicDeckMainCardId,
+                quantity: 4,
+              },
+              {
+                section_key: 'ride',
+                card_entity_id: atomicDeckRideCardId,
+                quantity: 1,
+              },
+            ],
+            versionNote: 'dense read baseline',
+          })
+
+          persistedDeckId = createdDeck.deck_id
+
+          const deckSummaries = await listDeckSummaries(client, {
+            ownerProfileId: owner.profileId,
+          })
+
+          assert(
+            deckSummaries.length === 1,
+            'Dense deck list should return the persisted owner deck in one DB-side read model.',
+          )
+
+          const summary = deckSummaries[0]
+
+          assert(
+            summary.deck_id === createdDeck.deck_id,
+            'Dense deck list should surface the persisted deck id.',
+          )
+          assert(
+            summary.format_id === 'standard' &&
+              summary.format_display_name === 'Standard',
+            'Dense deck list should attach format data without an extra application-side fetch.',
+          )
+          assert(
+            summary.current_version_number === 1,
+            'Dense deck list should surface the current version number.',
+          )
+          assert(
+            summary.main_count === 4 &&
+              summary.ride_count === 1 &&
+              summary.g_count === 0,
+            'Dense deck list should expose section counts from the current version in the same read.',
+          )
+
+          const deckDetail = await getDeckDetailAggregate(client, {
+            deckId: createdDeck.deck_id,
+          })
+
+          assert(
+            deckDetail !== null,
+            'Dense deck detail should return the persisted deck aggregate.',
+          )
+          assert(
+            deckDetail?.deck_id === createdDeck.deck_id,
+            'Dense deck detail should return the requested deck aggregate row.',
+          )
+          assert(
+            deckDetail?.current_version_number === 1,
+            'Dense deck detail should surface the current version metadata.',
+          )
+          assert(
+            Array.isArray(deckDetail?.current_version_cards) &&
+              deckDetail.current_version_cards.length === 2,
+            'Dense deck detail should inline the full current version card slice.',
+          )
+          assert(
+            deckDetail?.has_missing_card_entity === false,
+            'Dense deck detail should not report missing canonical cards for intact seed data.',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: foreignUser.authUserId },
+        async () => {
+          assert(
+            persistedDeckId !== null,
+            'Dense read verification requires a persisted deck id.',
+          )
+
+          const foreignVisibleDecks = await listDeckSummaries(client, {
+            ownerProfileId: owner.profileId,
+          })
+
+          assert(
+            foreignVisibleDecks.length === 0,
+            'Dense deck list must keep owner scoping under RLS for foreign users.',
+          )
+
+          const foreignDeckDetail = await getDeckDetailAggregate(client, {
+            deckId: persistedDeckId,
+          })
+
+          assert(
+            foreignDeckDetail === null,
+            'Dense deck detail must not expose another user deck aggregate.',
+          )
+        },
+      )
+    },
+  )
+}
+
 async function verifyAuthorizationRls(client) {
   console.log('Verifying baseline authorization and RLS...')
 
@@ -1065,6 +1785,7 @@ async function verifyAuthorizationRls(client) {
 
       const ownerDeckId = randomUUID()
       const ownerDeckVersionId = randomUUID()
+      const ownerDeckCardId = randomUUID()
 
       await client.query(
         `
@@ -1107,18 +1828,20 @@ async function verifyAuthorizationRls(client) {
       await client.query(
         `
           insert into user_data.deck_cards (
+            id,
             deck_version_id,
             section_key,
             card_entity_id,
             quantity
           ) values (
             $1,
+            $2,
             'main',
             '20000000-0000-4000-8000-000000000004',
             4
           )
         `,
-        [ownerDeckVersionId],
+        [ownerDeckCardId, ownerDeckVersionId],
       )
 
       await runAsDatabaseRole(
@@ -1194,6 +1917,34 @@ async function verifyAuthorizationRls(client) {
           )
 
           await expectPgError(
+            'owner cannot rewrite persisted deck versions in place',
+            () =>
+              client.query(
+                `
+                  update user_data.deck_versions
+                  set version_note = 'tampered historical version'
+                  where id = $1
+                `,
+                [ownerDeckVersionId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
+            'owner cannot rewrite persisted deck cards in place',
+            () =>
+              client.query(
+                `
+                  update user_data.deck_cards
+                  set quantity = 3
+                  where id = $1
+                `,
+                [ownerDeckCardId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
             'owner cannot create a deck for another profile',
             () =>
               client.query(
@@ -1231,6 +1982,101 @@ async function verifyAuthorizationRls(client) {
             'Non-owner must not read another user deck.',
           )
 
+          const foreignVersions = await client.query(
+            `select id from user_data.deck_versions where id = $1`,
+            [ownerDeckVersionId],
+          )
+
+          assert(
+            foreignVersions.rowCount === 0,
+            'Non-owner must not read another user deck version rows directly.',
+          )
+
+          const foreignDeckCards = await client.query(
+            `select id from user_data.deck_cards where id = $1`,
+            [ownerDeckCardId],
+          )
+
+          assert(
+            foreignDeckCards.rowCount === 0,
+            'Non-owner must not read another user deck card rows directly.',
+          )
+
+          const updateDeckResult = await client.query(
+            `
+              update user_data.decks
+              set title = 'Stranger Update Attempt'
+              where id = $1
+              returning id
+            `,
+            [ownerDeckId],
+          )
+
+          assert(
+            updateDeckResult.rowCount === 0,
+            'Non-owner must not update another user deck.',
+          )
+
+          await expectPgError(
+            'non-owner cannot create a deck version on another user deck',
+            () =>
+              client.query(
+                `
+                  insert into user_data.deck_versions (
+                    deck_id,
+                    version_number,
+                    created_by_profile_id,
+                    version_note
+                  ) values (
+                    $1,
+                    2,
+                    $2,
+                    'stranger revision'
+                  )
+                `,
+                [ownerDeckId, stranger.profileId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
+            'non-owner cannot create deck cards on another user version graph',
+            () =>
+              client.query(
+                `
+                  insert into user_data.deck_cards (
+                    deck_version_id,
+                    section_key,
+                    card_entity_id,
+                    quantity
+                  ) values (
+                    $1,
+                    'ride',
+                    '20000000-0000-4000-8000-000000000008',
+                    1
+                  )
+                `,
+                [ownerDeckVersionId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
+            'non-owner cannot save another user deck through the atomic write RPC',
+            () =>
+              saveDeckAggregate(client, {
+                deckId: ownerDeckId,
+                ownerProfileId: stranger.profileId,
+                formatId: 'standard',
+                title: 'Forbidden Save Attempt',
+                description: 'This must stay blocked by the database.',
+                tags: ['forbidden'],
+                cards: [],
+                versionNote: 'stranger save attempt',
+              }),
+            'P0002',
+          )
+
           const deleteDeckResult = await client.query(
             `
               delete from user_data.decks
@@ -1245,6 +2091,146 @@ async function verifyAuthorizationRls(client) {
             'Non-owner must not delete another user deck.',
           )
         },
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'deck ownership invariants reject cross-owner or reassigned child links',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Deck Invariant Owner',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Deck Invariant Stranger',
+      })
+
+      const ownerDeckId = randomUUID()
+      const siblingDeckId = randomUUID()
+      const ownerDeckVersionId = randomUUID()
+      const siblingDeckVersionId = randomUUID()
+      const ownerDeckCardId = randomUUID()
+
+      await client.query(
+        `
+          insert into user_data.decks (
+            id,
+            owner_profile_id,
+            format_id,
+            title,
+            visibility
+          ) values
+            ($1, $2, 'standard', 'Invariant Deck A', 'private'),
+            ($3, $2, 'standard', 'Invariant Deck B', 'private')
+        `,
+        [ownerDeckId, owner.profileId, siblingDeckId],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_versions (
+            id,
+            deck_id,
+            version_number,
+            created_by_profile_id,
+            version_note
+          ) values
+            ($1, $2, 1, $3, 'baseline a'),
+            ($4, $5, 1, $3, 'baseline b')
+        `,
+        [
+          ownerDeckVersionId,
+          ownerDeckId,
+          owner.profileId,
+          siblingDeckVersionId,
+          siblingDeckId,
+        ],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_cards (
+            id,
+            deck_version_id,
+            section_key,
+            card_entity_id,
+            quantity
+          ) values (
+            $1,
+            $2,
+            'main',
+            '20000000-0000-4000-8000-000000000004',
+            4
+          )
+        `,
+        [ownerDeckCardId, ownerDeckVersionId],
+      )
+
+      await expectPgError(
+        'deck ownership root cannot be reassigned after creation',
+        () =>
+          client.query(
+            `
+              update user_data.decks
+              set owner_profile_id = $2
+              where id = $1
+            `,
+            [ownerDeckId, stranger.profileId],
+          ),
+        '23514',
+      )
+
+      await expectPgError(
+        'deck versions cannot claim a creator that does not own the parent deck',
+        () =>
+          client.query(
+            `
+              insert into user_data.deck_versions (
+                id,
+                deck_id,
+                version_number,
+                created_by_profile_id,
+                version_note
+              ) values (
+                $1,
+                $2,
+                2,
+                $3,
+                'cross-owner mismatch'
+              )
+            `,
+            [randomUUID(), ownerDeckId, stranger.profileId],
+          ),
+        '23514',
+      )
+
+      await expectPgError(
+        'deck versions cannot be moved onto another deck after creation',
+        () =>
+          client.query(
+            `
+              update user_data.deck_versions
+              set deck_id = $2
+              where id = $1
+            `,
+            [ownerDeckVersionId, siblingDeckId],
+          ),
+        '23514',
+      )
+
+      await expectPgError(
+        'deck cards cannot be moved onto another persisted version graph',
+        () =>
+          client.query(
+            `
+              update user_data.deck_cards
+              set deck_version_id = $2
+              where id = $1
+            `,
+            [ownerDeckCardId, siblingDeckVersionId],
+          ),
+        '23514',
       )
     },
   )
@@ -1929,6 +2915,8 @@ async function main() {
     await client.connect()
     await verifySeedSmoke(client)
     await verifyConstraints(client)
+    await verifyDeckWriteAtomicity(client)
+    await verifyDeckReadDensification(client)
     await verifyAuthorizationRls(client)
     console.log('DB checkpoint verification completed successfully.')
   } finally {

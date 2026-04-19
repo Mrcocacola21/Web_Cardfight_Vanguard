@@ -1,4 +1,4 @@
-import type { Tables } from '../../generated/database.types'
+import type { Database, Json, Tables } from '../../generated/database.types'
 
 import type {
   DeckCardRecord,
@@ -17,6 +17,10 @@ import type {
 type DeckRow = Tables<{ schema: 'user_data' }, 'decks'>
 type DeckVersionRow = Tables<{ schema: 'user_data' }, 'deck_versions'>
 type FormatRow = Tables<{ schema: 'legality' }, 'formats'>
+type DeckListSummaryRow =
+  Database['user_data']['Functions']['list_deck_summaries']['Returns'][number]
+type DeckDetailAggregateRow =
+  Database['user_data']['Functions']['get_deck_detail_aggregate']['Returns'][number]
 type CardEntityRow = Pick<
   Tables<{ schema: 'catalog' }, 'card_entities'>,
   'id' | 'canonical_key' | 'name' | 'grade' | 'card_type' | 'trigger_type'
@@ -29,6 +33,7 @@ type DeckCardByVersionRow = Pick<
   Tables<{ schema: 'user_data' }, 'deck_cards'>,
   'deck_version_id' | 'section_key' | 'card_entity_id' | 'quantity'
 >
+type JsonObject = { readonly [key: string]: Json | undefined }
 
 export const deckSectionKeys = ['main', 'ride', 'g'] as const
 
@@ -94,6 +99,23 @@ export function mapDeckFormatRow(row: FormatRow): DeckFormatRecord {
     id: row.id,
     displayName: row.display_name,
     description: row.description,
+  }
+}
+
+export function mapDeckAggregateFormatRow(
+  row: Pick<
+    DeckListSummaryRow | DeckDetailAggregateRow,
+    'format_id' | 'format_display_name' | 'format_description'
+  >,
+): DeckFormatRecord | null {
+  if (row.format_display_name === null) {
+    return null
+  }
+
+  return {
+    id: row.format_id,
+    displayName: row.format_display_name,
+    description: row.format_description,
   }
 }
 
@@ -196,6 +218,35 @@ export function mapDeckListItemRow(
   }
 }
 
+export function mapDeckListSummaryAggregateRow(
+  row: DeckListSummaryRow,
+  format: DeckFormatRecord,
+): DeckListItemRecord {
+  const sectionCounts = {
+    main: row.main_count,
+    ride: row.ride_count,
+    g: row.g_count,
+  }
+
+  return {
+    id: row.deck_id,
+    ownerProfileId: row.owner_profile_id,
+    title: row.title,
+    description: row.description,
+    tags: row.tags,
+    isFavorite: row.is_favorite,
+    visibility: row.visibility,
+    archivedAt: row.archived_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    format,
+    currentVersionId: row.current_version_id,
+    currentVersionNumber: row.current_version_number,
+    totalCards: getTotalCards(sectionCounts),
+    sectionCounts,
+  }
+}
+
 export function mapDeckDetailVersionRow(
   row: DeckVersionRow,
   cards: readonly DeckDetailCardRecord[],
@@ -257,4 +308,113 @@ export function mapDeckDetailRow(
     currentVersionId: row.current_version_id,
     currentVersion,
   }
+}
+
+export function mapDeckDetailCardsJson(
+  value: Json,
+): readonly DeckDetailCardRecord[] | null {
+  if (!Array.isArray(value)) {
+    return null
+  }
+
+  const cards: DeckDetailCardRecord[] = []
+
+  for (const item of value) {
+    if (!isJsonObject(item)) {
+      return null
+    }
+
+    const sectionKey = item.sectionKey
+    const cardEntityId = item.cardEntityId
+    const canonicalKey = item.canonicalKey
+    const name = item.name
+    const grade = item.grade
+    const cardType = item.cardType
+    const triggerType = item.triggerType
+    const quantity = item.quantity
+
+    if (
+      !isDeckSectionKey(sectionKey) ||
+      typeof cardEntityId !== 'string' ||
+      typeof canonicalKey !== 'string' ||
+      typeof name !== 'string' ||
+      typeof grade !== 'number' ||
+      typeof cardType !== 'string' ||
+      (typeof triggerType !== 'string' && triggerType !== null) ||
+      typeof quantity !== 'number'
+    ) {
+      return null
+    }
+
+    cards.push({
+      sectionKey,
+      cardEntityId,
+      canonicalKey,
+      name,
+      grade,
+      cardType,
+      triggerType,
+      quantity,
+    })
+  }
+
+  return cards
+}
+
+export function mapDeckDetailAggregateRow(
+  row: DeckDetailAggregateRow,
+  format: DeckFormatRecord,
+  cards: readonly DeckDetailCardRecord[],
+): DeckDetailRecord {
+  return {
+    id: row.deck_id,
+    ownerProfileId: row.owner_profile_id,
+    title: row.title,
+    description: row.description,
+    tags: row.tags,
+    isFavorite: row.is_favorite,
+    visibility: row.visibility,
+    archivedAt: row.archived_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    format,
+    currentVersionId: row.current_version_id,
+    currentVersion: hasResolvedCurrentVersion(row)
+      ? mapDeckDetailVersionRow(
+          {
+            id: row.current_version_id,
+            deck_id: row.deck_id,
+            version_number: row.current_version_number,
+            created_by_profile_id: row.current_version_created_by_profile_id,
+            version_note: row.current_version_note,
+            created_at: row.current_version_created_at,
+          },
+          cards,
+        )
+      : null,
+  }
+}
+
+function hasResolvedCurrentVersion(
+  row: DeckDetailAggregateRow,
+): row is DeckDetailAggregateRow & {
+  readonly current_version_id: string
+  readonly current_version_number: number
+  readonly current_version_created_by_profile_id: string
+  readonly current_version_created_at: string
+} {
+  return (
+    row.current_version_id !== null &&
+    row.current_version_number !== null &&
+    row.current_version_created_by_profile_id !== null &&
+    row.current_version_created_at !== null
+  )
+}
+
+function isDeckSectionKey(value: Json | undefined): value is DeckSectionKey {
+  return value === 'main' || value === 'ride' || value === 'g'
+}
+
+function isJsonObject(value: Json): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

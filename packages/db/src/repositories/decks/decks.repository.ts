@@ -1,14 +1,12 @@
-import type { Tables } from '../../generated/database.types'
+import type { Database } from '../../generated/database.types'
 import type { DbClient } from '../shared/client'
 import { err, mapQueryError, ok, type RepositoryResult } from '../shared/result'
 import {
-  createDeckSectionCounts,
   mapDeckCardRow,
-  mapDeckDetailCardRow,
-  mapDeckDetailRow,
-  mapDeckDetailVersionRow,
-  mapDeckFormatRow,
-  mapDeckListItemRow,
+  mapDeckAggregateFormatRow,
+  mapDeckDetailAggregateRow,
+  mapDeckDetailCardsJson,
+  mapDeckListSummaryAggregateRow,
   mapDeckRow,
   mapDeckVersionRow,
 } from './decks.mappers'
@@ -20,24 +18,14 @@ import type {
   SaveDeckInput,
 } from './decks.types'
 
-type DeckVersionRow = Tables<{ schema: 'user_data' }, 'deck_versions'>
-type DeckCardRow = Pick<
-  Tables<{ schema: 'user_data' }, 'deck_cards'>,
-  'deck_version_id' | 'section_key' | 'card_entity_id' | 'quantity'
->
-type CardEntitySummaryRow = Pick<
-  Tables<{ schema: 'catalog' }, 'card_entities'>,
-  'id' | 'canonical_key' | 'name' | 'grade' | 'card_type' | 'trigger_type'
->
-
+type SaveDeckAggregateArgs =
+  Database['user_data']['Functions']['save_deck_aggregate']['Args']
+type SaveDeckAggregateRow =
+  Database['user_data']['Functions']['save_deck_aggregate']['Returns'][number]
 const deckSelect =
   'id, owner_profile_id, format_id, title, description, tags, is_favorite, visibility, archived_at, created_at, updated_at, current_version_id'
 const deckVersionSelect =
   'id, deck_id, version_number, created_by_profile_id, version_note, created_at'
-const deckCardSelect = 'deck_version_id, section_key, card_entity_id, quantity'
-const formatSelect = 'id, display_name, description'
-const cardEntitySummarySelect =
-  'id, canonical_key, name, grade, card_type, trigger_type'
 
 export interface DecksRepository {
   listDecksByUser(
@@ -61,10 +49,9 @@ export function createDecksRepository(client: DbClient): DecksRepository {
   ): Promise<RepositoryResult<readonly DeckListItemRecord[]>> {
     const { data: deckRows, error: deckError } = await client
       .schema('user_data')
-      .from('decks')
-      .select(deckSelect)
-      .eq('owner_profile_id', ownerProfileId)
-      .order('updated_at', { ascending: false })
+      .rpc('list_deck_summaries', {
+        read_owner_profile_id: ownerProfileId,
+      })
 
     if (deckError) {
       return err(mapQueryError(deckError, 'Failed to list decks.'))
@@ -74,63 +61,20 @@ export function createDecksRepository(client: DbClient): DecksRepository {
       return ok([])
     }
 
-    const formatMapResult = await loadFormatsByIds(
-      client,
-      deckRows.map((deckRow) => deckRow.format_id),
-    )
-
-    if (!formatMapResult.ok) {
-      return formatMapResult
-    }
-
-    const versionMapResult = await loadDeckVersionsByIds(
-      client,
-      deckRows.flatMap((deckRow) =>
-        deckRow.current_version_id ? [deckRow.current_version_id] : [],
-      ),
-    )
-
-    if (!versionMapResult.ok) {
-      return versionMapResult
-    }
-
-    const cardRowsByVersionResult = await loadDeckCardsByVersionIds(
-      client,
-      Array.from(versionMapResult.data.keys()),
-    )
-
-    if (!cardRowsByVersionResult.ok) {
-      return cardRowsByVersionResult
-    }
-
     const decks: DeckListItemRecord[] = []
 
     for (const deckRow of deckRows) {
-      const format = formatMapResult.data.get(deckRow.format_id)
+      const format = mapDeckAggregateFormatRow(deckRow)
 
       if (!format) {
         return err({
           code: 'query-failed',
           message: 'Failed to resolve the attached deck format.',
-          details: `Deck ${deckRow.id} references missing format ${deckRow.format_id}.`,
+          details: `Deck ${deckRow.deck_id} references missing format ${deckRow.format_id}.`,
         })
       }
 
-      const currentVersion = deckRow.current_version_id
-        ? (versionMapResult.data.get(deckRow.current_version_id) ?? null)
-        : null
-      const versionCards = currentVersion
-        ? (cardRowsByVersionResult.data.get(currentVersion.id) ?? [])
-        : []
-
-      decks.push(
-        mapDeckListItemRow(
-          deckRow,
-          format,
-          currentVersion,
-          createDeckSectionCounts(versionCards),
-        ),
-      )
+      decks.push(mapDeckListSummaryAggregateRow(deckRow, format))
     }
 
     return ok(decks)
@@ -206,9 +150,9 @@ export function createDecksRepository(client: DbClient): DecksRepository {
     async getDeckDetailById(id) {
       const { data: deckRow, error: deckError } = await client
         .schema('user_data')
-        .from('decks')
-        .select(deckSelect)
-        .eq('id', id)
+        .rpc('get_deck_detail_aggregate', {
+          read_deck_id: id,
+        })
         .maybeSingle()
 
       if (deckError) {
@@ -219,81 +163,38 @@ export function createDecksRepository(client: DbClient): DecksRepository {
         return ok(null)
       }
 
-      const formatMapResult = await loadFormatsByIds(client, [
-        deckRow.format_id,
-      ])
-
-      if (!formatMapResult.ok) {
-        return formatMapResult
-      }
-
-      const format = formatMapResult.data.get(deckRow.format_id)
+      const format = mapDeckAggregateFormatRow(deckRow)
 
       if (!format) {
         return err({
           code: 'query-failed',
           message: 'Failed to resolve the attached deck format.',
-          details: `Deck ${deckRow.id} references missing format ${deckRow.format_id}.`,
+          details: `Deck ${deckRow.deck_id} references missing format ${deckRow.format_id}.`,
         })
       }
 
-      if (!deckRow.current_version_id) {
-        return ok(mapDeckDetailRow(deckRow, format, null))
+      if (deckRow.has_missing_card_entity) {
+        return err({
+          code: 'query-failed',
+          message: 'Failed to resolve a canonical card for the deck.',
+          details:
+            deckRow.current_version_id === null
+              ? 'The current deck version references a missing card entity.'
+              : `Deck version ${deckRow.current_version_id} references a missing card entity.`,
+        })
       }
 
-      const versionMapResult = await loadDeckVersionsByIds(client, [
-        deckRow.current_version_id,
-      ])
+      const deckCards = mapDeckDetailCardsJson(deckRow.current_version_cards)
 
-      if (!versionMapResult.ok) {
-        return versionMapResult
+      if (deckCards === null) {
+        return err({
+          code: 'query-failed',
+          message: 'Failed to load deck detail.',
+          details: `Deck ${deckRow.deck_id} returned a malformed card aggregate payload.`,
+        })
       }
 
-      const versionRow = versionMapResult.data.get(deckRow.current_version_id)
-
-      if (!versionRow) {
-        return ok(mapDeckDetailRow(deckRow, format, null))
-      }
-
-      const cardRowsByVersionResult = await loadDeckCardsByVersionIds(client, [
-        versionRow.id,
-      ])
-
-      if (!cardRowsByVersionResult.ok) {
-        return cardRowsByVersionResult
-      }
-
-      const versionCardRows =
-        cardRowsByVersionResult.data.get(versionRow.id) ?? []
-
-      const cardEntityMapResult = await loadCardEntitiesByIds(
-        client,
-        versionCardRows.map((cardRow) => cardRow.card_entity_id),
-      )
-
-      if (!cardEntityMapResult.ok) {
-        return cardEntityMapResult
-      }
-
-      const deckCards = []
-
-      for (const cardRow of versionCardRows) {
-        const cardEntity = cardEntityMapResult.data.get(cardRow.card_entity_id)
-
-        if (!cardEntity) {
-          return err({
-            code: 'query-failed',
-            message: 'Failed to resolve a canonical card for the deck.',
-            details: `Deck version ${versionRow.id} references missing card entity ${cardRow.card_entity_id}.`,
-          })
-        }
-
-        deckCards.push(mapDeckDetailCardRow(cardRow, cardEntity))
-      }
-
-      const currentVersion = mapDeckDetailVersionRow(versionRow, deckCards)
-
-      return ok(mapDeckDetailRow(deckRow, format, currentVersion))
+      return ok(mapDeckDetailAggregateRow(deckRow, format, deckCards))
     },
 
     async createDeck(input) {
@@ -301,204 +202,28 @@ export function createDecksRepository(client: DbClient): DecksRepository {
     },
 
     async saveDeck(input) {
-      const cleanupIds: {
-        deckId?: string
-        deckVersionId?: string
-      } = {}
-
       const cards = input.cards ?? []
-      const updatedAt = new Date().toISOString()
-
-      let deckRow: Tables<{ schema: 'user_data' }, 'decks'>
-      let versionNumber = 1
-
-      if (input.deckId) {
-        const { data: existingDeckRow, error: existingDeckError } = await client
-          .schema('user_data')
-          .from('decks')
-          .select(deckSelect)
-          .eq('id', input.deckId)
-          .maybeSingle()
-
-        if (existingDeckError) {
-          return err(
-            mapQueryError(existingDeckError, 'Failed to load deck for saving.'),
-          )
-        }
-
-        if (!existingDeckRow) {
-          return err({
-            code: 'conflict',
-            message:
-              'Failed to save deck because the persisted deck no longer exists.',
-            details: `Deck ${input.deckId} could not be found before save.`,
-          })
-        }
-
-        if (existingDeckRow.owner_profile_id !== input.ownerProfileId) {
-          return err({
-            code: 'conflict',
-            message: 'Failed to save deck because ownership does not match.',
-            details: `Deck ${input.deckId} is owned by ${existingDeckRow.owner_profile_id}, not ${input.ownerProfileId}.`,
-          })
-        }
-
-        deckRow = existingDeckRow
-
-        if (existingDeckRow.current_version_id) {
-          const { data: currentVersionRow, error: currentVersionError } =
-            await client
-              .schema('user_data')
-              .from('deck_versions')
-              .select(deckVersionSelect)
-              .eq('id', existingDeckRow.current_version_id)
-              .eq('deck_id', existingDeckRow.id)
-              .maybeSingle()
-
-          if (currentVersionError) {
-            return err(
-              mapQueryError(
-                currentVersionError,
-                'Failed to load the current deck version before saving.',
-              ),
-            )
-          }
-
-          if (!currentVersionRow) {
-            return err({
-              code: 'query-failed',
-              message:
-                'Failed to resolve the current deck version before saving.',
-              details: `Deck ${existingDeckRow.id} references missing version ${existingDeckRow.current_version_id}.`,
-            })
-          }
-
-          versionNumber = currentVersionRow.version_number + 1
-        }
-      } else {
-        const { data: createdDeckRow, error: deckError } = await client
-          .schema('user_data')
-          .from('decks')
-          .insert({
-            owner_profile_id: input.ownerProfileId,
-            format_id: input.formatId,
-            title: input.title,
-            description: input.description ?? null,
-            tags: [...(input.tags ?? [])],
-            is_favorite: input.isFavorite ?? false,
-            visibility: input.visibility ?? 'private',
-            archived_at: input.archivedAt ?? null,
-          })
-          .select(deckSelect)
-          .single()
-
-        if (deckError) {
-          return err(mapQueryError(deckError, 'Failed to create deck.'))
-        }
-
-        deckRow = createdDeckRow
-        cleanupIds.deckId = deckRow.id
-      }
-
-      const { data: versionRow, error: versionError } = await client
+      const { data: persistedDeck, error: writeError } = await client
         .schema('user_data')
-        .from('deck_versions')
-        .insert({
-          deck_id: deckRow.id,
-          version_number: versionNumber,
-          created_by_profile_id: input.ownerProfileId,
-          version_note: input.versionNote ?? null,
-        })
-        .select(deckVersionSelect)
+        .rpc('save_deck_aggregate', buildSaveDeckAggregateArgs(input))
         .single()
 
-      if (versionError) {
-        await bestEffortDeleteDeck(client, cleanupIds.deckId)
-
-        return err(
-          mapQueryError(versionError, 'Failed to create initial deck version.'),
-        )
+      if (writeError) {
+        return err(mapSaveDeckError(writeError, input))
       }
 
-      cleanupIds.deckVersionId = versionRow.id
-
-      if (cards.length > 0) {
-        const { error: cardsError } = await client
-          .schema('user_data')
-          .from('deck_cards')
-          .insert(
-            cards.map((card) => ({
-              deck_version_id: versionRow.id,
-              section_key: card.sectionKey,
-              card_entity_id: card.cardEntityId,
-              quantity: card.quantity,
-            })),
-          )
-
-        if (cardsError) {
-          await bestEffortDeleteDeckVersion(client, cleanupIds.deckVersionId)
-          await bestEffortDeleteDeck(client, cleanupIds.deckId)
-
-          return err(
-            mapQueryError(cardsError, 'Failed to persist initial deck cards.'),
-          )
-        }
-      }
-
-      const { error: updateError } = await client
-        .schema('user_data')
-        .from('decks')
-        .update({
-          format_id: input.formatId,
-          title: input.title,
-          description: input.description ?? null,
-          tags: [...(input.tags ?? deckRow.tags)],
-          is_favorite: input.isFavorite ?? deckRow.is_favorite,
-          visibility: input.visibility ?? deckRow.visibility,
-          archived_at: input.archivedAt ?? deckRow.archived_at,
-          current_version_id: versionRow.id,
-          updated_at: updatedAt,
+      if (!persistedDeck) {
+        return err({
+          code: 'query-failed',
+          message: input.deckId
+            ? 'Failed to save deck.'
+            : 'Failed to create deck.',
+          details:
+            'The atomic deck write completed without returning the persisted aggregate.',
         })
-        .eq('id', deckRow.id)
-
-      if (updateError) {
-        await bestEffortDeleteDeckVersion(client, cleanupIds.deckVersionId)
-        await bestEffortDeleteDeck(client, cleanupIds.deckId)
-
-        return err(
-          mapQueryError(
-            updateError,
-            'Failed to attach the initial deck version to the deck.',
-          ),
-        )
       }
 
-      const currentVersion = mapDeckVersionRow(
-        versionRow,
-        cards.map((card) => ({
-          sectionKey: card.sectionKey,
-          cardEntityId: card.cardEntityId,
-          quantity: card.quantity,
-        })),
-      )
-
-      return ok(
-        mapDeckRow(
-          {
-            ...deckRow,
-            format_id: input.formatId,
-            title: input.title,
-            description: input.description ?? null,
-            tags: [...(input.tags ?? deckRow.tags)],
-            is_favorite: input.isFavorite ?? deckRow.is_favorite,
-            visibility: input.visibility ?? deckRow.visibility,
-            archived_at: input.archivedAt ?? deckRow.archived_at,
-            current_version_id: versionRow.id,
-            updated_at: updatedAt,
-          },
-          currentVersion,
-        ),
-      )
+      return ok(mapSavedDeckAggregateRow(persistedDeck, cards))
     },
 
     async deleteDeck(id) {
@@ -517,157 +242,89 @@ export function createDecksRepository(client: DbClient): DecksRepository {
   }
 }
 
-async function loadFormatsByIds(
-  client: DbClient,
-  formatIds: readonly string[],
-): Promise<
-  RepositoryResult<ReadonlyMap<string, ReturnType<typeof mapDeckFormatRow>>>
-> {
-  const uniqueFormatIds = Array.from(new Set(formatIds))
-
-  if (uniqueFormatIds.length === 0) {
-    return ok(new Map())
+function buildSaveDeckAggregateArgs(
+  input: SaveDeckInput,
+): SaveDeckAggregateArgs {
+  return {
+    save_deck_id: input.deckId ?? null,
+    save_owner_profile_id: input.ownerProfileId,
+    save_format_id: input.formatId,
+    save_title: input.title,
+    save_description: input.description ?? null,
+    save_tags: input.tags ? [...input.tags] : null,
+    save_is_favorite: input.isFavorite ?? null,
+    save_visibility: input.visibility ?? null,
+    save_archived_at: input.archivedAt ?? null,
+    save_version_note: input.versionNote ?? null,
+    save_cards: input.cards
+      ? input.cards.map((card) => ({
+          section_key: card.sectionKey,
+          card_entity_id: card.cardEntityId,
+          quantity: card.quantity,
+        }))
+      : [],
   }
-
-  const { data, error } = await client
-    .schema('legality')
-    .from('formats')
-    .select(formatSelect)
-    .in('id', uniqueFormatIds)
-
-  if (error) {
-    return err(mapQueryError(error, 'Failed to load attached deck formats.'))
-  }
-
-  const formatMap = new Map<string, ReturnType<typeof mapDeckFormatRow>>()
-
-  for (const row of data ?? []) {
-    formatMap.set(row.id, mapDeckFormatRow(row))
-  }
-
-  return ok(formatMap)
 }
 
-async function loadDeckVersionsByIds(
-  client: DbClient,
-  versionIds: readonly string[],
-): Promise<RepositoryResult<ReadonlyMap<string, DeckVersionRow>>> {
-  const uniqueVersionIds = Array.from(new Set(versionIds))
-
-  if (uniqueVersionIds.length === 0) {
-    return ok(new Map())
+function mapSavedDeckAggregateRow(
+  row: SaveDeckAggregateRow,
+  cards: NonNullable<SaveDeckInput['cards']>,
+): DeckRecord {
+  return {
+    id: row.deck_id,
+    ownerProfileId: row.owner_profile_id,
+    formatId: row.format_id,
+    title: row.title,
+    description: row.description,
+    tags: row.tags,
+    isFavorite: row.is_favorite,
+    visibility: row.visibility,
+    archivedAt: row.archived_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    currentVersion: {
+      id: row.current_version_id,
+      deckId: row.deck_id,
+      versionNumber: row.current_version_number,
+      createdByProfileId: row.current_version_created_by_profile_id,
+      versionNote: row.current_version_note,
+      createdAt: row.current_version_created_at,
+      cards: (cards ?? []).map((card) => ({
+        sectionKey: card.sectionKey,
+        cardEntityId: card.cardEntityId,
+        quantity: card.quantity,
+      })),
+    },
   }
-
-  const { data, error } = await client
-    .schema('user_data')
-    .from('deck_versions')
-    .select(deckVersionSelect)
-    .in('id', uniqueVersionIds)
-
-  if (error) {
-    return err(mapQueryError(error, 'Failed to load current deck versions.'))
-  }
-
-  return ok(
-    new Map(
-      (data ?? []).map(
-        (row) => [row.id, row] satisfies [string, DeckVersionRow],
-      ),
-    ),
-  )
 }
 
-async function loadDeckCardsByVersionIds(
-  client: DbClient,
-  versionIds: readonly string[],
-): Promise<RepositoryResult<ReadonlyMap<string, readonly DeckCardRow[]>>> {
-  const uniqueVersionIds = Array.from(new Set(versionIds))
-
-  if (uniqueVersionIds.length === 0) {
-    return ok(new Map())
-  }
-
-  const { data, error } = await client
-    .schema('user_data')
-    .from('deck_cards')
-    .select(deckCardSelect)
-    .in('deck_version_id', uniqueVersionIds)
-    .order('section_key', { ascending: true })
-    .order('card_entity_id', { ascending: true })
-
-  if (error) {
-    return err(mapQueryError(error, 'Failed to load persisted deck cards.'))
-  }
-
-  const cardsByVersion = new Map<string, DeckCardRow[]>()
-
-  for (const row of data ?? []) {
-    const versionCards = cardsByVersion.get(row.deck_version_id)
-
-    if (versionCards) {
-      versionCards.push(row)
-      continue
+function mapSaveDeckError(
+  error: {
+    readonly code?: string | null
+    readonly message: string
+    readonly details?: string | null
+  },
+  input: SaveDeckInput,
+) {
+  if (error.code === 'P0002' && input.deckId) {
+    return {
+      code: 'conflict' as const,
+      message:
+        'Failed to save deck because the persisted deck no longer exists.',
+      details: error.details ?? error.message,
     }
-
-    cardsByVersion.set(row.deck_version_id, [row])
   }
 
-  return ok(cardsByVersion)
-}
-
-async function loadCardEntitiesByIds(
-  client: DbClient,
-  cardEntityIds: readonly string[],
-): Promise<RepositoryResult<ReadonlyMap<string, CardEntitySummaryRow>>> {
-  const uniqueCardEntityIds = Array.from(new Set(cardEntityIds))
-
-  if (uniqueCardEntityIds.length === 0) {
-    return ok(new Map())
+  if (error.code === '42501' && input.deckId) {
+    return {
+      code: 'conflict' as const,
+      message: 'Failed to save deck because ownership does not match.',
+      details: error.details ?? error.message,
+    }
   }
 
-  const { data, error } = await client
-    .schema('catalog')
-    .from('card_entities')
-    .select(cardEntitySummarySelect)
-    .in('id', uniqueCardEntityIds)
-
-  if (error) {
-    return err(
-      mapQueryError(error, 'Failed to load canonical cards for the deck.'),
-    )
-  }
-
-  return ok(
-    new Map(
-      (data ?? []).map(
-        (row) => [row.id, row] satisfies [string, CardEntitySummaryRow],
-      ),
-    ),
+  return mapQueryError(
+    error,
+    input.deckId ? 'Failed to save deck.' : 'Failed to create deck.',
   )
-}
-
-async function bestEffortDeleteDeckVersion(
-  client: DbClient,
-  deckVersionId: string | undefined,
-): Promise<void> {
-  if (!deckVersionId) {
-    return
-  }
-
-  await client
-    .schema('user_data')
-    .from('deck_versions')
-    .delete()
-    .eq('id', deckVersionId)
-}
-
-async function bestEffortDeleteDeck(
-  client: DbClient,
-  deckId: string | undefined,
-): Promise<void> {
-  if (!deckId) {
-    return
-  }
-
-  await client.schema('user_data').from('decks').delete().eq('id', deckId)
 }

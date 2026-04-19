@@ -3,19 +3,23 @@
 Monorepo for a Cardfight!! Vanguard web client / companion platform.
 
 The repository contains a working catalog with multi-wave Standard content, an
-importer → publication content pipeline with semantic enrichment, baseline
+importer -> publication content pipeline with semantic enrichment, baseline
 auth/RLS, the first real deck builder workflow, format-aware deck validation
-with profile-driven baseline rules, an explicit application-layer separation
-across features, a social foundation on top of the profile layer, and an
-owner-owned match history / stats foundation.
+with profile-driven baseline rules, DB-backed atomic deck persistence and
+dense owner-scoped deck reads, an explicit application-layer separation across
+features, a social foundation on top of the profile layer, and an owner-owned
+match history / stats foundation.
 
 ## Prerequisites
 
 - Node.js `20.9+`
 - Corepack enabled, or `pnpm 10.x` installed globally
 - Git
+- Docker Desktop or another container runtime if you plan to run local
+  Supabase / `test:db`
 
-If you do not have `pnpm` installed globally, use `corepack pnpm ...` in the commands below.
+If you do not have `pnpm` installed globally, use `corepack pnpm ...` in the
+commands below.
 
 ## Install
 
@@ -73,6 +77,10 @@ corepack pnpm test:web
 # Run the default fast test suite
 corepack pnpm test
 
+# Run DB-backed repository / RLS checkpoints against local Supabase
+# starts local Supabase services and resets the local DB
+corepack pnpm test:db
+
 # Run Playwright e2e
 corepack pnpm test:e2e
 
@@ -96,11 +104,11 @@ corepack pnpm importer:dev-json -- ./packages/importer/fixtures/dev-json/sample-
 
 ## Repository Layout
 
-- `apps/web` – Next.js frontend app
-- `packages/*` – domain and infrastructure packages
-- `scripts/` – pipeline runner and expansion scripts
-- `supabase/` – Supabase config, migrations, seeds, and SQL snippets
-- `docs/` – product, engineering, architecture, and domain documents
+- `apps/web` - Next.js frontend app
+- `packages/*` - domain and infrastructure packages
+- `scripts/` - pipeline runner and expansion scripts
+- `supabase/` - Supabase config, migrations, seeds, and SQL snippets
+- `docs/` - product, engineering, architecture, and domain documents
 
 Current package set:
 
@@ -117,9 +125,11 @@ Current package set:
 
 Import boundaries are lint-enforced:
 
-- import workspace packages only through their root API, for example `@web-vg/catalog`
+- import workspace packages only through their root API, for example
+  `@web-vg/catalog`
 - do not deep import through another package's `src/*`
-- package-to-package dependencies must follow the bounded-context rules in the repo
+- package-to-package dependencies must follow the bounded-context rules in the
+  repo
 
 ## Commit Quality
 
@@ -128,7 +138,8 @@ Pre-commit uses Husky + lint-staged. On staged files, it runs:
 - Prettier
 - ESLint with autofix
 
-Full repo-wide checks such as build, test, and typecheck are not part of pre-commit.
+Full repo-wide checks such as build, test, and typecheck are not part of
+pre-commit.
 
 ## Test Baseline
 
@@ -136,6 +147,8 @@ Current test setup:
 
 - Vitest for package/domain unit tests
 - Vitest + React Testing Library for `apps/web`
+- DB-backed local Supabase checkpoint verification through
+  `corepack pnpm test:db`
 - Playwright for local runtime/browser checkpoints
 
 Current practical coverage is strongest around:
@@ -146,10 +159,15 @@ Current practical coverage is strongest around:
 - social foundation and protected profile/public-profile flows
 - deck domain, deck builder UI, autosave, and metadata flows
 - deck validation core, format-aware baseline rules, and integration tests
+- deck DB persistence hardening:
+  - atomic write RPC coverage
+  - dense summary/detail read RPC coverage
+  - owner-scoped RLS and deck ownership invariant checks
 - owner-owned match history, filters, and stats aggregation
 
 The browser/runtime layer is still lighter than unit/component coverage and is
-best treated as checkpoint confidence, not a full e2e matrix.
+best treated as checkpoint confidence, not a full e2e matrix. The DB checkpoint
+suite is stronger for persistence invariants than for end-to-end UI behavior.
 
 ## Current Status
 
@@ -162,7 +180,8 @@ Available now:
 - shared layout / feedback / data-display primitives
 - Supabase browser/server client foundation
 - SSR-friendly auth/session foundation
-- baseline owner-based authorization and RLS for profiles, decks, collections, and matches
+- baseline owner-based authorization and RLS for profiles, decks, collections,
+  and matches
 - protected and public profile surfaces
 - social foundation:
   - public user search at `/users`
@@ -197,10 +216,12 @@ Available now:
   - explicit publication into catalog truth
 - multi-wave Standard content expansion:
   - wave-1 seed products, entities, and printings
-  - curated D / DZ Keter Sanctuary expansion (D-SD03, D-BT04, D-BT08, DZ-BT01, DZ-BT02, DZ-SS05)
+  - curated D / DZ Keter Sanctuary expansion
+    (D-SD03, D-BT04, D-BT08, DZ-BT01, DZ-BT02, DZ-SS05)
   - additional standard products expansion (DZ-LBT01)
   - booster-by-booster expansion pipeline
-  - semantic data enrichment (keywords, restriction provenance, printing variants)
+  - semantic data enrichment
+    (keywords, restriction provenance, printing variants)
   - canonical bootstrap SQL snippets + choice restriction overlays
 - published catalog content with:
   - products
@@ -216,6 +237,11 @@ Available now:
   - add/remove/quantity controls
   - draft state + autosave
   - metadata editing
+- deck persistence infrastructure:
+  - atomic create/save through `user_data.save_deck_aggregate(...)`
+  - dense deck summary/detail reads through DB-backed aggregate RPCs
+  - DB-enforced owner-scoped deck root/version/card access
+  - immutable ownership/version-link invariants at the Postgres layer
 - deck validation:
   - `packages/deck-validation` with format-aware validation pipeline
   - common, standard, premium, and V-Premium rule sets
@@ -229,8 +255,9 @@ Available now:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries
   - extracted authorization helpers
-- importer/runtime checkpoint scripts and focused review docs
-- linting, formatting, typecheck, and pre-commit checks
+- importer/runtime checkpoint scripts, DB verification checkpoints, and focused
+  review docs
+- linting, formatting, typecheck, DB checkpoints, and pre-commit checks
 
 Not implemented yet:
 

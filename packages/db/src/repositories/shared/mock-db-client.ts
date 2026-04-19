@@ -3,7 +3,13 @@ import type { DbClient } from './client'
 export interface MockQueryInvocation {
   readonly schema: string
   readonly table: string
-  readonly operation: 'select' | 'insert' | 'update' | 'upsert' | 'delete'
+  readonly operation:
+    | 'select'
+    | 'insert'
+    | 'update'
+    | 'upsert'
+    | 'delete'
+    | 'rpc'
   readonly select: string | null
   readonly count: 'exact' | 'planned' | 'estimated' | null
   readonly values: unknown
@@ -42,7 +48,7 @@ class MockQueryBuilder {
   private count: MockQueryInvocation['count'] = null
   private values: unknown = null
   private onConflict: string | null = null
-  private operation: MockQueryInvocation['operation'] = 'select'
+  private operation: MockQueryInvocation['operation']
   private rangeValues: MockQueryInvocation['range'] = null
 
   constructor(
@@ -51,7 +57,12 @@ class MockQueryBuilder {
     private readonly consumeStep: (
       query: MockQueryInvocation,
     ) => MockQueryResponse | Promise<MockQueryResponse>,
-  ) {}
+    initialOperation: MockQueryInvocation['operation'] = 'select',
+    initialValues: unknown = null,
+  ) {
+    this.operation = initialOperation
+    this.values = initialValues
+  }
 
   select(
     select: string,
@@ -193,6 +204,15 @@ export function createSequentialMockDbClient(steps: readonly MockStep[]): {
       return {
         from(tableName: string) {
           return new MockQueryBuilder(schemaName, tableName, consumeStep)
+        },
+        rpc(functionName: string, args?: unknown) {
+          return new MockQueryBuilder(
+            schemaName,
+            functionName,
+            consumeStep,
+            'rpc',
+            args ?? null,
+          )
         },
       }
     },

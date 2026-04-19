@@ -1981,7 +1981,91 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      get_deck_detail_aggregate: {
+        Args: {
+          read_deck_id: string
+        }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          current_version_cards: Json
+          current_version_created_at: string | null
+          current_version_created_by_profile_id: string | null
+          current_version_id: string | null
+          current_version_note: string | null
+          current_version_number: number | null
+          deck_id: string
+          description: string | null
+          format_description: string | null
+          format_display_name: string | null
+          format_id: string
+          has_missing_card_entity: boolean
+          is_favorite: boolean
+          owner_profile_id: string
+          tags: string[]
+          title: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      list_deck_summaries: {
+        Args: {
+          read_owner_profile_id: string
+        }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          current_version_id: string | null
+          current_version_number: number | null
+          deck_id: string
+          description: string | null
+          format_description: string | null
+          format_display_name: string | null
+          format_id: string
+          g_count: number
+          is_favorite: boolean
+          main_count: number
+          owner_profile_id: string
+          ride_count: number
+          tags: string[]
+          title: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      save_deck_aggregate: {
+        Args: {
+          save_archived_at?: string | null
+          save_cards?: Json
+          save_deck_id?: string | null
+          save_description?: string | null
+          save_format_id?: string | null
+          save_is_favorite?: boolean | null
+          save_owner_profile_id?: string | null
+          save_tags?: string[] | null
+          save_title?: string | null
+          save_version_note?: string | null
+          save_visibility?: string | null
+        }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          current_version_created_at: string
+          current_version_created_by_profile_id: string
+          current_version_id: string
+          current_version_note: string | null
+          current_version_number: number
+          deck_id: string
+          description: string | null
+          format_id: string
+          is_favorite: boolean
+          owner_profile_id: string
+          tags: string[]
+          title: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
