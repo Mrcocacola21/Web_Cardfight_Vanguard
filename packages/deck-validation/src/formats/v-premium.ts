@@ -7,6 +7,10 @@ import type {
   DeckValidationTarget,
   DeckValidator,
 } from '../contracts'
+import {
+  validateCopyLimitsValidator,
+  validateDeckSizeValidator,
+} from '../format-baseline-rules'
 import { createFormatSectionValidator } from './shared'
 
 const vPremiumFormatId = 'v-premium' as FormatId
@@ -152,6 +156,8 @@ export const vPremiumValidators: readonly DeckValidator[] = [
     formatId: 'v-premium',
     allowedSections: ['main'],
   }),
+  validateDeckSizeValidator,
+  validateCopyLimitsValidator,
   validateVPremiumCardFactsValidator,
   validateVPremiumClanConstraintsValidator,
   validateVPremiumCardLegalityValidator,

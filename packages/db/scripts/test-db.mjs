@@ -522,6 +522,191 @@ async function verifyConstraints(client) {
 
   await withRollback(
     client,
+    'match rows require an owning profile and default to manual source',
+    async () => {
+      const owner = await createProfileFixture(client, {
+        displayName: 'Match Constraint Owner',
+      })
+
+      await expectPgError(
+        'match rows cannot be ownerless',
+        () =>
+          client.query(
+            `
+              insert into social.matches (
+                recorded_by_profile_id,
+                format_id,
+                visibility,
+                status
+              ) values (
+                null,
+                'standard',
+                'private',
+                'completed'
+              )
+            `,
+          ),
+        '23502',
+      )
+
+      const insertResult = await client.query(
+        `
+          insert into social.matches (
+            recorded_by_profile_id,
+            format_id,
+            visibility,
+            status
+          ) values (
+            $1,
+            'standard',
+            'private',
+            'completed'
+          )
+          returning entry_source, updated_at
+        `,
+        [owner.profileId],
+      )
+
+      assert(
+        insertResult.rowCount === 1,
+        'Owner-backed match row should insert successfully.',
+      )
+      assert(
+        insertResult.rows[0]?.entry_source === 'manual',
+        'Manual match history rows should default to manual provenance.',
+      )
+      assert(
+        typeof insertResult.rows[0]?.updated_at === 'string',
+        'Match rows should expose an updated_at timestamp.',
+      )
+    },
+  )
+
+  await withRollback(
+    client,
+    'match participants cannot reference deck versions owned by another profile',
+    async () => {
+      const matchOwner = await createProfileFixture(client, {
+        displayName: 'Match Deck Owner',
+      })
+      const otherDeckOwner = await createProfileFixture(client, {
+        displayName: 'Other Deck Owner',
+      })
+
+      const matchId = randomUUID()
+      const ownerDeckId = randomUUID()
+      const ownerDeckVersionId = randomUUID()
+      const foreignDeckId = randomUUID()
+      const foreignDeckVersionId = randomUUID()
+
+      await client.query(
+        `
+          insert into user_data.decks (
+            id,
+            owner_profile_id,
+            format_id,
+            title,
+            visibility
+          ) values
+            ($1, $2, 'standard', 'Owner Match Deck', 'private'),
+            ($3, $4, 'standard', 'Foreign Match Deck', 'private')
+        `,
+        [
+          ownerDeckId,
+          matchOwner.profileId,
+          foreignDeckId,
+          otherDeckOwner.profileId,
+        ],
+      )
+
+      await client.query(
+        `
+          insert into user_data.deck_versions (
+            id,
+            deck_id,
+            version_number,
+            created_by_profile_id,
+            version_note
+          ) values
+            ($1, $2, 1, $3, 'owner deck'),
+            ($4, $5, 1, $6, 'foreign deck')
+        `,
+        [
+          ownerDeckVersionId,
+          ownerDeckId,
+          matchOwner.profileId,
+          foreignDeckVersionId,
+          foreignDeckId,
+          otherDeckOwner.profileId,
+        ],
+      )
+
+      await client.query(
+        `
+          insert into social.matches (
+            id,
+            recorded_by_profile_id,
+            format_id,
+            visibility,
+            status
+          ) values (
+            $1,
+            $2,
+            'standard',
+            'private',
+            'completed'
+          )
+        `,
+        [matchId, matchOwner.profileId],
+      )
+
+      await client.query(
+        `
+          insert into social.match_participants (
+            match_id,
+            profile_id,
+            deck_version_id,
+            seat_order,
+            result
+          ) values (
+            $1,
+            $2,
+            $3,
+            1,
+            'win'
+          )
+        `,
+        [matchId, matchOwner.profileId, ownerDeckVersionId],
+      )
+
+      await expectPgError(
+        'foreign deck version rejected for owner match history',
+        () =>
+          client.query(
+            `
+              insert into social.match_participants (
+                match_id,
+                profile_id,
+                deck_version_id,
+                seat_order,
+                result
+              ) values (
+                $1,
+                $2,
+                $3,
+                2,
+                'loss'
+              )
+            `,
+            [matchId, otherDeckOwner.profileId, foreignDeckVersionId],
+          ),
+        '23514',
+      )
+    },
+  )
+
+  await withRollback(
+    client,
     'gameplay room events cannot reference room players from another room',
     async () => {
       const hostProfileId = randomUUID()

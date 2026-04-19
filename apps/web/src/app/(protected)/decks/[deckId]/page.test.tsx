@@ -47,6 +47,7 @@ vi.mock('@/components/decks/deck-builder-view', () => ({
     catalogCards: readonly unknown[]
     catalogErrorMessage: string | null
     validationData: {
+      formatProfiles: readonly unknown[]
       cards: readonly unknown[]
       restrictionLists: readonly unknown[]
     }
@@ -76,6 +77,7 @@ describe('DeckDetailPage', () => {
       },
     })
     mocks.getDeckBuilderValidationData.mockResolvedValue({
+      formatProfiles: [],
       cards: [],
       restrictionLists: [],
     })

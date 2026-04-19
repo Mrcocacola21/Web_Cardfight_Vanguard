@@ -2,6 +2,7 @@ import type {
   CatalogCardEntityRecord,
   CatalogCardLegalityRecord,
   CatalogCardPrintingRecord,
+  CatalogKeywordTagRecord,
 } from '@web-vg/db/repositories/catalog'
 
 export interface CatalogCardRulesRecord {
@@ -25,6 +26,7 @@ export interface CatalogRelatedProductRecord {
 
 export interface CatalogCardDetailViewModel {
   readonly card: CatalogCardEntityRecord
+  readonly keywordTags: readonly CatalogKeywordTagRecord[]
   readonly rules: CatalogCardRulesRecord
   readonly printings: readonly CatalogCardPrintingRecord[]
   readonly legality: CatalogCardLegalityRecord

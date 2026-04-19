@@ -25,7 +25,8 @@ interface CatalogCardDetailViewProps {
 }
 
 export function CatalogCardDetailView({ detail }: CatalogCardDetailViewProps) {
-  const { card, legality, printings, relatedProducts, rules } = detail
+  const { card, keywordTags, legality, printings, relatedProducts, rules } =
+    detail
 
   return (
     <DetailPageLayout
@@ -99,10 +100,10 @@ export function CatalogCardDetailView({ detail }: CatalogCardDetailViewProps) {
                 />
                 <StatBlock
                   label="Keywords"
-                  value={card.keywords.length}
+                  value={keywordTags.length}
                   hint={
-                    card.keywords.length > 0
-                      ? card.keywords.join(', ')
+                    keywordTags.length > 0
+                      ? keywordTags.map((tag) => tag.displayName).join(', ')
                       : 'No keyword tags'
                   }
                 />
@@ -112,6 +113,46 @@ export function CatalogCardDetailView({ detail }: CatalogCardDetailViewProps) {
                   hint="Current catalog truth publishes effect references rather than literal oracle text."
                 />
               </StatGrid>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-medium">
+                    Keyword & mechanics tags
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Structured tags published from catalog truth. These tags are
+                    entity-level facts and remain separate from printing
+                    presentation.
+                  </p>
+                </div>
+                {keywordTags.length > 0 ? (
+                  <div className="grid gap-3">
+                    {keywordTags.map((tag) => (
+                      <div
+                        key={tag.id}
+                        className="rounded-xl border border-border/70 bg-background-elevated/56 px-3 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">{tag.displayName}</Badge>
+                          <Badge variant="outline">
+                            {formatToken(tag.category)}
+                          </Badge>
+                        </div>
+                        {tag.description ? (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {tag.description}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No structured keyword or mechanic tags are published for
+                    this card yet.
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
 

@@ -142,6 +142,7 @@ describe('auth actions', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
     expect(result).toEqual({
@@ -276,6 +277,7 @@ describe('auth actions', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
     expect(mocks.redirect).toHaveBeenCalledWith('/profile')

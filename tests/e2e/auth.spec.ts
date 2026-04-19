@@ -2,9 +2,16 @@ import { expect, test } from '@playwright/test'
 
 import { registerAndReachProfile } from './auth-helpers'
 
+const useLocalSupabase = process.env.PLAYWRIGHT_USE_LOCAL_SUPABASE === '1'
+
 function createUniqueEmail() {
   return `auth-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
 }
+
+test.skip(
+  !useLocalSupabase,
+  'Requires the dedicated local Supabase Playwright runtime.',
+)
 
 test('guest users are redirected away from protected routes', async ({
   page,
@@ -36,7 +43,11 @@ test('registration, login, logout, and auth-page redirects work end-to-end with 
       name: /my profile/i,
     }),
   ).toBeVisible()
-  await expect(page.getByText(new RegExp(email, 'i'))).toBeVisible()
+  await expect(
+    page.getByRole('banner').getByText(email, {
+      exact: true,
+    }),
+  ).toBeVisible()
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/\/profile$/)

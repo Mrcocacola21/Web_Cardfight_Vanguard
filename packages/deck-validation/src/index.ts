@@ -24,12 +24,15 @@ export type {
 export {
   commonDeckValidators,
   requireDeckFormatValidator,
-  validateCopyLimitsValidator,
+  validateDeckPresenceValidator,
   validateDeckConsistencyValidator,
   validateDeckEntryShapeValidator,
-  validateDeckSizeValidator,
   validateDuplicateDeckEntriesValidator,
 } from './common-rules'
+export {
+  validateCopyLimitsValidator,
+  validateDeckSizeValidator,
+} from './format-baseline-rules'
 export { defaultDeckValidationValidatorRegistry } from './formats/registry'
 export {
   premiumValidators,

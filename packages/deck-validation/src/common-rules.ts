@@ -12,9 +12,6 @@ import type {
   DeckValidator,
 } from './contracts'
 
-const commonMainDeckSize = 50
-const commonMaxCopiesPerCard = 4
-
 const deckSectionOrder: Readonly<Record<DeckSection, number>> = {
   main: 0,
   ride: 1,
@@ -138,101 +135,25 @@ export const validateDuplicateDeckEntriesValidator: DeckValidator = {
   },
 }
 
-export const validateDeckSizeValidator: DeckValidator = {
-  id: 'validate-deck-size',
+export const validateDeckPresenceValidator: DeckValidator = {
+  id: 'validate-deck-presence',
   validate: ({ deck }) => {
-    const issues: DeckValidationIssue[] = []
     const totalCards = countPositiveCards(deck.currentVersion.cards)
 
-    if (totalCards === 0) {
-      issues.push({
+    if (totalCards > 0) {
+      return []
+    }
+
+    return [
+      {
         severity: 'error',
         category: 'deck',
         code: 'empty-deck',
         message:
           'Deck must contain at least one card before validation can succeed.',
         target: createDeckTarget(deck.id),
-      })
-
-      return issues
-    }
-
-    const mainDeckSize = countPositiveCardsInSection(
-      deck.currentVersion.cards,
-      'main',
-    )
-
-    if (mainDeckSize < commonMainDeckSize) {
-      issues.push({
-        severity: 'error',
-        category: 'section',
-        code: 'main-deck-too-small',
-        message: `Main deck contains ${mainDeckSize} cards, but the common validation baseline requires ${commonMainDeckSize}.`,
-        target: {
-          type: 'section',
-          section: 'main',
-        },
-      })
-    }
-
-    if (mainDeckSize > commonMainDeckSize) {
-      issues.push({
-        severity: 'error',
-        category: 'section',
-        code: 'main-deck-too-large',
-        message: `Main deck contains ${mainDeckSize} cards, but the common validation baseline allows only ${commonMainDeckSize}.`,
-        target: {
-          type: 'section',
-          section: 'main',
-        },
-      })
-    }
-
-    return issues
-  },
-}
-
-export const validateCopyLimitsValidator: DeckValidator = {
-  id: 'validate-copy-limits',
-  validate: ({ deck }) => {
-    const copiesByCardEntityId = new Map<CardId, number>()
-
-    for (const card of deck.currentVersion.cards) {
-      if (card.section !== 'main') {
-        continue
-      }
-
-      const cardEntityId = getCardEntityId(card.cardEntityId)
-
-      if (
-        !hasNonEmptyValue(cardEntityId) ||
-        !isPositiveInteger(card.quantity)
-      ) {
-        continue
-      }
-
-      copiesByCardEntityId.set(
-        cardEntityId,
-        (copiesByCardEntityId.get(cardEntityId) ?? 0) + card.quantity,
-      )
-    }
-
-    return Array.from(copiesByCardEntityId.entries())
-      .filter(([, quantity]) => quantity > commonMaxCopiesPerCard)
-      .sort(([leftCardId], [rightCardId]) =>
-        String(leftCardId).localeCompare(String(rightCardId)),
-      )
-      .map<DeckValidationIssue>(([cardEntityId, quantity]) => ({
-        severity: 'error',
-        category: 'card',
-        code: 'copy-limit-exceeded',
-        message: `Main deck contains ${quantity} copies of ${cardEntityId}, but the common validation baseline allows only ${commonMaxCopiesPerCard}.`,
-        target: {
-          type: 'card',
-          cardEntityId,
-          section: 'main',
-        },
-      }))
+      },
+    ]
   },
 }
 
@@ -324,8 +245,7 @@ export const commonDeckValidators: readonly DeckValidator[] = [
   requireDeckFormatValidator,
   validateDeckEntryShapeValidator,
   validateDuplicateDeckEntriesValidator,
-  validateDeckSizeValidator,
-  validateCopyLimitsValidator,
+  validateDeckPresenceValidator,
   validateDeckConsistencyValidator,
 ]
 
@@ -383,19 +303,6 @@ function aggregateDeckCards(
 function countPositiveCards(cards: readonly DeckCard[]): number {
   return cards.reduce((total, card) => {
     return total + (isPositiveInteger(card.quantity) ? card.quantity : 0)
-  }, 0)
-}
-
-function countPositiveCardsInSection(
-  cards: readonly DeckCard[],
-  section: DeckSection,
-): number {
-  return cards.reduce((total, card) => {
-    if (card.section !== section || !isPositiveInteger(card.quantity)) {
-      return total
-    }
-
-    return total + card.quantity
   }, 0)
 }
 

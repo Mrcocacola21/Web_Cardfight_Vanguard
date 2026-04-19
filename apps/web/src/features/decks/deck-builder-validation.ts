@@ -13,6 +13,7 @@ import type {
   DeckId,
   DeckSection,
   FormatId,
+  FormatProfile,
   Grade,
   Nation,
   TriggerType,
@@ -37,12 +38,14 @@ export interface DeckBuilderValidationCardRecord {
 }
 
 export interface DeckBuilderValidationData {
+  readonly formatProfiles: readonly FormatProfile[]
   readonly cards: readonly DeckBuilderValidationCardRecord[]
   readonly restrictionLists: readonly RestrictionList[]
 }
 
 export function createEmptyDeckBuilderValidationData(): DeckBuilderValidationData {
   return {
+    formatProfiles: [],
     cards: [],
     restrictionLists: [],
   }
@@ -111,17 +114,28 @@ function createDeckBuilderValidationContext(
   draft: DeckBuilderDraft,
   data: DeckBuilderValidationData,
 ): DeckValidationContext | undefined {
+  const formatProfile = selectFormatProfileForFormat(
+    draft.formatId,
+    data.formatProfiles,
+  )
   const cardFacts = createCardFactsMap(data.cards)
   const restrictionList = selectRestrictionListForFormat(
     draft.formatId,
     data.restrictionLists,
   )
 
-  if (cardFacts.size === 0 && !restrictionList) {
+  if (cardFacts.size === 0 && !restrictionList && !formatProfile) {
     return undefined
   }
 
   return {
+    ...(formatProfile
+      ? {
+          format: {
+            profile: formatProfile,
+          },
+        }
+      : {}),
     ...(cardFacts.size > 0
       ? {
           cardFacts,
@@ -170,6 +184,16 @@ function selectRestrictionListForFormat(
     restrictionLists.find(
       (entry) => entry.formatId === (formatId as FormatId),
     ) ?? null
+  )
+}
+
+function selectFormatProfileForFormat(
+  formatId: string,
+  formatProfiles: readonly FormatProfile[],
+): FormatProfile | null {
+  return (
+    formatProfiles.find((entry) => entry.formatId === (formatId as FormatId)) ??
+    null
   )
 }
 

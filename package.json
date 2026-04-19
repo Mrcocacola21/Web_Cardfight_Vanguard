@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "corepack pnpm --filter @web-vg/web dev",
     "build": "corepack pnpm --filter @web-vg/web build",
-    "importer:dev-json": "corepack pnpm --filter @web-vg/importer run dev:json --",
+    "importer:dev-json": "corepack pnpm dlx tsx ./packages/importer/src/dev-json/run-dev-json-import.ts --",
     "pipeline:dev-json": "corepack pnpm dlx tsx ./scripts/run-persisted-pipeline.ts --",
     "db:seed": "corepack pnpm --filter @web-vg/db run seed",
     "db:types:generate": "corepack pnpm --filter @web-vg/db run types:generate",

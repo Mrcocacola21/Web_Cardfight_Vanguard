@@ -11,7 +11,7 @@
     "@web-vg/db": "workspace:*"
   },
   "scripts": {
-    "dev:json": "pnpm dlx tsx ./src/dev-json/run-dev-json-import.ts",
+    "dev:json": "corepack pnpm dlx tsx ./src/dev-json/run-dev-json-import.ts",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run src",
     "typecheck": "tsc --project tsconfig.json --noEmit"

@@ -94,6 +94,7 @@ export async function signInAction(
       avatarUrl: initialProfileDraft.avatarUrl,
       bio: initialProfileDraft.bio,
       visibility: initialProfileDraft.visibility,
+      bioVisibility: initialProfileDraft.bioVisibility,
     },
   )
 
@@ -185,6 +186,7 @@ export async function signUpAction(
       avatarUrl: initialProfileDraft.avatarUrl,
       bio: initialProfileDraft.bio,
       visibility: initialProfileDraft.visibility,
+      bioVisibility: initialProfileDraft.bioVisibility,
     },
   )
 

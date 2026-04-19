@@ -1,0 +1,538 @@
+{
+  "source": {
+    "key": "dev-json.additional-standard-products-expansion-wave-11-3",
+    "displayName": "Additional Standard products expansion wave 11.3",
+    "providerName": "local-dev",
+    "snapshotKey": "wave-11-3-v1"
+  },
+  "job": {
+    "scopeMetadata": {
+      "fixture": "additional-standard-products-expansion-wave-11-3",
+      "wave": "standard-content-expansion-step-11-3",
+      "formatScope": "standard",
+      "expansionMode": "product-family-by-product-family",
+      "productFamilies": ["start-deck", "lyrical-product", "special-series"]
+    }
+  },
+  "options": {
+    "runNormalization": true
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-d-sd03",
+      "name": "D-SD03 Start Deck 03: Tohya Ebata -Apex Ruler-",
+      "code": "D-SD03",
+      "productCategory": "deck",
+      "productKind": "start",
+      "familyName": "Standard Start Deck",
+      "releaseDateText": "2021-05-14",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedRole": "non-booster-start-deck",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dsd03/"
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-lbt01",
+      "name": "Cardfight!! Vanguard Lyrical Booster: Lyrical Monasterio Sparkling Stars!",
+      "code": "DZ-LBT01",
+      "productCategory": "booster",
+      "productKind": "lyrical",
+      "familyName": "Standard Lyrical Booster",
+      "releaseDateText": "2024-09-27",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedRole": "non-booster-lyrical-product",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzlbt01/"
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-ss05",
+      "name": "DZ-SS05 CoroCoro Start Deck Pack",
+      "code": "DZ-SS05",
+      "productCategory": "special-set",
+      "productKind": "special-series",
+      "familyName": "Standard Special Series",
+      "releaseDateText": "2025-05-30",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedRole": "non-booster-special-series",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzss05/"
+      }
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-bastion-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Apex Ruler, Bastion",
+      "printingCode": "D-SD03/001EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "apex-ruler-bastion"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rooks-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Spear, Rooks",
+      "printingCode": "D-SD03/002EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-spear-rooks"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-fort-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Sword, Fort",
+      "printingCode": "D-SD03/003EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-sword-fort"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-base-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Bow, Base",
+      "printingCode": "D-SD03/004EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "0",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-bow-base"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ramana-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Vehement Witch, Ramana",
+      "printingCode": "D-SD03/005EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "vehement-witch-ramana"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rafluke-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Broadaxe, Rafluke",
+      "printingCode": "D-SD03/006EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-broadaxe-rafluke"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-lisana-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Shadow Bow Archer, Lisana",
+      "printingCode": "D-SD03/007EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "shadow-bow-archer-lisana"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-platinum-wolf-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Platinum Wolf",
+      "printingCode": "D-SD03/008EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "platinum-wolf"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-kurabiel-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Lifesaving Angel, Kurabiel",
+      "printingCode": "D-SD03/009EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "7000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "lifesaving-angel-kurabiel"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-olbaria-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Spiritual King of Determination, Olbaria",
+      "printingCode": "D-SD03/010EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "triggerType": "over",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "50000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "officialTextNationDash": true,
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "spiritual-king-of-determination-olbaria"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-gurgant-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Hammer, Gurgant",
+      "printingCode": "D-SD03/011EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "critical",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-hammer-gurgant"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-gallus-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Pierce, Gallus",
+      "printingCode": "D-SD03/012EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "draw",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-pierce-gallus"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-lif-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Rend, Lif",
+      "printingCode": "D-SD03/013EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "front",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-rend-lif"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-arshes-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Healer of Heavenly Staff, Arshes",
+      "printingCode": "D-SD03/014EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "heal",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "healer-of-heavenly-staff-arshes"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-the-hour-of-holy-judgement-cometh-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "The Hour of Holy Judgement Cometh",
+      "printingCode": "D-SD03/015EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-order",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "the-hour-of-holy-judgement-cometh"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-sagitta-dz-lbt01-main",
+      "sourceProductId": "prod-dz-lbt01",
+      "sourceProductCode": "DZ-LBT01",
+      "cardName": "Absolute Zero, Sagitta",
+      "printingCode": "DZ-LBT01/001EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Lyrical Monasterio",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "absolute-zero-sagitta"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-aurora-star-coral-dz-lbt01-rrr",
+      "sourceProductId": "prod-dz-lbt01",
+      "sourceProductCode": "DZ-LBT01",
+      "cardName": "Aurora Star, Coral",
+      "printingCode": "DZ-LBT01/002EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Lyrical Monasterio",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "aurora-star-coral"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-aurora-star-coral-dz-lbt01-msp",
+      "sourceProductId": "prod-dz-lbt01",
+      "sourceProductCode": "DZ-LBT01",
+      "cardName": "Aurora Star, Coral",
+      "printingCode": "DZ-LBT01/MSP01EN",
+      "rarity": "MSP",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Lyrical Monasterio",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "aurora-star-coral",
+        "officialReference": "https://en.cf-vanguard.com/wordpress/wp-content/uploads/Mermaid-Text-Reference-January-2026v2.pdf"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-retentir-dz-lbt01-main",
+      "sourceProductId": "prod-dz-lbt01",
+      "sourceProductCode": "DZ-LBT01",
+      "cardName": "Diva of Echostar, Retentir",
+      "printingCode": "DZ-LBT01/024EN",
+      "rarity": "RR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Lyrical Monasterio",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "diva-of-echostar-retentir"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-fresh-star-coral-dz-lbt01-main",
+      "sourceProductId": "prod-dz-lbt01",
+      "sourceProductCode": "DZ-LBT01",
+      "cardName": "Fresh Star, Coral",
+      "printingCode": "DZ-LBT01/082EN",
+      "rarity": "C",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Lyrical Monasterio",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fresh-star-coral"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cerrgaon-dz-ss05-cr",
+      "sourceProductId": "prod-dz-ss05",
+      "sourceProductCode": "DZ-SS05",
+      "cardName": "Cerrgaon",
+      "printingCode": "DZ-SS05/CR08EN",
+      "rarity": "CR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "cerrgaon"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cerrgaon-dz-ss05-gcr",
+      "sourceProductId": "prod-dz-ss05",
+      "sourceProductCode": "DZ-SS05",
+      "cardName": "Cerrgaon",
+      "printingCode": "DZ-SS05/GCR08EN",
+      "rarity": "GCR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-3",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "cerrgaon"
+      }
+    }
+  ]
+}

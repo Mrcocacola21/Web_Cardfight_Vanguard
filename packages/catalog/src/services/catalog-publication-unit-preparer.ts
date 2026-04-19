@@ -69,10 +69,28 @@ interface PublicationPreparationOptions {
   readonly createId: () => string
 }
 
+interface InferredPrintingSemantics {
+  readonly artVariant: string | null
+  readonly isAlternateArt: boolean
+  readonly isPromoVariant: boolean
+}
+
 type PublishableCatalogPrintingSource = CatalogPrintingPublicationSource & {
   readonly cardEntityId: string
   readonly rawProduct: CatalogPublicationRawProductSource
 }
+
+const alternateArtVariantPrefixes = new Set([
+  'ASR',
+  'DSR',
+  'FFR',
+  'FR',
+  'GCR',
+  'MSP',
+  'SEC',
+  'SNR',
+  'SP',
+])
 
 export function prepareProductPublicationUnits(
   rawProducts: readonly CatalogPublicationRawProductSource[],
@@ -240,6 +258,13 @@ function preparePrintingPublicationUnit(
     return null
   }
 
+  const printingSemantics = inferPrintingSemantics({
+    collectorNumber,
+    rarity,
+    productCode,
+    rawProduct: source.rawProduct,
+  })
+
   return {
     id: options.createId(),
     printingKey,
@@ -252,9 +277,9 @@ function preparePrintingPublicationUnit(
       source.rawRegionCode ?? source.rawProduct.rawRegionCode ?? null,
     ),
     printedName: normalizeNonEmptyString(source.rawCardName),
-    artVariant: null,
-    isAlternateArt: false,
-    isPromoVariant: false,
+    artVariant: printingSemantics.artVariant,
+    isAlternateArt: printingSemantics.isAlternateArt,
+    isPromoVariant: printingSemantics.isPromoVariant,
     traceability: {
       importJobId: source.importJobId,
       normalizationResultId: source.normalizationResultId,
@@ -270,4 +295,36 @@ function hasRawProduct(
   readonly rawProduct: CatalogPublicationRawProductSource
 } {
   return source.rawProduct !== null
+}
+
+function inferPrintingSemantics(input: {
+  readonly collectorNumber: string
+  readonly rarity: Rarity
+  readonly productCode: string
+  readonly rawProduct: CatalogPublicationRawProductSource
+}): InferredPrintingSemantics {
+  const collectorPrefix = extractCollectorPrefix(input.collectorNumber)
+  const normalizedProductCategory = normalizeNonEmptyString(
+    input.rawProduct.rawProductCategory,
+  )?.toLowerCase()
+  const normalizedProductCode = input.productCode.toUpperCase()
+  const normalizedRarity = input.rarity.toUpperCase()
+  const artVariant = collectorPrefix ? collectorPrefix.toLowerCase() : null
+
+  return {
+    artVariant,
+    isAlternateArt:
+      collectorPrefix !== null &&
+      alternateArtVariantPrefixes.has(collectorPrefix),
+    isPromoVariant:
+      normalizedProductCategory === 'promo' ||
+      normalizedProductCode.startsWith('PR-') ||
+      normalizedRarity === 'PR',
+  }
+}
+
+function extractCollectorPrefix(collectorNumber: string): string | null {
+  const match = collectorNumber.match(/^([A-Za-z]+)\d+$/)
+
+  return match?.[1]?.toUpperCase() ?? null
 }

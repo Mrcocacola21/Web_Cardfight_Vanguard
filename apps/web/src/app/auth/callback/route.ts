@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
           avatarUrl: initialProfileDraft.avatarUrl,
           bio: initialProfileDraft.bio,
           visibility: initialProfileDraft.visibility,
+          bioVisibility: initialProfileDraft.bioVisibility,
         },
       )
 

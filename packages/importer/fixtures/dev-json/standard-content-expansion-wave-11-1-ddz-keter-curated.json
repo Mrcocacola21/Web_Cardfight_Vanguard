@@ -1,0 +1,751 @@
+{
+  "source": {
+    "key": "dev-json.standard-content-expansion-wave-11-1-ddz-keter-curated",
+    "displayName": "Standard content expansion wave 11.1: curated D + DZ Keter slice",
+    "providerName": "local-dev",
+    "snapshotKey": "wave-11-1-v1"
+  },
+  "job": {
+    "scopeMetadata": {
+      "fixture": "standard-content-expansion-wave-11-1-ddz-keter-curated",
+      "wave": "standard-content-expansion-wave-11-1",
+      "formatScope": "standard-ddz-keter-curated",
+      "nationScope": "Keter Sanctuary"
+    }
+  },
+  "options": {
+    "runNormalization": true
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-d-sd03",
+      "name": "D-SD03 Start Deck 03: Tohya Ebata -Apex Ruler-",
+      "code": "D-SD03",
+      "productCategory": "deck",
+      "productKind": "start",
+      "familyName": "Standard Start Deck",
+      "releaseDateText": "2021-05-14",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "early-d-start-deck-core",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dsd03/"
+      }
+    },
+    {
+      "sourceProductId": "prod-d-bt04",
+      "name": "D-BT04 Awakening of Chakrabarthi",
+      "code": "D-BT04",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2022-02-11",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "early-d-booster-support",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dbt04/"
+      }
+    },
+    {
+      "sourceProductId": "prod-d-bt08",
+      "name": "D-BT08 Minerva Rising",
+      "code": "D-BT08",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2023-02-03",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "later-d-booster-support",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dbt08/"
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-bt01",
+      "name": "DZ-BT01 Fated Clash",
+      "code": "DZ-BT01",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2024-05-03",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "dz-booster-core",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzbt01/"
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-bt02",
+      "name": "DZ-BT02 Illusionless Strife",
+      "code": "DZ-BT02",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2024-06-28",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "dz-mixed-product",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzbt02/"
+      }
+    },
+    {
+      "sourceProductId": "prod-dz-ss05",
+      "name": "DZ-SS05 CoroCoro Start Deck Pack",
+      "code": "DZ-SS05",
+      "productCategory": "special-set",
+      "productKind": "special-series",
+      "familyName": "Standard Special Series",
+      "releaseDateText": "2025-05-30",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedRole": "special-product-choice-restriction-support",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzss05/"
+      }
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-bastion-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Apex Ruler, Bastion",
+      "printingCode": "D-SD03/001EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "apex-ruler-bastion"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rooks-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Spear, Rooks",
+      "printingCode": "D-SD03/002EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-spear-rooks"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-fort-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Sword, Fort",
+      "printingCode": "D-SD03/003EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-sword-fort"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-base-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Bow, Base",
+      "printingCode": "D-SD03/004EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "0",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-bow-base"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ramana-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Vehement Witch, Ramana",
+      "printingCode": "D-SD03/005EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "vehement-witch-ramana"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rafluke-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Broadaxe, Rafluke",
+      "printingCode": "D-SD03/006EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-broadaxe-rafluke"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-lisana-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Shadow Bow Archer, Lisana",
+      "printingCode": "D-SD03/007EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "shadow-bow-archer-lisana"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-platinum-wolf-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Platinum Wolf",
+      "printingCode": "D-SD03/008EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "platinum-wolf"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-kurabiel-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Lifesaving Angel, Kurabiel",
+      "printingCode": "D-SD03/009EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "7000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "lifesaving-angel-kurabiel"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-olbaria-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Spiritual King of Determination, Olbaria",
+      "printingCode": "D-SD03/010EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "triggerType": "over",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "50000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "officialTextNationDash": true,
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "spiritual-king-of-determination-olbaria"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-gurgant-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Hammer, Gurgant",
+      "printingCode": "D-SD03/011EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "critical",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-hammer-gurgant"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-gallus-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Pierce, Gallus",
+      "printingCode": "D-SD03/012EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "draw",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-pierce-gallus"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-lif-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Knight of Heavenly Rend, Lif",
+      "printingCode": "D-SD03/013EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "front",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-heavenly-rend-lif"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-arshes-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "Healer of Heavenly Staff, Arshes",
+      "printingCode": "D-SD03/014EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "trigger-unit",
+      "nation": "Keter Sanctuary",
+      "triggerType": "heal",
+      "gradeText": "0",
+      "powerText": "5000",
+      "criticalText": "1",
+      "shieldText": "15000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "healer-of-heavenly-staff-arshes"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-the-hour-of-holy-judgement-cometh-d-sd03-main",
+      "sourceProductId": "prod-d-sd03",
+      "sourceProductCode": "D-SD03",
+      "cardName": "The Hour of Holy Judgement Cometh",
+      "printingCode": "D-SD03/015EN",
+      "rarity": "SD",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-order",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "the-hour-of-holy-judgement-cometh"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-bastion-prime-d-bt04-main",
+      "sourceProductId": "prod-d-bt04",
+      "sourceProductCode": "D-BT04",
+      "cardName": "Apex-surpassing Sword, Bastion Prime",
+      "printingCode": "D-BT04/002EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "apex-surpassing-sword-bastion-prime"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-wisdom-of-beginning-d-bt08-main",
+      "sourceProductId": "prod-d-bt08",
+      "sourceProductCode": "D-BT08",
+      "cardName": "Wisdom of Beginning That Cleared The World",
+      "printingCode": "D-BT08/023EN",
+      "rarity": "RR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-order",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "wisdom-of-beginning-that-cleared-the-world"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-rrr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/010EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-dsr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/DSR01EN",
+      "rarity": "DSR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-soel-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Wings of Aspiration, Soel",
+      "printingCode": "DZ-BT01/117EN",
+      "rarity": "C",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "0",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "wings-of-aspiration-soel"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ascensior-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Knight of Great Advance, Ascensior",
+      "printingCode": "DZ-BT01/038EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-great-advance-ascensior"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ventesta-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Patrol of Gusts, Ventesta",
+      "printingCode": "DZ-BT01/033EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "patrol-of-gusts-ventesta"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-biscotti-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Divine Sister, Biscotti",
+      "printingCode": "DZ-BT01/019EN",
+      "rarity": "RR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "divine-sister-biscotti"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-nobia-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Knight of Gentle Beauty, Nobia",
+      "printingCode": "DZ-BT01/026EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-gentle-beauty-nobia"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cethlan-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Bringer of Protection, Cethlan",
+      "printingCode": "DZ-BT01/066EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "bringer-of-protection-cethlan"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cethlan-dz-bt01-fr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Bringer of Protection, Cethlan",
+      "printingCode": "DZ-BT01/FR32EN",
+      "rarity": "FR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "bringer-of-protection-cethlan"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-effoll-dz-bt02-main",
+      "sourceProductId": "prod-dz-bt02",
+      "sourceProductCode": "DZ-BT02",
+      "cardName": "Academic of Endeavoring, Effoll",
+      "printingCode": "DZ-BT02/034EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "mixed-product-publishable",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "academic-of-endeavoring-effoll"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-liael-amorta-dz-bt02-main",
+      "sourceProductId": "prod-dz-bt02",
+      "sourceProductCode": "DZ-BT02",
+      "cardName": "Fated One of Time, Liael=Amorta",
+      "printingCode": "DZ-BT02/010EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "review-unresolved",
+        "expectedNormalization": "unresolved_review_queue",
+        "canonicalGroup": "fated-one-of-time-liael-amorta",
+        "seedAssumption": "canonical bootstrap intentionally omits Liael=Amorta to preserve manual review behavior"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cerrgaon-dz-ss05-cr",
+      "sourceProductId": "prod-dz-ss05",
+      "sourceProductCode": "DZ-SS05",
+      "cardName": "Cerrgaon",
+      "printingCode": "DZ-SS05/CR08EN",
+      "rarity": "CR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "cerrgaon"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cerrgaon-dz-ss05-gcr",
+      "sourceProductId": "prod-dz-ss05",
+      "sourceProductCode": "DZ-SS05",
+      "cardName": "Cerrgaon",
+      "printingCode": "DZ-SS05/GCR08EN",
+      "rarity": "GCR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-wave-11-1",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "cerrgaon"
+      }
+    }
+  ]
+}

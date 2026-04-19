@@ -49,6 +49,60 @@ function runCorepack(corepackArgs, fallbackMessage, env = process.env) {
   return result.stdout
 }
 
+function tryRunCorepack(corepackArgs, env = process.env) {
+  try {
+    return runCorepack(corepackArgs, '', env)
+  } catch {
+    return null
+  }
+}
+
+function waitMs(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+function waitForSupabaseStop() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const statusOutput = tryRunCorepack([
+      'pnpm',
+      'dlx',
+      `supabase@${cliVersion}`,
+      'status',
+    ])
+
+    if (statusOutput === null) {
+      return
+    }
+
+    waitMs(1_000)
+  }
+}
+
+function startLocalSupabase() {
+  try {
+    return runCorepack(
+      ['pnpm', 'dlx', `supabase@${cliVersion}`, 'start'],
+      'Failed to start local Supabase services.\n',
+    )
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /(container name .* is already in use|container is not ready: starting)/iu.test(
+        error.message,
+      )
+    ) {
+      waitMs(5_000)
+
+      return runCorepack(
+        ['pnpm', 'dlx', `supabase@${cliVersion}`, 'start'],
+        'Failed to start local Supabase services.\n',
+      )
+    }
+
+    throw error
+  }
+}
+
 function parseStatusEnv(statusOutput, name) {
   const match = statusOutput.match(new RegExp(`${name}="([^"]+)"`, 'u'))
   return match?.[1] ?? null
@@ -63,10 +117,16 @@ function assert(value, message) {
 export function runLocalPlaywrightE2E({ label, specPath }) {
   console.log(`Preparing local Supabase services for ${label} e2e smoke...`)
 
-  runCorepack(
-    ['pnpm', 'dlx', `supabase@${cliVersion}`, 'start'],
-    'Failed to start local Supabase services.\n',
-  )
+  tryRunCorepack([
+    'pnpm',
+    'dlx',
+    `supabase@${cliVersion}`,
+    'stop',
+    '--no-backup',
+  ])
+  waitForSupabaseStop()
+
+  startLocalSupabase()
 
   runCorepack(
     ['pnpm', 'dlx', `supabase@${cliVersion}`, 'db', 'reset', '--local'],
@@ -97,6 +157,7 @@ export function runLocalPlaywrightE2E({ label, specPath }) {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: anonKey,
     NEXT_PUBLIC_SUPABASE_URL: apiUrl,
     PLAYWRIGHT_BASE_URL: localBaseUrl,
+    PLAYWRIGHT_USE_LOCAL_SUPABASE: '1',
   }
 
   const output = runCorepack(

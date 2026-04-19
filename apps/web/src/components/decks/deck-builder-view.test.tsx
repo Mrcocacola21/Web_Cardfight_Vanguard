@@ -742,6 +742,7 @@ function createCatalogCard() {
 
 function createValidationData(): DeckBuilderValidationData {
   return {
+    formatProfiles: [],
     cards: [
       {
         cardEntityId: 'entity-bastion',

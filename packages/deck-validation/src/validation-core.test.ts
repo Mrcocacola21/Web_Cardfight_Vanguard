@@ -595,11 +595,12 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
         'require-deck-format',
         'validate-deck-entry-shape',
         'validate-deck-duplicates',
-        'validate-deck-size',
-        'validate-copy-limits',
+        'validate-deck-presence',
         'validate-deck-consistency',
         'select-format-validator-group',
         'validate-standard-sections',
+        'validate-deck-size',
+        'validate-copy-limits',
         'validate-standard-card-facts',
         'validate-standard-ride-deck',
         'validate-standard-nation-constraints',
@@ -718,8 +719,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       'require-deck-format',
       'validate-deck-entry-shape',
       'validate-deck-duplicates',
-      'validate-deck-size',
-      'validate-copy-limits',
+      'validate-deck-presence',
       'validate-deck-consistency',
       'select-format-validator-group',
     ])
@@ -1094,11 +1094,12 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       'require-deck-format',
       'validate-deck-entry-shape',
       'validate-deck-duplicates',
-      'validate-deck-size',
-      'validate-copy-limits',
+      'validate-deck-presence',
       'validate-deck-consistency',
       'select-format-validator-group',
       'validate-v-premium-sections',
+      'validate-deck-size',
+      'validate-copy-limits',
       'validate-v-premium-card-facts',
       'validate-v-premium-clan-constraints',
       'validate-v-premium-card-legality',
@@ -1286,11 +1287,12 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       'require-deck-format',
       'validate-deck-entry-shape',
       'validate-deck-duplicates',
-      'validate-deck-size',
-      'validate-copy-limits',
+      'validate-deck-presence',
       'validate-deck-consistency',
       'select-format-validator-group',
       'validate-premium-sections',
+      'validate-deck-size',
+      'validate-copy-limits',
       'validate-premium-card-facts',
       'validate-premium-g-deck-structure',
       'validate-premium-section-qualification',
@@ -1814,7 +1816,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
         category: 'section',
         code: 'main-deck-too-small',
         message:
-          'Main deck contains 49 cards, but the common validation baseline requires 50.',
+          'Main deck contains 49 cards, but the format baseline requires 50.',
         target: {
           type: 'section',
           section: 'main',
@@ -1825,7 +1827,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
         category: 'section',
         code: 'main-deck-too-small',
         message:
-          'Main deck contains 49 cards, but the common validation baseline requires 50.',
+          'Main deck contains 49 cards, but the format baseline requires 50.',
         target: {
           type: 'section',
           section: 'main',
@@ -1836,7 +1838,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
         category: 'section',
         code: 'main-deck-too-small',
         message:
-          'Main deck contains 49 cards, but the common validation baseline requires 50.',
+          'Main deck contains 49 cards, but the format baseline requires 50.',
         target: {
           type: 'section',
           section: 'main',
@@ -1855,7 +1857,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       category: 'section',
       code: 'main-deck-too-large',
       message:
-        'Main deck contains 51 cards, but the common validation baseline allows only 50.',
+        'Main deck contains 51 cards, but the format baseline allows only 50.',
       target: {
         type: 'section',
         section: 'main',
@@ -1876,7 +1878,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       category: 'card',
       code: 'copy-limit-exceeded',
       message:
-        'Main deck contains 5 copies of card-alpha, but the common validation baseline allows only 4.',
+        'Main deck contains 5 copies of card-alpha, but the format baseline allows only 4.',
       target: {
         type: 'card',
         cardEntityId: alphaCardId,
@@ -2112,7 +2114,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
 
   it('exposes the default common and format validator groups through the registry', () => {
     expect(defaultDeckValidationValidatorRegistry.commonValidators.length).toBe(
-      6,
+      5,
     )
     expect(
       defaultDeckValidationValidatorRegistry.commonValidators.map(
@@ -2122,8 +2124,7 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       'require-deck-format',
       'validate-deck-entry-shape',
       'validate-deck-duplicates',
-      'validate-deck-size',
-      'validate-copy-limits',
+      'validate-deck-presence',
       'validate-deck-consistency',
     ])
     expect(
@@ -2141,6 +2142,8 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       ),
     ).toEqual([
       'validate-standard-sections',
+      'validate-deck-size',
+      'validate-copy-limits',
       'validate-standard-card-facts',
       'validate-standard-ride-deck',
       'validate-standard-nation-constraints',
@@ -2151,6 +2154,8 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       ].map((validator) => validator.id),
     ).toEqual([
       'validate-v-premium-sections',
+      'validate-deck-size',
+      'validate-copy-limits',
       'validate-v-premium-card-facts',
       'validate-v-premium-clan-constraints',
       'validate-v-premium-card-legality',
@@ -2161,6 +2166,8 @@ describe('@web-vg/deck-validation common and format-aware pipeline', () => {
       ),
     ).toEqual([
       'validate-premium-sections',
+      'validate-deck-size',
+      'validate-copy-limits',
       'validate-premium-card-facts',
       'validate-premium-g-deck-structure',
       'validate-premium-section-qualification',

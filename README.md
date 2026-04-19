@@ -2,12 +2,12 @@
 
 Monorepo for a Cardfight!! Vanguard web client / companion platform.
 
-The repository is no longer just a shell. It now contains a working catalog,
-an importer -> publication content pipeline, baseline auth/RLS, the first
-real deck builder workflow, format-aware deck validation, and an explicit
-application-layer separation across features, plus an explicit social
-foundation on top of the profile layer and an owner-owned match history /
-stats foundation.
+The repository contains a working catalog with multi-wave Standard content, an
+importer → publication content pipeline with semantic enrichment, baseline
+auth/RLS, the first real deck builder workflow, format-aware deck validation
+with profile-driven baseline rules, an explicit application-layer separation
+across features, a social foundation on top of the profile layer, and an
+owner-owned match history / stats foundation.
 
 ## Prerequisites
 
@@ -96,9 +96,11 @@ corepack pnpm importer:dev-json -- ./packages/importer/fixtures/dev-json/sample-
 
 ## Repository Layout
 
-- `apps/web` - Next.js frontend app
-- `packages/*` - domain and infrastructure packages
-- `docs/` - product, engineering, architecture, and domain documents
+- `apps/web` – Next.js frontend app
+- `packages/*` – domain and infrastructure packages
+- `scripts/` – pipeline runner and expansion scripts
+- `supabase/` – Supabase config, migrations, seeds, and SQL snippets
+- `docs/` – product, engineering, architecture, and domain documents
 
 Current package set:
 
@@ -143,6 +145,7 @@ Current practical coverage is strongest around:
 - auth/profile baseline
 - social foundation and protected profile/public-profile flows
 - deck domain, deck builder UI, autosave, and metadata flows
+- deck validation core, format-aware baseline rules, and integration tests
 - owner-owned match history, filters, and stats aggregation
 
 The browser/runtime layer is still lighter than unit/component coverage and is
@@ -184,13 +187,22 @@ Available now:
   - `/catalog/[cardKey]`
   - `/catalog/printings/[printingKey]`
   - `/catalog/products/[productKey]`
+  - structured keyword/mechanics tags on card detail
+  - printing-level variant semantics (art variant, alternate art, promo flags)
 - importer stack:
   - tracked `import_sources` / `import_jobs`
   - raw import
   - normalization
   - manual review queue
   - explicit publication into catalog truth
-- published wave-1 catalog content with:
+- multi-wave Standard content expansion:
+  - wave-1 seed products, entities, and printings
+  - curated D / DZ Keter Sanctuary expansion (D-SD03, D-BT04, D-BT08, DZ-BT01, DZ-BT02, DZ-SS05)
+  - additional standard products expansion (DZ-LBT01)
+  - booster-by-booster expansion pipeline
+  - semantic data enrichment (keywords, restriction provenance, printing variants)
+  - canonical bootstrap SQL snippets + choice restriction overlays
+- published catalog content with:
   - products
   - card entities
   - printings
@@ -207,8 +219,12 @@ Available now:
 - deck validation:
   - `packages/deck-validation` with format-aware validation pipeline
   - common, standard, premium, and V-Premium rule sets
+  - profile-driven format-aware baseline rules (deck size, copy limits)
+  - runtime `format.profile` hydration through builder validation data
+  - Premium section qualification facts (G-deck eligibility)
   - restriction-list validation
   - validation UI panel in the deck builder
+  - focused integration tests for profile-aware and Premium runtime behavior
 - application-layer refactoring:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries

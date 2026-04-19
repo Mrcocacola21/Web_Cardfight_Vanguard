@@ -208,6 +208,120 @@ describe('catalog publication unit preparer', () => {
       ],
     })
   })
+
+  it('preserves printing-level variant semantics for alternate-art and promo printings', () => {
+    const boosterProduct: CatalogPublicationRawProductSource = {
+      rawProductId: 'raw-product-dz-bt01',
+      importJobId: 'job-1',
+      sourceProductId: 'source-1',
+      rawName: 'Fated Clash',
+      rawCode: 'DZ-BT01',
+      rawProductCategory: 'booster',
+      rawProductKind: 'main',
+      rawReleaseDateText: '2024-05-03',
+      rawRegionCode: 'en',
+    }
+    const promoProduct: CatalogPublicationRawProductSource = {
+      rawProductId: 'raw-product-pr-g01',
+      importJobId: 'job-1',
+      sourceProductId: 'source-2',
+      rawName: 'Premium Anniversary Promo Pack',
+      rawCode: 'PR-G01',
+      rawProductCategory: 'promo',
+      rawProductKind: 'standalone',
+      rawReleaseDateText: '2019-08-09',
+      rawRegionCode: 'en',
+    }
+
+    const result = preparePrintingPublicationUnits(
+      [
+        {
+          importJobId: 'job-1',
+          normalizationResultId: 'normalization-rezael-dsr',
+          rawCardPrintingId: 'raw-printing-rezael-dsr',
+          rawProductId: boosterProduct.rawProductId,
+          normalizationStatus: 'auto_resolved',
+          cardEntityId: 'entity-rezael',
+          sourcePrintingId: 'source-printing-1',
+          rawCardName: 'Fated One of Miracles, Rezael',
+          rawPrintingCode: 'DZ-BT01/DSR01EN',
+          rawRarity: 'DSR',
+          rawLocaleCode: 'en',
+          rawRegionCode: 'en',
+          rawProduct: boosterProduct,
+        },
+        {
+          importJobId: 'job-1',
+          normalizationResultId: 'normalization-promo',
+          rawCardPrintingId: 'raw-printing-promo',
+          rawProductId: promoProduct.rawProductId,
+          normalizationStatus: 'auto_resolved',
+          cardEntityId: 'entity-promo',
+          sourcePrintingId: 'source-printing-2',
+          rawCardName: 'Anniversary Promo Vanguard',
+          rawPrintingCode: 'PR-G01/001EN',
+          rawRarity: 'PR',
+          rawLocaleCode: 'en',
+          rawRegionCode: 'en',
+          rawProduct: promoProduct,
+        },
+      ],
+      new Map([
+        [boosterProduct.rawProductId, 'catalog-product-booster'],
+        [promoProduct.rawProductId, 'catalog-product-promo'],
+      ]),
+      {
+        createId: createIdSequence(['printing-unit-1', 'printing-unit-2']),
+      },
+    )
+
+    expect(result).toEqual({
+      attemptedCount: 2,
+      units: [
+        {
+          id: 'printing-unit-1',
+          printingKey: 'printing.fated-one-of-miracles-rezael.dz-bt01.dsr01.en',
+          cardEntityId: 'entity-rezael',
+          productId: 'catalog-product-booster',
+          collectorNumber: 'DSR01',
+          rarity: 'DSR',
+          locale: 'en',
+          region: 'en',
+          printedName: 'Fated One of Miracles, Rezael',
+          artVariant: 'dsr',
+          isAlternateArt: true,
+          isPromoVariant: false,
+          traceability: {
+            importJobId: 'job-1',
+            normalizationResultId: 'normalization-rezael-dsr',
+            rawCardPrintingId: 'raw-printing-rezael-dsr',
+            rawProductId: 'raw-product-dz-bt01',
+          },
+        },
+        {
+          id: 'printing-unit-2',
+          printingKey: 'printing.anniversary-promo-vanguard.pr-g01.001.en',
+          cardEntityId: 'entity-promo',
+          productId: 'catalog-product-promo',
+          collectorNumber: '001',
+          rarity: 'PR',
+          locale: 'en',
+          region: 'en',
+          printedName: 'Anniversary Promo Vanguard',
+          artVariant: null,
+          isAlternateArt: false,
+          isPromoVariant: true,
+          traceability: {
+            importJobId: 'job-1',
+            normalizationResultId: 'normalization-promo',
+            rawCardPrintingId: 'raw-printing-promo',
+            rawProductId: 'raw-product-pr-g01',
+          },
+        },
+      ],
+      skippedResults: [],
+    })
+  })
 })
 
 function createIdSequence(ids: readonly string[]): () => string {

@@ -194,6 +194,7 @@ describe('GET /auth/callback', () => {
         avatarUrl: null,
         bio: null,
         visibility: 'private',
+        bioVisibility: 'private',
       },
     )
   })

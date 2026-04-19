@@ -16,41 +16,25 @@ Its scope is narrow:
 
 These rules are treated as common because they do not depend on:
 
+- published format-profile baselines for section size and duplicate limits;
 - Standard ride-deck semantics;
 - V Premium clan logic;
 - Premium G-deck logic;
 - restriction-list exceptions.
 
 They validate baseline deck integrity first. Format-specific validators then add
-extra rules on top.
+extra rules on top. Format-aware baseline size and copy-limit checks now run
+inside the selected format validator group so those limits can follow published
+profile data honestly.
 
-## 3. Deck Size Rules
+## 3. Deck Presence Rule
 
 The common layer now checks:
 
 - `empty-deck`
-  when the deck has no positive-quantity cards at all;
-- `main-deck-too-small`
-  when the main section contains fewer than 50 cards;
-- `main-deck-too-large`
-  when the main section contains more than 50 cards.
+  when the deck has no positive-quantity cards at all.
 
-The common size baseline is intentionally limited to the main deck. Ride-deck
-and G-deck size rules remain format-specific work.
-
-## 4. Copy-Limit Rules
-
-The common layer now checks:
-
-- `copy-limit-exceeded`
-  when the main deck contains more than 4 copies of the same canonical
-  `CardEntity`.
-
-This runs on canonical card identity, not printing identity. Builder-level copy
-caps are treated only as early UX guardrails; validation remains the formal
-reporting layer.
-
-## 5. Structural Consistency Rules
+## 4. Structural Consistency Rules
 
 The common layer now enforces these structural invariants:
 
@@ -61,7 +45,7 @@ The common layer now enforces these structural invariants:
 - duplicate rows for the same canonical card in the same section are rejected;
 - deck version and published snapshot must stay internally aligned.
 
-## 6. Issue Model / Issue Codes
+## 5. Issue Model / Issue Codes
 
 Common-rule issues use the shared validation issue model and stable codes.
 
@@ -72,20 +56,16 @@ Current common-rule codes:
 - `missing-card-entity-id`
 - `invalid-card-quantity`
 - `invalid-card-section`
-- `main-deck-too-small`
-- `main-deck-too-large`
-- `copy-limit-exceeded`
 - `duplicate-card-entry`
 - internal consistency codes such as `snapshot-card-mismatch`
 
 Targets are chosen by issue type:
 
 - deck-level target for `empty-deck`
-- section target for main-deck size issues
-- card target for copy-limit and broken-entry issues
+- card target for broken-entry issues
 - format target for format attachment mismatches
 
-## 7. What Is Intentionally NOT Implemented Yet
+## 6. What Is Intentionally NOT Implemented Yet
 
 Still out of scope for this step:
 
@@ -96,7 +76,7 @@ Still out of scope for this step:
 - database or catalog reads from validators;
 - validation UI.
 
-## 8. How Later Phases Extend This
+## 7. How Later Phases Extend This
 
 Later phases should build on top of this common layer by adding:
 
@@ -109,13 +89,11 @@ Later phases should build on top of this common layer by adding:
 The orchestration stays the same: common validation first, format branches
 second.
 
-## 9. Summary
+## 8. Summary
 
 The validation core now has a real common-rules layer with:
 
 - non-empty deck checks;
-- main-deck size baseline checks;
-- canonical entity copy-limit checks;
 - stronger broken-entry validation;
 - integration ahead of format-specific validators.
 

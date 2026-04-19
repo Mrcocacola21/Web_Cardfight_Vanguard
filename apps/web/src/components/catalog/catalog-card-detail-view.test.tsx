@@ -25,6 +25,16 @@ describe('CatalogCardDetailView', () => {
             keywords: ['twin-drive'],
             effectRefs: ['effect.ref.dev.dragon'],
           },
+          keywordTags: [
+            {
+              id: 'twin-drive',
+              displayName: 'Twin Drive',
+              category: 'mechanic',
+              description:
+                'A drive mechanic that resolves two drive checks during battle.',
+              sortOrder: 10,
+            },
+          ],
           rules: {
             effectReferences: ['effect.ref.dev.dragon'],
             hasPublishedOracleText: false,
@@ -134,6 +144,8 @@ describe('CatalogCardDetailView', () => {
     expect(screen.getByText(/^disallowed$/i)).toBeInTheDocument()
     expect(screen.getByText(/choose one/i)).toBeInTheDocument()
     expect(screen.getByText(/effect\.ref\.dev\.dragon/i)).toBeInTheDocument()
+    expect(screen.getByText(/keyword & mechanics tags/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/^twin drive$/i)).toHaveLength(2)
     expect(
       screen.getByRole('link', { name: /printing detail/i }),
     ).toHaveAttribute(
@@ -167,6 +179,7 @@ describe('CatalogCardDetailView', () => {
             keywords: [],
             effectRefs: [],
           },
+          keywordTags: [],
           rules: {
             effectReferences: [],
             hasPublishedOracleText: false,
@@ -184,6 +197,9 @@ describe('CatalogCardDetailView', () => {
 
     expect(
       screen.getByText(/no published rules references are attached/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/no structured keyword or mechanic tags are published/i),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/no concrete printings are currently published/i),

@@ -28,6 +28,7 @@ describe('DeckListView', () => {
           bio: null,
           avatarUrl: null,
           visibility: 'private',
+          bioVisibility: 'private',
           createdAt: '2026-04-08T00:00:00.000Z',
           updatedAt: '2026-04-08T00:00:00.000Z',
         }}
@@ -97,6 +98,7 @@ describe('DeckListView', () => {
           bio: null,
           avatarUrl: null,
           visibility: 'private',
+          bioVisibility: 'private',
           createdAt: '2026-04-08T00:00:00.000Z',
           updatedAt: '2026-04-08T00:00:00.000Z',
         }}

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCardEntityByCanonicalKey: vi.fn(),
   listCardPrintings: vi.fn(),
   getCardLegalityFacts: vi.fn(),
+  listCardEntityKeywordTags: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -31,6 +32,7 @@ describe('catalog read helpers', () => {
       getCardEntityById: vi.fn(),
       getCardEntityByCanonicalKey: mocks.getCardEntityByCanonicalKey,
       getCardLegalityFacts: mocks.getCardLegalityFacts,
+      listCardEntityKeywordTags: mocks.listCardEntityKeywordTags,
       listCardPrintings: mocks.listCardPrintings,
     })
   })
@@ -193,6 +195,19 @@ describe('catalog read helpers', () => {
         choiceRestrictions: [],
       },
     })
+    mocks.listCardEntityKeywordTags.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        {
+          id: 'twin-drive',
+          displayName: 'Twin Drive',
+          category: 'mechanic',
+          description:
+            'A drive mechanic that resolves two drive checks during battle.',
+          sortOrder: 10,
+        },
+      ],
+    })
 
     const result = await getCatalogCardDetail('card.azure-vanguard-dragon')
 
@@ -213,6 +228,16 @@ describe('catalog read helpers', () => {
 
     expect(result.data.card.canonicalKey).toBe('card.azure-vanguard-dragon')
     expect(result.data.card.name).toBe('Azure Vanguard Dragon')
+    expect(result.data.keywordTags).toEqual([
+      {
+        id: 'twin-drive',
+        displayName: 'Twin Drive',
+        category: 'mechanic',
+        description:
+          'A drive mechanic that resolves two drive checks during battle.',
+        sortOrder: 10,
+      },
+    ])
     expect(result.data.rules).toEqual({
       effectReferences: ['effect.ref.dev.dragon'],
       hasPublishedOracleText: false,

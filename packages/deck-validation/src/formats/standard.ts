@@ -8,6 +8,10 @@ import type {
   DeckValidationTarget,
   DeckValidator,
 } from '../contracts'
+import {
+  validateCopyLimitsValidator,
+  validateDeckSizeValidator,
+} from '../format-baseline-rules'
 import { createFormatSectionValidator } from './shared'
 
 const standardRideDeckBaselineSize = 4
@@ -212,6 +216,8 @@ export const standardValidators: readonly DeckValidator[] = [
     formatId: 'standard',
     allowedSections: ['main', 'ride'],
   }),
+  validateDeckSizeValidator,
+  validateCopyLimitsValidator,
   validateStandardCardFactsValidator,
   validateStandardRideDeckValidator,
   validateStandardNationConstraintsValidator,

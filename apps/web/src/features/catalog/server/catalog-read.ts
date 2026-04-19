@@ -84,10 +84,19 @@ export async function getCatalogCardDetail(
     return legalityResult
   }
 
+  const keywordTagsResult = await repository.listCardEntityKeywordTags(
+    cardResult.data.id,
+  )
+
+  if (!keywordTagsResult.ok) {
+    return keywordTagsResult
+  }
+
   return {
     ok: true,
     data: {
       card: cardResult.data,
+      keywordTags: keywordTagsResult.data,
       rules: {
         effectReferences: cardResult.data.effectRefs,
         hasPublishedOracleText: false,

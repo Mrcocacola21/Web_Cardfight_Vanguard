@@ -1,0 +1,235 @@
+{
+  "source": {
+    "key": "dev-json.booster-by-booster-expansion.dz-bt01-keter",
+    "displayName": "Booster-by-booster expansion: DZ-BT01 curated Keter slice",
+    "providerName": "local-dev",
+    "snapshotKey": "dz-bt01-keter-v1"
+  },
+  "job": {
+    "scopeMetadata": {
+      "fixture": "booster-by-booster-expansion-dz-bt01-keter",
+      "wave": "standard-content-expansion-step-11-2",
+      "expansionMode": "booster-by-booster",
+      "formatScope": "standard",
+      "productScope": "DZ-BT01",
+      "nationScope": "Keter Sanctuary",
+      "contentSlice": "curated-keter-booster-slice"
+    }
+  },
+  "options": {
+    "runNormalization": true
+  },
+  "products": [
+    {
+      "sourceProductId": "prod-dz-bt01",
+      "name": "DZ-BT01 Fated Clash",
+      "code": "DZ-BT01",
+      "productCategory": "booster",
+      "productKind": "main",
+      "familyName": "Standard Booster",
+      "releaseDateText": "2024-05-03",
+      "regionCode": "en",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "seedRole": "standalone-booster-wave",
+        "contentSlice": "curated-keter-booster-slice",
+        "officialProductUrl": "https://en.cf-vanguard.com/products/dzbt01/"
+      }
+    }
+  ],
+  "printings": [
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-rrr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/010EN",
+      "rarity": "RRR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-rezael-dz-bt01-dsr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Fated One of Miracles, Rezael",
+      "printingCode": "DZ-BT01/DSR01EN",
+      "rarity": "DSR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "3",
+      "powerText": "13000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "fated-one-of-miracles-rezael"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-soel-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Wings of Aspiration, Soel",
+      "printingCode": "DZ-BT01/117EN",
+      "rarity": "C",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "0",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "wings-of-aspiration-soel"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ascensior-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Knight of Great Advance, Ascensior",
+      "printingCode": "DZ-BT01/038EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-great-advance-ascensior"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-ventesta-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Patrol of Gusts, Ventesta",
+      "printingCode": "DZ-BT01/033EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "patrol-of-gusts-ventesta"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-biscotti-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Divine Sister, Biscotti",
+      "printingCode": "DZ-BT01/019EN",
+      "rarity": "RR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "8000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "divine-sister-biscotti"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-nobia-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Knight of Gentle Beauty, Nobia",
+      "printingCode": "DZ-BT01/026EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "2",
+      "powerText": "10000",
+      "criticalText": "1",
+      "shieldText": "5000",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "knight-of-gentle-beauty-nobia"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cethlan-dz-bt01-main",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Bringer of Protection, Cethlan",
+      "printingCode": "DZ-BT01/066EN",
+      "rarity": "R",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "seedCase": "multiple-printings-primary",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "bringer-of-protection-cethlan"
+      }
+    },
+    {
+      "sourcePrintingId": "printing-cethlan-dz-bt01-fr",
+      "sourceProductId": "prod-dz-bt01",
+      "sourceProductCode": "DZ-BT01",
+      "cardName": "Bringer of Protection, Cethlan",
+      "printingCode": "DZ-BT01/FR32EN",
+      "rarity": "FR",
+      "localeCode": "en",
+      "regionCode": "en",
+      "cardType": "normal-unit",
+      "nation": "Keter Sanctuary",
+      "gradeText": "1",
+      "powerText": "6000",
+      "criticalText": "1",
+      "shieldText": "0",
+      "sourcePayload": {
+        "seedWave": "standard-content-expansion-step-11-2",
+        "seedCase": "multiple-printings-parallel",
+        "expectedNormalization": "auto_resolved",
+        "canonicalGroup": "bringer-of-protection-cethlan"
+      }
+    }
+  ]
+}

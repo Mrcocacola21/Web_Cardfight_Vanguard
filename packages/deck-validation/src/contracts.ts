@@ -76,6 +76,7 @@ export type DeckValidationIssueCategory =
 export type KnownDeckValidationRuleId =
   | 'require-deck-format'
   | 'select-format-validator-group'
+  | 'validate-deck-presence'
   | 'validate-deck-entry-shape'
   | 'validate-deck-duplicates'
   | 'validate-deck-size'
