@@ -94,4 +94,49 @@ describe('getCurrentAuthState', () => {
       kind: 'signed-out',
     })
   })
+
+  it('treats refresh_token_not_found as a signed-out guest state', async () => {
+    const state = await getCurrentAuthState({
+      client: {
+        auth: {
+          getUser: () =>
+            Promise.resolve({
+              data: {
+                user: null,
+              },
+              error: {
+                code: 'refresh_token_not_found',
+                message: 'Invalid Refresh Token: Refresh Token Not Found',
+              },
+            }),
+        },
+      } as never,
+    })
+
+    expect(state).toEqual({
+      kind: 'signed-out',
+    })
+  })
+
+  it('treats a thrown invalid refresh token error as signed-out', async () => {
+    const state = await getCurrentAuthState({
+      client: {
+        auth: {
+          getUser: () =>
+            Promise.reject(
+              Object.assign(
+                new Error('Invalid Refresh Token: Refresh Token Not Found'),
+                {
+                  code: 'refresh_token_not_found',
+                },
+              ),
+            ),
+        },
+      } as never,
+    })
+
+    expect(state).toEqual({
+      kind: 'signed-out',
+    })
+  })
 })

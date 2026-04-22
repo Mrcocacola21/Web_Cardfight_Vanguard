@@ -87,8 +87,8 @@ Transient:
   - optional one-to-one link via `auth_user_id`
 - `profile -> collections`
   - one profile owns many collections
-- `collection -> collection_items`
-  - one collection contains many printing-level items
+- `profile -> collection_items`
+  - one profile owns many printing-level inventory rows
 - `profile -> decks`
   - one profile owns many decks
 - `deck -> deck_versions`
@@ -115,20 +115,25 @@ This keeps app/social semantics separate from auth-provider mechanics.
 
 ## 5. Collections
 
-Collections are intentionally modeled as named user containers, not as a generic blob.
+Current collection foundation is intentionally owner-owned inventory first.
 
-- `user_data.collections`
-  - owns collection metadata
-  - supports `inventory`, `binder`, and `wishlist`
 - `user_data.collection_items`
-  - stores `card_printing_id` plus `quantity`
+  - stores `owner_profile_id`
+  - stores `card_printing_id`
+  - stores positive `quantity`
+  - enforces one row per `owner + printing`
+- `user_data.collections`
+  - remains available as deferred container metadata for future named binder or wishlist surfaces
+  - is not the runtime ownership root for the current private inventory flow
 
-Collection items use printing-level identity on purpose:
+Collection items stay printing-level on purpose:
 
-- collections represent ownership or desire for specific physical printings
-- canonical card grouping can be derived through `catalog.card_printings -> catalog.card_entities`
+- regular, alt-art, promo, or rarity variants remain separate owned rows when they are separate printings
+- canonical card grouping can be derived later through
+  `catalog.card_printings -> catalog.card_entities`
+- quantity zero removes the inventory row instead of keeping ambiguous zero-count rows
 
-This keeps collections distinct from decks.
+This keeps collection semantics distinct from deck semantics.
 
 ## 6. Decks and Deck_Cards
 
@@ -196,6 +201,7 @@ Important constraints:
 - unique case-insensitive usernames
 - unique collection names per owner
 - one default collection per owner and collection kind
+- unique printing inventory row per `owner_profile_id + card_printing_id`
 - one deck current-version pointer constrained to the same deck
 - unique deck version numbers inside one deck
 - unique canonical card entry per `deck_version + section + card_entity`

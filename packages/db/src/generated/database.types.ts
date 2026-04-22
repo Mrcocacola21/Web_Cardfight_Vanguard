@@ -1704,37 +1704,69 @@ export type Database = {
       collection_items: {
         Row: {
           card_printing_id: string
-          collection_id: string
           created_at: string
           id: string
-          notes: string | null
+          owner_profile_id: string
           quantity: number
           updated_at: string
         }
         Insert: {
           card_printing_id: string
-          collection_id: string
           created_at?: string
           id?: string
-          notes?: string | null
+          owner_profile_id: string
           quantity: number
           updated_at?: string
         }
         Update: {
           card_printing_id?: string
-          collection_id?: string
           created_at?: string
           id?: string
-          notes?: string | null
+          owner_profile_id?: string
           quantity?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: 'collection_items_collection_id_fkey'
-            columns: ['collection_id']
+            foreignKeyName: 'collection_items_owner_profile_id_fkey'
+            columns: ['owner_profile_id']
             isOneToOne: false
-            referencedRelation: 'collections'
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      collection_printing_preferences: {
+        Row: {
+          card_printing_id: string
+          created_at: string
+          id: string
+          owner_profile_id: string
+          preference_kind: string
+          updated_at: string
+        }
+        Insert: {
+          card_printing_id: string
+          created_at?: string
+          id?: string
+          owner_profile_id: string
+          preference_kind: string
+          updated_at?: string
+        }
+        Update: {
+          card_printing_id?: string
+          created_at?: string
+          id?: string
+          owner_profile_id?: string
+          preference_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'collection_printing_preferences_owner_profile_id_fkey'
+            columns: ['owner_profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -1981,6 +2013,21 @@ export type Database = {
       }
     }
     Functions: {
+      change_collection_item_quantity: {
+        Args: {
+          change_card_printing_id: string
+          change_owner_profile_id: string
+          change_quantity_delta: number
+        }
+        Returns: {
+          card_printing_id: string
+          created_at: string
+          id: string
+          owner_profile_id: string
+          quantity: number
+          updated_at: string
+        }[]
+      }
       get_deck_detail_aggregate: {
         Args: {
           read_deck_id: string
@@ -2064,6 +2111,21 @@ export type Database = {
           title: string
           updated_at: string
           visibility: string
+        }[]
+      }
+      set_collection_item_quantity: {
+        Args: {
+          set_card_printing_id: string
+          set_owner_profile_id: string
+          set_quantity: number
+        }
+        Returns: {
+          card_printing_id: string
+          created_at: string
+          id: string
+          owner_profile_id: string
+          quantity: number
+          updated_at: string
         }[]
       }
     }

@@ -54,6 +54,24 @@ describe('getMatchHistoryListPageState', () => {
         matches: [
           {
             id: 'match-1',
+            formatId: 'standard',
+            status: 'completed',
+            playedAt: '2026-04-20T12:00:00.000Z',
+            createdAt: '2026-04-20T12:30:00.000Z',
+            result: 'win',
+            notes: 'Tight three-game set.',
+            ownDeck: {
+              deckId: 'deck-1',
+              title: 'Keter Balance',
+              versionNumber: 3,
+            },
+            opponent: {
+              profileId: 'profile-opponent',
+              displayName: 'Dark States Pilot',
+              avatarUrl: null,
+              bio: null,
+              profileVisible: true,
+            },
           },
         ],
         availableDecks: [
@@ -101,6 +119,24 @@ describe('getMatchHistoryListPageState', () => {
       matches: [
         {
           id: 'match-1',
+          formatId: 'standard',
+          status: 'completed',
+          playedAt: '2026-04-20T12:00:00.000Z',
+          createdAt: '2026-04-20T12:30:00.000Z',
+          result: 'win',
+          notes: 'Tight three-game set.',
+          ownDeck: {
+            deckId: 'deck-1',
+            title: 'Keter Balance',
+            versionNumber: 3,
+          },
+          opponent: {
+            profileId: 'profile-opponent',
+            displayName: 'Dark States Pilot',
+            avatarUrl: null,
+            bio: null,
+            profileVisible: true,
+          },
         },
       ],
       availableDecks: [

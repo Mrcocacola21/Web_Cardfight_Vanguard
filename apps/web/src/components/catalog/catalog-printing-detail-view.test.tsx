@@ -78,6 +78,8 @@ describe('CatalogPrintingDetailView', () => {
             },
           ],
         }}
+        collectionPanel={<div>Collection panel</div>}
+        preferencePanel={<div>Preference panel</div>}
       />,
     )
 
@@ -113,6 +115,8 @@ describe('CatalogPrintingDetailView', () => {
       'href',
       '/catalog/printings/printing.azure-vanguard-dragon.d-bt01.001.en',
     )
+    expect(screen.getByText(/collection panel/i)).toBeInTheDocument()
+    expect(screen.getByText(/preference panel/i)).toBeInTheDocument()
   })
 
   it('renders an honest empty state when no sibling printings are published yet', () => {

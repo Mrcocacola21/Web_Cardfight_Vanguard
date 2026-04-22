@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./repositories": "./src/repositories/index.ts",
     "./repositories/catalog": "./src/repositories/catalog/index.ts",
+    "./repositories/collections": "./src/repositories/collections/index.ts",
     "./repositories/decks": "./src/repositories/decks/index.ts",
     "./repositories/importer": "./src/repositories/importer/index.ts",
     "./repositories/matches": "./src/repositories/matches/index.ts",
@@ -19,6 +20,7 @@
     "seed": "node ./scripts/seed.mjs",
     "test": "vitest run",
     "test:db": "node ./scripts/test-db.mjs",
+    "test:db:decks": "node ./scripts/test-db.mjs --suite=decks",
     "types:generate": "node ./scripts/generate-types.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },

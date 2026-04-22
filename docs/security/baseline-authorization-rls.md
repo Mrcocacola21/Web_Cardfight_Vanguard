@@ -20,7 +20,7 @@ Establish the minimum owner-based security floor for current user-owned data bef
 - Auth identity is anchored on `auth.users.id`.
 - `user_data.profiles.auth_user_id` is the canonical link from auth identity to app-level profile identity.
 - User-owned rows reference `user_data.profiles.id`:
-  - `owner_profile_id` for collections and decks
+  - `owner_profile_id` for collections, collection items, and decks
   - `created_by_profile_id` for deck versions
   - `recorded_by_profile_id` for matches
 - RLS owner resolution uses `user_data.current_profile_id()`.
@@ -39,7 +39,8 @@ Establish the minimum owner-based security floor for current user-owned data bef
 ## 5. RLS Policy Model
 
 - `profiles`: owner-only `select/insert/update/delete`
-- `collections` and `collection_items`: owner-only `select/insert/update/delete`
+- `collections`: owner-only `select/insert/update/delete`
+- `collection_items`: owner-only `select/insert/update/delete`
 - `decks`, `deck_versions`, and `deck_cards`: owner-only `select/insert/update/delete`
 - `matches` and `match_participants`: owner-only `select/insert/update/delete`
 - Public profile access is handled by grants on the projection view, not by opening the base table.

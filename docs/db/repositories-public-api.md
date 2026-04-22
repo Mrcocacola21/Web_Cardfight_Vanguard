@@ -19,7 +19,7 @@ Top-level repository exports are now limited to:
   `RepositoryError`, `RepositoryErrorCode`
 - repository factory entrypoints:
   `createCatalogRepository`, `createCatalogPublicationRepository`,
-  `createDecksRepository`, `createImporterRepository`,
+  `createCollectionsRepository`, `createDecksRepository`, `createImporterRepository`,
   `createProfilesRepository`
 
 This keeps repo creation easy to discover from `@web-vg/db` while avoiding a
@@ -31,6 +31,7 @@ Domain-specific repository contracts and DTOs now live behind explicit public
 subpaths:
 
 - `@web-vg/db/repositories/catalog`
+- `@web-vg/db/repositories/collections`
 - `@web-vg/db/repositories/decks`
 - `@web-vg/db/repositories/importer`
 - `@web-vg/db/repositories/profiles`
@@ -42,7 +43,7 @@ profile-specific types, it should import them from the matching submodule.
 
 The top-level repository barrel no longer re-exports:
 
-- deck/catalog/importer/profile DTO types
+- deck/catalog/collection/importer/profile DTO types
 - repository-specific write input types
 - repository contract types for individual domains
 - publication-specific DTOs outside the catalog submodule

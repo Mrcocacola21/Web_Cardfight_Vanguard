@@ -1,4 +1,5 @@
 import {
+  Archive,
   BookOpenText,
   House,
   Handshake,
@@ -28,6 +29,13 @@ export const protectedNavItems: readonly ProtectedNavItem[] = [
     label: 'Catalog',
     description: 'Browse cards and printings through server-rendered reads.',
     icon: BookOpenText,
+  },
+  {
+    href: '/collection',
+    label: 'Collection',
+    description:
+      'Open your owner-only binder and list views for owned printings.',
+    icon: Archive,
   },
   {
     href: '/decks',

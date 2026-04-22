@@ -236,7 +236,7 @@ export async function getPublicProfilePageState(
 
   return resolvePublicProfilePageState(profileId, {
     getViewerProfileId() {
-      return viewerProfileState.viewerProfileId
+      return Promise.resolve(viewerProfileState.viewerProfileId)
     },
     getProfileById(profileIdToLoad) {
       return repository.getProfileById(profileIdToLoad)

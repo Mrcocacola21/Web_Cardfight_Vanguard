@@ -65,6 +65,16 @@ function assert(condition, message) {
   }
 }
 
+function assertJsonEqual(actual, expected, message) {
+  const actualJson = JSON.stringify(actual)
+  const expectedJson = JSON.stringify(expected)
+
+  assert(
+    actualJson === expectedJson,
+    `${message}\nExpected: ${expectedJson}\nReceived: ${actualJson}`,
+  )
+}
+
 let activeTransactionClient = null
 
 async function queryScalar(client, sql, values = []) {
@@ -413,6 +423,67 @@ async function loadDeckGraphCountsByTitle(client, { ownerProfileId, title }) {
   )
 
   return result.rows[0]
+}
+
+function normalizeDeckCards(cards) {
+  return [...cards]
+    .map((card) => ({
+      sectionKey: card.sectionKey ?? card.section_key ?? null,
+      cardEntityId: card.cardEntityId ?? card.card_entity_id ?? null,
+      quantity: Number(card.quantity ?? 0),
+    }))
+    .sort((left, right) => {
+      const leftKey = `${left.sectionKey}:${left.cardEntityId}`
+      const rightKey = `${right.sectionKey}:${right.cardEntityId}`
+      return leftKey.localeCompare(rightKey)
+    })
+}
+
+async function loadDeckVersionGraph(client, deckId) {
+  const versionsResult = await client.query(
+    `
+      select
+        id,
+        version_number,
+        created_by_profile_id,
+        version_note
+      from user_data.deck_versions
+      where deck_id = $1
+      order by version_number asc
+    `,
+    [deckId],
+  )
+
+  const cardsByVersionId = new Map()
+  const versionIds = versionsResult.rows.map((row) => row.id)
+
+  if (versionIds.length > 0) {
+    const cardsResult = await client.query(
+      `
+        select
+          deck_version_id,
+          section_key,
+          card_entity_id,
+          quantity
+        from user_data.deck_cards
+        where deck_version_id = any($1::uuid[])
+      `,
+      [versionIds],
+    )
+
+    for (const row of cardsResult.rows) {
+      const existingCards = cardsByVersionId.get(row.deck_version_id) ?? []
+      existingCards.push(row)
+      cardsByVersionId.set(row.deck_version_id, existingCards)
+    }
+  }
+
+  return versionsResult.rows.map((row) => ({
+    versionNumber: row.version_number,
+    createdByProfileId: row.created_by_profile_id,
+    versionNote: row.version_note,
+    cards: normalizeDeckCards(cardsByVersionId.get(row.id) ?? []),
+  }))
 }
 
 async function verifySeedSmoke(client) {
@@ -770,7 +841,8 @@ async function verifyConstraints(client) {
         'Manual match history rows should default to manual provenance.',
       )
       assert(
-        typeof insertResult.rows[0]?.updated_at === 'string',
+        insertResult.rows[0]?.updated_at instanceof Date ||
+          typeof insertResult.rows[0]?.updated_at === 'string',
         'Match rows should expose an updated_at timestamp.',
       )
     },
@@ -1056,6 +1128,35 @@ async function verifyDeckWriteAtomicity(client) {
             'Atomic create should persist deck metadata together with the version graph.',
           )
 
+          const createdVersionGraph = await loadDeckVersionGraph(
+            client,
+            createdDeck.deck_id,
+          )
+
+          assertJsonEqual(
+            createdVersionGraph,
+            [
+              {
+                versionNumber: 1,
+                createdByProfileId: owner.profileId,
+                versionNote: 'initial atomic write',
+                cards: normalizeDeckCards([
+                  {
+                    sectionKey: 'main',
+                    cardEntityId: atomicDeckMainCardId,
+                    quantity: 4,
+                  },
+                  {
+                    sectionKey: 'ride',
+                    cardEntityId: atomicDeckRideCardId,
+                    quantity: 1,
+                  },
+                ]),
+              },
+            ],
+            'Atomic create should persist the expected initial deck version graph.',
+          )
+
           const savedDeck = await saveDeckAggregate(client, {
             deckId: createdDeck.deck_id,
             ownerProfileId: owner.profileId,
@@ -1087,6 +1188,10 @@ async function verifyDeckWriteAtomicity(client) {
           assert(
             savedDeck.current_version_number === 2,
             'Atomic save should append the next version number.',
+          )
+          assert(
+            savedDeck.current_version_id !== createdDeck.current_version_id,
+            'Atomic save should create a new current version row instead of mutating the old one.',
           )
 
           const savedState = await loadDeckGraphState(
@@ -1129,6 +1234,94 @@ async function verifyDeckWriteAtomicity(client) {
           assert(
             savedState.visibility === 'private',
             'Atomic save should preserve deck visibility on the committed aggregate.',
+          )
+
+          const savedVersionGraph = await loadDeckVersionGraph(
+            client,
+            createdDeck.deck_id,
+          )
+
+          assertJsonEqual(
+            savedVersionGraph,
+            [
+              {
+                versionNumber: 1,
+                createdByProfileId: owner.profileId,
+                versionNote: 'initial atomic write',
+                cards: normalizeDeckCards([
+                  {
+                    sectionKey: 'main',
+                    cardEntityId: atomicDeckMainCardId,
+                    quantity: 4,
+                  },
+                  {
+                    sectionKey: 'ride',
+                    cardEntityId: atomicDeckRideCardId,
+                    quantity: 1,
+                  },
+                ]),
+              },
+              {
+                versionNumber: 2,
+                createdByProfileId: owner.profileId,
+                versionNote: 'second atomic write',
+                cards: normalizeDeckCards([
+                  {
+                    sectionKey: 'main',
+                    cardEntityId: atomicDeckMainCardId,
+                    quantity: 3,
+                  },
+                  {
+                    sectionKey: 'ride',
+                    cardEntityId: atomicDeckRideCardId,
+                    quantity: 2,
+                  },
+                ]),
+              },
+            ],
+            'Atomic save should persist the full expected version graph without stray child rows.',
+          )
+
+          const savedDetail = await getDeckDetailAggregate(client, {
+            deckId: createdDeck.deck_id,
+          })
+
+          assert(
+            savedDetail !== null,
+            'Atomic save should leave the dense deck detail aggregate readable for the owner.',
+          )
+          assert(
+            savedDetail?.current_version_number === 2,
+            'Atomic save should surface the new current version number through the dense read RPC.',
+          )
+          assert(
+            savedDetail?.current_version_note === 'second atomic write',
+            'Atomic save should surface the persisted version note through the dense read RPC.',
+          )
+          assert(
+            savedDetail?.current_version_created_by_profile_id ===
+              owner.profileId,
+            'Atomic save should keep current version ownership aligned in the dense read payload.',
+          )
+          assert(
+            savedDetail?.has_missing_card_entity === false,
+            'Atomic save should not introduce dangling card references into the dense read payload.',
+          )
+          assertJsonEqual(
+            normalizeDeckCards(savedDetail?.current_version_cards ?? []),
+            normalizeDeckCards([
+              {
+                sectionKey: 'main',
+                cardEntityId: atomicDeckMainCardId,
+                quantity: 3,
+              },
+              {
+                sectionKey: 'ride',
+                cardEntityId: atomicDeckRideCardId,
+                quantity: 2,
+              },
+            ]),
+            'Atomic save should expose the expected current-version cards through the dense read RPC.',
           )
         },
       )
@@ -1506,103 +1699,108 @@ async function verifyDeckReadDensification(client) {
   )
 }
 
-async function verifyAuthorizationRls(client) {
-  console.log('Verifying baseline authorization and RLS...')
+async function verifyAuthorizationRls(client, { onlyDeck = false } = {}) {
+  console.log(
+    onlyDeck
+      ? 'Verifying deck authorization and RLS...'
+      : 'Verifying baseline authorization and RLS...',
+  )
 
-  await withRollback(
-    client,
-    'profiles stay owner-only while public profile reads use a safe projection',
-    async () => {
-      const owner = await createProfileFixture(client, {
-        displayName: 'Owner Pilot',
-        visibility: 'private',
-      })
-      const stranger = await createProfileFixture(client, {
-        displayName: 'Stranger Pilot',
-        visibility: 'private',
-      })
-      const publicProfile = await createProfileFixture(client, {
-        displayName: 'Public Pilot',
-        visibility: 'public',
-      })
+  if (!onlyDeck) {
+    await withRollback(
+      client,
+      'profiles stay owner-only while public profile reads use a safe projection',
+      async () => {
+        const owner = await createProfileFixture(client, {
+          displayName: 'Owner Pilot',
+          visibility: 'private',
+        })
+        const stranger = await createProfileFixture(client, {
+          displayName: 'Stranger Pilot',
+          visibility: 'private',
+        })
+        const publicProfile = await createProfileFixture(client, {
+          displayName: 'Public Pilot',
+          visibility: 'public',
+        })
 
-      await runAsDatabaseRole(client, { role: 'anon' }, async () => {
-        const publicViewResult = await client.query(
-          `
+        await runAsDatabaseRole(client, { role: 'anon' }, async () => {
+          const publicViewResult = await client.query(
+            `
             select id, display_name, avatar_url, bio
             from user_data.public_profiles
             order by display_name asc
           `,
-        )
+          )
 
-        assert(
-          publicViewResult.rowCount === 1,
-          'Anon should see only one public profile row.',
-        )
-        assert(
-          publicViewResult.rows[0]?.id === publicProfile.profileId,
-          'Anon should only see the public profile projection.',
-        )
+          assert(
+            publicViewResult.rowCount === 1,
+            'Anon should see only one public profile row.',
+          )
+          assert(
+            publicViewResult.rows[0]?.id === publicProfile.profileId,
+            'Anon should only see the public profile projection.',
+          )
 
-        await expectPgError(
-          'anon cannot read base profiles table directly',
-          () => client.query(`select id from user_data.profiles`),
-          '42501',
-        )
-      })
+          await expectPgError(
+            'anon cannot read base profiles table directly',
+            () => client.query(`select id from user_data.profiles`),
+            '42501',
+          )
+        })
 
-      await runAsDatabaseRole(
-        client,
-        { role: 'authenticated', authUserId: owner.authUserId },
-        async () => {
-          const ownProfileResult = await client.query(
-            `
+        await runAsDatabaseRole(
+          client,
+          { role: 'authenticated', authUserId: owner.authUserId },
+          async () => {
+            const ownProfileResult = await client.query(
+              `
               select id
               from user_data.profiles
               where id = $1
             `,
-            [owner.profileId],
-          )
+              [owner.profileId],
+            )
 
-          assert(
-            ownProfileResult.rowCount === 1,
-            'Owner should be able to read their own profile row.',
-          )
+            assert(
+              ownProfileResult.rowCount === 1,
+              'Owner should be able to read their own profile row.',
+            )
 
-          const privateOtherResult = await client.query(
-            `
+            const privateOtherResult = await client.query(
+              `
               select id
               from user_data.profiles
               where id = $1
             `,
-            [stranger.profileId],
-          )
+              [stranger.profileId],
+            )
 
-          assert(
-            privateOtherResult.rowCount === 0,
-            'Authenticated non-owner must not read another private profile row.',
-          )
+            assert(
+              privateOtherResult.rowCount === 0,
+              'Authenticated non-owner must not read another private profile row.',
+            )
 
-          const updateOwnProfileResult = await client.query(
-            `
+            const updateOwnProfileResult = await client.query(
+              `
               update user_data.profiles
               set bio = 'Owner bio'
               where id = $1
               returning id
             `,
-            [owner.profileId],
-          )
+              [owner.profileId],
+            )
 
-          assert(
-            updateOwnProfileResult.rowCount === 1,
-            'Owner should be able to update their own profile row.',
-          )
+            assert(
+              updateOwnProfileResult.rowCount === 1,
+              'Owner should be able to update their own profile row.',
+            )
 
-          await expectPgError(
-            'authenticated user cannot forge another auth_user_id on profile insert',
-            () =>
-              client.query(
-                `
+            await expectPgError(
+              'authenticated user cannot forge another auth_user_id on profile insert',
+              () =>
+                client.query(
+                  `
                   insert into user_data.profiles (
                     auth_user_id,
                     display_name,
@@ -1613,30 +1811,30 @@ async function verifyAuthorizationRls(client) {
                     'private'
                   )
                 `,
-                [stranger.authUserId],
-              ),
-            '42501',
-          )
-        },
-      )
-    },
-  )
+                  [stranger.authUserId],
+                ),
+              '42501',
+            )
+          },
+        )
+      },
+    )
 
-  await withRollback(
-    client,
-    'collections and collection items stay owner-only',
-    async () => {
-      const owner = await createProfileFixture(client, {
-        displayName: 'Collection Owner',
-      })
-      const stranger = await createProfileFixture(client, {
-        displayName: 'Collection Stranger',
-      })
+    await withRollback(
+      client,
+      'collections and collection items stay owner-only',
+      async () => {
+        const owner = await createProfileFixture(client, {
+          displayName: 'Collection Owner',
+        })
+        const stranger = await createProfileFixture(client, {
+          displayName: 'Collection Stranger',
+        })
 
-      const ownerCollectionId = randomUUID()
+        const ownerCollectionId = randomUUID()
 
-      await client.query(
-        `
+        await client.query(
+          `
           insert into user_data.collections (
             id,
             owner_profile_id,
@@ -1653,13 +1851,13 @@ async function verifyAuthorizationRls(client) {
             false
           )
         `,
-        [ownerCollectionId, owner.profileId],
-      )
+          [ownerCollectionId, owner.profileId],
+        )
 
-      await client.query(
-        `
+        await client.query(
+          `
           insert into user_data.collection_items (
-            collection_id,
+            owner_profile_id,
             card_printing_id,
             quantity
           ) values (
@@ -1668,53 +1866,138 @@ async function verifyAuthorizationRls(client) {
             2
           )
         `,
-        [ownerCollectionId],
-      )
+          [owner.profileId],
+        )
 
-      await runAsDatabaseRole(
-        client,
-        { role: 'authenticated', authUserId: owner.authUserId },
-        async () => {
-          const ownCollections = await client.query(
-            `select id from user_data.collections where owner_profile_id = $1`,
-            [owner.profileId],
-          )
+        await runAsDatabaseRole(
+          client,
+          { role: 'authenticated', authUserId: owner.authUserId },
+          async () => {
+            const ownCollections = await client.query(
+              `select id from user_data.collections where owner_profile_id = $1`,
+              [owner.profileId],
+            )
 
-          assert(
-            ownCollections.rowCount === 1,
-            'Owner should be able to read their own collection.',
-          )
+            assert(
+              ownCollections.rowCount === 1,
+              'Owner should be able to read their own collection.',
+            )
 
-          const ownItems = await client.query(
-            `select id from user_data.collection_items where collection_id = $1`,
-            [ownerCollectionId],
-          )
+            const ownItems = await client.query(
+              `
+              select id, quantity
+              from user_data.collection_items
+              where owner_profile_id = $1
+            `,
+              [owner.profileId],
+            )
 
-          assert(
-            ownItems.rowCount === 1,
-            'Owner should be able to read collection items for their collection.',
-          )
+            assert(
+              ownItems.rowCount === 1,
+              'Owner should be able to read their own collection items.',
+            )
+            assert(
+              ownItems.rows[0]?.quantity === 2,
+              'Owner collection item should keep the inserted quantity.',
+            )
 
-          const updateCollectionResult = await client.query(
-            `
+            const updateCollectionResult = await client.query(
+              `
               update user_data.collections
               set description = 'Updated by owner'
               where id = $1
               returning id
             `,
-            [ownerCollectionId],
-          )
+              [ownerCollectionId],
+            )
 
-          assert(
-            updateCollectionResult.rowCount === 1,
-            'Owner should be able to update their own collection.',
-          )
+            assert(
+              updateCollectionResult.rowCount === 1,
+              'Owner should be able to update their own collection.',
+            )
 
-          await expectPgError(
-            'owner cannot create a collection for another profile',
-            () =>
-              client.query(
-                `
+            const incrementItemResult = await client.query(
+              `
+              select quantity
+              from user_data.change_collection_item_quantity($1, $2, $3)
+            `,
+              [owner.profileId, '30000000-0000-4000-8000-000000000001', 1],
+            )
+
+            assert(
+              incrementItemResult.rowCount === 1 &&
+                incrementItemResult.rows[0]?.quantity === 3,
+              'Owner should be able to increment their own collection item quantity.',
+            )
+
+            const clearItemResult = await client.query(
+              `
+              select *
+              from user_data.set_collection_item_quantity($1, $2, $3)
+            `,
+              [owner.profileId, '30000000-0000-4000-8000-000000000001', 0],
+            )
+
+            assert(
+              clearItemResult.rowCount === 0,
+              'Setting collection quantity to zero should delete the row cleanly.',
+            )
+
+            const deletedItems = await client.query(
+              `
+              select id
+              from user_data.collection_items
+              where owner_profile_id = $1
+                and card_printing_id = $2
+            `,
+              [owner.profileId, '30000000-0000-4000-8000-000000000001'],
+            )
+
+            assert(
+              deletedItems.rowCount === 0,
+              'Deleted collection items should no longer remain in owner inventory.',
+            )
+
+            await client.query(
+              `
+              insert into user_data.collection_items (
+                owner_profile_id,
+                card_printing_id,
+                quantity
+              ) values (
+                $1,
+                '30000000-0000-4000-8000-000000000001',
+                1
+              )
+            `,
+              [owner.profileId],
+            )
+
+            await expectPgError(
+              'owner cannot create duplicate collection rows for the same printing',
+              () =>
+                client.query(
+                  `
+                  insert into user_data.collection_items (
+                    owner_profile_id,
+                    card_printing_id,
+                    quantity
+                  ) values (
+                    $1,
+                    '30000000-0000-4000-8000-000000000001',
+                    1
+                  )
+                `,
+                  [owner.profileId],
+                ),
+              '23505',
+            )
+
+            await expectPgError(
+              'owner cannot create a collection for another profile',
+              () =>
+                client.query(
+                  `
                   insert into user_data.collections (
                     owner_profile_id,
                     name,
@@ -1727,34 +2010,18 @@ async function verifyAuthorizationRls(client) {
                     'private'
                   )
                 `,
-                [stranger.profileId],
-              ),
-            '42501',
-          )
-        },
-      )
+                  [stranger.profileId],
+                ),
+              '42501',
+            )
 
-      await runAsDatabaseRole(
-        client,
-        { role: 'authenticated', authUserId: stranger.authUserId },
-        async () => {
-          const otherCollections = await client.query(
-            `select id from user_data.collections where id = $1`,
-            [ownerCollectionId],
-          )
-
-          assert(
-            otherCollections.rowCount === 0,
-            'Non-owner must not read another user collection.',
-          )
-
-          await expectPgError(
-            'non-owner cannot add items to another user collection',
-            () =>
-              client.query(
-                `
+            await expectPgError(
+              'owner cannot create a collection item for another profile',
+              () =>
+                client.query(
+                  `
                   insert into user_data.collection_items (
-                    collection_id,
+                    owner_profile_id,
                     card_printing_id,
                     quantity
                   ) values (
@@ -1763,14 +2030,78 @@ async function verifyAuthorizationRls(client) {
                     1
                   )
                 `,
-                [ownerCollectionId],
-              ),
-            '42501',
-          )
-        },
-      )
-    },
-  )
+                  [stranger.profileId],
+                ),
+              '42501',
+            )
+          },
+        )
+
+        await runAsDatabaseRole(
+          client,
+          { role: 'authenticated', authUserId: stranger.authUserId },
+          async () => {
+            const otherCollections = await client.query(
+              `select id from user_data.collections where id = $1`,
+              [ownerCollectionId],
+            )
+
+            assert(
+              otherCollections.rowCount === 0,
+              'Non-owner must not read another user collection.',
+            )
+
+            const otherItems = await client.query(
+              `
+              select id
+              from user_data.collection_items
+              where owner_profile_id = $1
+            `,
+              [owner.profileId],
+            )
+
+            assert(
+              otherItems.rowCount === 0,
+              'Non-owner must not read another user collection items.',
+            )
+
+            await expectPgError(
+              'non-owner cannot add items to another user collection inventory',
+              () =>
+                client.query(
+                  `
+                  insert into user_data.collection_items (
+                    owner_profile_id,
+                    card_printing_id,
+                    quantity
+                  ) values (
+                    $1,
+                    '30000000-0000-4000-8000-000000000002',
+                    1
+                  )
+                `,
+                  [owner.profileId],
+                ),
+              '42501',
+            )
+
+            await expectPgError(
+              'non-owner cannot mutate another user collection item through the quantity rpc',
+              () =>
+                client.query(
+                  `
+                  select *
+                  from user_data.change_collection_item_quantity($1, $2, $3)
+                `,
+                  [owner.profileId, '30000000-0000-4000-8000-000000000001', 1],
+                ),
+              '42501',
+            )
+          },
+        )
+      },
+    )
+  }
 
   await withRollback(
     client,
@@ -1916,6 +2247,37 @@ async function verifyAuthorizationRls(client) {
             'Owner should be able to create a new deck version on their own deck.',
           )
 
+          const insertedVersionId = insertedVersion.rows[0]?.id ?? null
+
+          assert(
+            typeof insertedVersionId === 'string',
+            'Owner-created deck versions should return a persisted version id.',
+          )
+
+          const insertedDeckCard = await client.query(
+            `
+              insert into user_data.deck_cards (
+                deck_version_id,
+                section_key,
+                card_entity_id,
+                quantity
+              ) values (
+                $1,
+                'ride',
+                '20000000-0000-4000-8000-000000000008',
+                1
+              )
+              returning quantity
+            `,
+            [insertedVersionId],
+          )
+
+          assert(
+            insertedDeckCard.rowCount === 1 &&
+              insertedDeckCard.rows[0]?.quantity === 1,
+            'Owner should be able to create deck cards on their own persisted version graph.',
+          )
+
           await expectPgError(
             'owner cannot rewrite persisted deck versions in place',
             () =>
@@ -1967,6 +2329,8 @@ async function verifyAuthorizationRls(client) {
           )
         },
       )
+
+      const stateBeforeDeniedRpc = await loadDeckGraphState(client, ownerDeckId)
 
       await runAsDatabaseRole(
         client,
@@ -2066,7 +2430,7 @@ async function verifyAuthorizationRls(client) {
             () =>
               saveDeckAggregate(client, {
                 deckId: ownerDeckId,
-                ownerProfileId: stranger.profileId,
+                ownerProfileId: owner.profileId,
                 formatId: 'standard',
                 title: 'Forbidden Save Attempt',
                 description: 'This must stay blocked by the database.',
@@ -2074,7 +2438,7 @@ async function verifyAuthorizationRls(client) {
                 cards: [],
                 versionNote: 'stranger save attempt',
               }),
-            'P0002',
+            '42501',
           )
 
           const deleteDeckResult = await client.query(
@@ -2091,6 +2455,16 @@ async function verifyAuthorizationRls(client) {
             'Non-owner must not delete another user deck.',
           )
         },
+      )
+
+      await resetDatabaseRole(client)
+
+      const stateAfterDeniedRpc = await loadDeckGraphState(client, ownerDeckId)
+
+      assertJsonEqual(
+        stateAfterDeniedRpc,
+        stateBeforeDeniedRpc,
+        'Denied cross-owner aggregate saves must not mutate the persisted deck graph.',
       )
     },
   )
@@ -2234,6 +2608,10 @@ async function verifyAuthorizationRls(client) {
       )
     },
   )
+
+  if (onlyDeck) {
+    return
+  }
 
   await withRollback(
     client,
@@ -2890,6 +3268,7 @@ async function verifyAuthorizationRls(client) {
 
 async function main() {
   console.log('Starting DB checkpoint verification...')
+  const runDeckBoundaryOnly = process.argv.slice(2).includes('--suite=decks')
 
   runCorepack(
     ['pnpm', 'dlx', `supabase@${cliVersion}`, 'start'],
@@ -2914,6 +3293,13 @@ async function main() {
   try {
     await client.connect()
     await verifySeedSmoke(client)
+    if (runDeckBoundaryOnly) {
+      await verifyDeckWriteAtomicity(client)
+      await verifyDeckReadDensification(client)
+      await verifyAuthorizationRls(client, { onlyDeck: true })
+      console.log('Deck DB boundary verification completed successfully.')
+      return
+    }
     await verifyConstraints(client)
     await verifyDeckWriteAtomicity(client)
     await verifyDeckReadDensification(client)

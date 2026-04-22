@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -5,6 +6,8 @@ const notFoundError = new Error('NEXT_NOT_FOUND')
 
 const mocks = vi.hoisted(() => ({
   getCatalogPrintingDetail: vi.fn(),
+  getCurrentPrintingCollectionState: vi.fn(),
+  getCurrentPrintingPreferenceState: vi.fn(),
   notFound: vi.fn(() => {
     throw notFoundError
   }),
@@ -14,6 +17,20 @@ vi.mock('@/features/catalog/server/catalog-printing-read', () => ({
   getCatalogPrintingDetail: mocks.getCatalogPrintingDetail,
 }))
 
+vi.mock(
+  '@/features/collections/server/current-printing-collection-read',
+  () => ({
+    getCurrentPrintingCollectionState: mocks.getCurrentPrintingCollectionState,
+  }),
+)
+
+vi.mock(
+  '@/features/collections/server/current-printing-preference-read',
+  () => ({
+    getCurrentPrintingPreferenceState: mocks.getCurrentPrintingPreferenceState,
+  }),
+)
+
 vi.mock('next/navigation', () => ({
   notFound: mocks.notFound,
 }))
@@ -21,13 +38,37 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/catalog/catalog-printing-detail-view', () => ({
   CatalogPrintingDetailView: ({
     detail,
+    collectionPanel,
+    preferencePanel,
   }: {
     detail: {
       printing: {
+        id: string
         printingKey: string
       }
     }
-  }) => <div data-testid="printing-detail">{detail.printing.printingKey}</div>,
+    collectionPanel?: ReactNode
+    preferencePanel?: ReactNode
+  }) => (
+    <div>
+      <div data-testid="printing-detail">{detail.printing.printingKey}</div>
+      <div data-testid="printing-id">{detail.printing.id}</div>
+      {collectionPanel}
+      {preferencePanel}
+    </div>
+  ),
+}))
+
+vi.mock('@/components/collections/printing-collection-panel', () => ({
+  PrintingCollectionPanel: ({ printingId }: { printingId: string }) => (
+    <div data-testid="collection-panel">{printingId}</div>
+  ),
+}))
+
+vi.mock('@/components/collections/printing-preference-panel', () => ({
+  PrintingPreferencePanel: ({ printingId }: { printingId: string }) => (
+    <div data-testid="preference-panel">{printingId}</div>
+  ),
 }))
 
 import CatalogPrintingPage from './page'
@@ -42,9 +83,16 @@ describe('CatalogPrintingPage', () => {
       ok: true,
       data: {
         printing: {
+          id: 'printing-1',
           printingKey: 'printing.azure-vanguard-dragon.d-sd01.004.en',
         },
       },
+    })
+    mocks.getCurrentPrintingCollectionState.mockResolvedValueOnce({
+      kind: 'signed-out',
+    })
+    mocks.getCurrentPrintingPreferenceState.mockResolvedValueOnce({
+      kind: 'signed-out',
     })
 
     render(
@@ -58,8 +106,20 @@ describe('CatalogPrintingPage', () => {
     expect(mocks.getCatalogPrintingDetail).toHaveBeenCalledWith(
       'printing.azure-vanguard-dragon.d-sd01.004.en',
     )
+    expect(mocks.getCurrentPrintingCollectionState).toHaveBeenCalledWith(
+      'printing-1',
+    )
+    expect(mocks.getCurrentPrintingPreferenceState).toHaveBeenCalledWith(
+      'printing-1',
+    )
     expect(screen.getByTestId('printing-detail')).toHaveTextContent(
       'printing.azure-vanguard-dragon.d-sd01.004.en',
+    )
+    expect(screen.getByTestId('collection-panel')).toHaveTextContent(
+      'printing-1',
+    )
+    expect(screen.getByTestId('preference-panel')).toHaveTextContent(
+      'printing-1',
     )
   })
 

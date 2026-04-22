@@ -32,6 +32,19 @@ describe('ProtectedNavLinks', () => {
     ).toBe(true)
   })
 
+  it('marks the collection route as active for the protected inventory surface', () => {
+    render(<ProtectedNavLinks pathname="/collection" />)
+    const collectionLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href') === '/collection')
+
+    expect(
+      collectionLinks.some(
+        (link) => link.getAttribute('aria-current') === 'page',
+      ),
+    ).toBe(true)
+  })
+
   it('marks the friends dashboard route as active for the dedicated social dashboard', () => {
     render(<ProtectedNavLinks pathname="/friends" />)
     const friendsLinks = screen

@@ -34,6 +34,11 @@ alter table user_data.profiles
 alter table user_data.profiles
   alter column bio_visibility set not null;
 
+drop view if exists social.outgoing_pending_friend_requests;
+drop view if exists social.incoming_pending_friend_requests;
+drop view if exists social.active_friendships_overview;
+drop policy if exists friend_relationships_requester_insert
+  on social.friend_relationships;
 drop view if exists user_data.public_profiles;
 create view user_data.public_profiles
 with (security_barrier = true) as
@@ -125,6 +130,20 @@ create policy profiles_visible_select
   for select
   to authenticated
   using (auth.uid() = auth_user_id);
+
+create policy friend_relationships_requester_insert
+  on social.friend_relationships
+  for insert
+  to authenticated
+  with check (
+    requester_profile_id = user_data.current_profile_id()
+    and requester_profile_id <> addressee_profile_id
+    and exists (
+      select 1
+      from user_data.public_profiles
+      where public_profiles.id = addressee_profile_id
+    )
+  );
 
 drop view if exists social.active_friendships_overview;
 create view social.active_friendships_overview

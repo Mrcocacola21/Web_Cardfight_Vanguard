@@ -9,6 +9,7 @@ export {
   createCatalogRepository,
   createCatalogPublicationRepository,
 } from './catalog'
+export { createCollectionsRepository } from './collections'
 export { createDecksRepository } from './decks'
 export { createImporterRepository } from './importer'
 export { createMatchesRepository } from './matches'

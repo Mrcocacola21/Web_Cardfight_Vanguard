@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { isSignedOutSupabaseAuthError } from '@/lib/supabase/auth-errors'
 
 export interface AuthUserRecord {
   readonly id: string
@@ -26,39 +27,49 @@ export async function getCurrentAuthState(
   options?: GetCurrentAuthStateOptions,
 ): Promise<CurrentAuthState> {
   const client = options?.client ?? (await createSupabaseServerClient())
-  const {
-    data: { user },
-    error,
-  } = await client.auth.getUser()
 
-  if (!user && isMissingAuthSessionError(error?.message)) {
-    return {
-      kind: 'signed-out',
+  try {
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser()
+
+    if (!user && isSignedOutSupabaseAuthError(error)) {
+      return {
+        kind: 'signed-out',
+      }
     }
-  }
 
-  if (error) {
+    if (error) {
+      return {
+        kind: 'error',
+        message: 'Failed to resolve the current authenticated session.',
+      }
+    }
+
+    if (!user) {
+      return {
+        kind: 'signed-out',
+      }
+    }
+
+    return {
+      kind: 'ready',
+      user: {
+        id: user.id,
+        email: user.email ?? null,
+      },
+    }
+  } catch (error) {
+    if (isSignedOutSupabaseAuthError(error)) {
+      return {
+        kind: 'signed-out',
+      }
+    }
+
     return {
       kind: 'error',
       message: 'Failed to resolve the current authenticated session.',
     }
   }
-
-  if (!user) {
-    return {
-      kind: 'signed-out',
-    }
-  }
-
-  return {
-    kind: 'ready',
-    user: {
-      id: user.id,
-      email: user.email ?? null,
-    },
-  }
-}
-
-function isMissingAuthSessionError(message: string | undefined): boolean {
-  return typeof message === 'string' && /auth session missing/i.test(message)
 }

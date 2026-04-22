@@ -251,6 +251,13 @@ Available now:
   - restriction-list validation
   - validation UI panel in the deck builder
   - focused integration tests for profile-aware and Premium runtime behavior
+- gameplay rules foundation:
+  - `packages/rules-core` as a clean domain-first gameplay engine package
+  - explicit `GameState` / `PlayerState` / `ZoneState` contracts
+  - action, event, request, and deterministic transition foundation
+  - engine/UI validation boundary with structured accepted/invalid/blocked results
+  - first format-adapter layer under `src/formats`
+  - Standard adapter baseline with ride-deck-aware legality and ride transition flow
 - application-layer refactoring:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries
@@ -264,7 +271,8 @@ Not implemented yet:
 - collection/binder product flow
 - notifications, recommendations, and richer social graph/product workflows
 - public/shared match history workflows and richer match-detail editing flows
-- gameplay engine and effect system
+- full gameplay mechanics and effect system
+- additional format adapters beyond the current Standard baseline
 - advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 
@@ -21,10 +22,14 @@ import {
 
 interface CatalogPrintingDetailViewProps {
   readonly detail: CatalogPrintingDetailViewModel
+  readonly collectionPanel?: ReactNode
+  readonly preferencePanel?: ReactNode
 }
 
 export function CatalogPrintingDetailView({
   detail,
+  collectionPanel,
+  preferencePanel,
 }: CatalogPrintingDetailViewProps) {
   const { printing, siblingPrintings } = detail
 
@@ -78,6 +83,9 @@ export function CatalogPrintingDetailView({
       }
       main={
         <PageSection className="space-y-6">
+          {collectionPanel}
+          {preferencePanel}
+
           <Card>
             <CardHeader>
               <CardTitle>Printing facts</CardTitle>

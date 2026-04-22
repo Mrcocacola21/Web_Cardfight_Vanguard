@@ -25,6 +25,9 @@
       "@web-vg/db/repositories/catalog": [
         "packages/db/src/repositories/catalog/index.ts"
       ],
+      "@web-vg/db/repositories/collections": [
+        "packages/db/src/repositories/collections/index.ts"
+      ],
       "@web-vg/db/repositories/decks": [
         "packages/db/src/repositories/decks/index.ts"
       ],

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { expectTypeOf } from 'vitest'
 
 import type { TablesInsert } from '../index'
+import type { CollectionOwnedPrintingIdentity } from './collections'
 import type { CardId, CardPrintingId, DeckEntry } from '@web-vg/shared'
 
 type HasKey<TValue, TKey extends PropertyKey> = TKey extends keyof TValue
@@ -14,6 +15,10 @@ type DeckCardInsert = TablesInsert<{ schema: 'user_data' }, 'deck_cards'>
 type CollectionItemInsert = TablesInsert<
   { schema: 'user_data' },
   'collection_items'
+>
+type CollectionPrintingPreferenceInsert = TablesInsert<
+  { schema: 'user_data' },
+  'collection_printing_preferences'
 >
 
 describe('domain boundaries', () => {
@@ -29,11 +34,78 @@ describe('domain boundaries', () => {
   it('keeps collection persistence printing-based instead of canonical-card based', () => {
     expectTypeOf<CardPrintingId>().toMatchTypeOf<string>()
     expectTypeOf<
+      CollectionOwnedPrintingIdentity['ownerProfileId']
+    >().toEqualTypeOf<string>()
+    expectTypeOf<
+      CollectionOwnedPrintingIdentity['cardPrintingId']
+    >().toEqualTypeOf<string>()
+    expectTypeOf<
+      HasKey<CollectionOwnedPrintingIdentity, 'cardEntityId'>
+    >().toEqualTypeOf<false>()
+    expectTypeOf<
+      CollectionItemInsert['owner_profile_id']
+    >().toEqualTypeOf<string>()
+    expectTypeOf<
       CollectionItemInsert['card_printing_id']
     >().toEqualTypeOf<string>()
     expectTypeOf<
       HasKey<CollectionItemInsert, 'card_entity_id'>
     >().toEqualTypeOf<false>()
+    expectTypeOf<
+      CollectionPrintingPreferenceInsert['card_printing_id']
+    >().toEqualTypeOf<string>()
+    expectTypeOf<
+      HasKey<CollectionPrintingPreferenceInsert, 'card_entity_id'>
+    >().toEqualTypeOf<false>()
+  })
+
+  it('keeps collection application flows printing-oriented instead of deck-style entity-oriented', () => {
+    const collectionWriteSource = readFileSync(
+      new URL(
+        '../../../../apps/web/src/features/collections/application/collection-use-cases.ts',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const collectionReadSource = readFileSync(
+      new URL(
+        '../../../../apps/web/src/features/collections/application/collection-inventory-use-cases.ts',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const collectionActionSource = readFileSync(
+      new URL(
+        '../../../../apps/web/src/features/collections/server/collection-actions.ts',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const collectionPreferenceWriteSource = readFileSync(
+      new URL(
+        '../../../../apps/web/src/features/collections/application/collection-preference-use-cases.ts',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    const collectionPreferenceActionSource = readFileSync(
+      new URL(
+        '../../../../apps/web/src/features/collections/server/collection-preference-actions.ts',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+
+    expect(collectionWriteSource).toContain('printingId')
+    expect(collectionWriteSource).not.toContain('cardEntityId')
+    expect(collectionReadSource).toContain('cardPrintingId')
+    expect(collectionReadSource).not.toContain('cardEntityId')
+    expect(collectionActionSource).toContain('printingId')
+    expect(collectionActionSource).not.toContain('entityId')
+    expect(collectionPreferenceWriteSource).toContain('printingId')
+    expect(collectionPreferenceWriteSource).not.toContain('cardEntityId')
+    expect(collectionPreferenceActionSource).toContain('printingId')
+    expect(collectionPreferenceActionSource).not.toContain('entityId')
   })
 
   it('keeps importer writes out of catalog write paths', () => {
@@ -108,6 +180,7 @@ describe('domain boundaries', () => {
 
     const repositoryFiles = [
       './catalog/catalog.repository.ts',
+      './collections/collections.repository.ts',
       './importer/importer.repository.ts',
       './decks/decks.repository.ts',
       './matches/matches.repository.ts',

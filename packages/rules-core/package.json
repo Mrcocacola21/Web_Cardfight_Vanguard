@@ -2,7 +2,7 @@
   "name": "@web-vg/rules-core",
   "private": true,
   "version": "0.0.0",
-  "description": "Rules-core foundation scaffold for the Cardfight!! Vanguard platform",
+  "description": "Framework-agnostic gameplay rules foundation for the Cardfight!! Vanguard platform",
   "exports": {
     ".": "./src/index.ts"
   },
