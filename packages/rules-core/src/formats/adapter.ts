@@ -1,4 +1,8 @@
-import type { FormatId } from '@web-vg/shared'
+import type {
+  ConstructionBasis,
+  FormatGameplayMarker,
+  FormatId,
+} from '@web-vg/shared'
 
 import type { GameActionType } from '../actions'
 import {
@@ -49,6 +53,8 @@ export type FormatCommandDecision =
 
 export interface FormatAdapterDefinition {
   readonly formatId: FormatId
+  readonly constructionBasis: ConstructionBasis
+  readonly gameplayMarkers: readonly FormatGameplayMarker[]
   readonly supportedActionTypes: readonly GameActionType[]
   evaluateCommand?(context: FormatCommandContext): FormatCommandDecision
   handleCommand?(context: FormatCommandContext): TransitionResult | undefined
@@ -56,6 +62,8 @@ export interface FormatAdapterDefinition {
 
 export interface RulesFormatAdapter {
   readonly formatId: FormatId
+  readonly constructionBasis: ConstructionBasis
+  readonly gameplayMarkers: readonly FormatGameplayMarker[]
   readonly supportedActionTypes: readonly GameActionType[]
   dispatch(
     currentState: GameState,
@@ -72,6 +80,8 @@ export function createRulesFormatAdapter(
 ): RulesFormatAdapter {
   return {
     formatId: definition.formatId,
+    constructionBasis: definition.constructionBasis,
+    gameplayMarkers: definition.gameplayMarkers,
     supportedActionTypes: definition.supportedActionTypes,
     dispatch(currentState, command) {
       return dispatchFormatCommand(definition, currentState, command)

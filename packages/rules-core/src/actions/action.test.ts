@@ -14,6 +14,7 @@ import type {
   SystemActionActor,
   SystemGameAction,
   TurnFlowAction,
+  ZoneTransferReason,
   ZoneId,
 } from '../index'
 import { isPlayerGameAction, isSystemGameAction } from '../index'
@@ -26,14 +27,24 @@ type ExpectedActionTypes =
   | 'match.ready'
   | 'match.start'
   | 'match.concede'
+  | 'system.begin_mulligan'
+  | 'system.drive_check'
+  | 'system.damage_check'
+  | 'piece.rest'
+  | 'piece.stand'
+  | 'piece.lock'
+  | 'piece.unlock'
   | 'turn.pass_priority'
   | 'turn.end_phase'
   | 'turn.end_turn'
+  | 'zone.shuffle'
+  | 'zone.draw'
   | 'zone.move_piece'
   | 'card.play'
   | 'card.ride'
   | 'card.call'
   | 'battle.declare_attack'
+  | 'battle.commit_boost'
   | 'battle.guard'
   | 'system.advance_phase'
   | 'system.advance_step'
@@ -69,6 +80,7 @@ const systemAction: MovePieceAction = {
   to: {
     zoneId: 'zone-drop' as MovePieceAction['to']['zoneId'],
   },
+  reason: 'generic',
 }
 
 describe('@web-vg/rules-core action model', () => {
@@ -83,9 +95,15 @@ describe('@web-vg/rules-core action model', () => {
     expectTypeOf<ActionType>().toEqualTypeOf<ExpectedActionTypes>()
     expectTypeOf<GameAction['type']>().toEqualTypeOf<ExpectedActionTypes>()
     expectTypeOf<MatchAction['type']>().toEqualTypeOf<
-      'match.ready' | 'match.start' | 'match.concede'
+      'match.ready' | 'match.start' | 'match.concede' | 'system.begin_mulligan'
     >()
     expectTypeOf<TurnFlowAction['type']>().toEqualTypeOf<
+      | 'system.drive_check'
+      | 'system.damage_check'
+      | 'piece.rest'
+      | 'piece.stand'
+      | 'piece.lock'
+      | 'piece.unlock'
       | 'turn.pass_priority'
       | 'turn.end_phase'
       | 'turn.end_turn'
@@ -99,6 +117,9 @@ describe('@web-vg/rules-core action model', () => {
     expectTypeOf<PlayerGameAction['actor']>().toEqualTypeOf<PlayerActionActor>()
     expectTypeOf<SystemGameAction['actor']>().toEqualTypeOf<SystemActionActor>()
     expectTypeOf<MovePieceAction['to']['zoneId']>().toEqualTypeOf<ZoneId>()
+    expectTypeOf<
+      MovePieceAction['reason']
+    >().toEqualTypeOf<ZoneTransferReason>()
     expectTypeOf<DeclareAttackAction['target']>().toEqualTypeOf<AttackTarget>()
     expectTypeOf<GameActionSubmission['action']>().toEqualTypeOf<GameAction>()
   })

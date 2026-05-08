@@ -1,5 +1,6 @@
 import type {
   ActionId,
+  BattleId,
   EventId,
   PieceId,
   PlayerId,
@@ -83,6 +84,25 @@ export interface ConfirmBooleanRequest extends GameChoiceRequestBase<'confirm.bo
   readonly defaultAnswer?: boolean
 }
 
+export interface MulliganChoiceRequest extends GameChoiceRequestBase<'mulligan.select_cards'> {
+  readonly handZoneId: ZoneId
+  readonly deckZoneId: ZoneId
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly eligiblePieceIds: readonly PieceId[]
+  readonly currentDeckPieceIds: readonly PieceId[]
+}
+
+export interface GuardChoiceRequest extends GameChoiceRequestBase<'battle.guard_select'> {
+  readonly battleId: BattleId
+  readonly handZoneId: ZoneId
+  readonly guardZoneId: ZoneId
+  readonly attackerPieceId: PieceId
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly eligiblePieceIds: readonly PieceId[]
+}
+
 export type SelectionChoiceRequestType =
   | 'choose.pieces'
   | 'choose.target'
@@ -91,6 +111,8 @@ export type SelectionChoiceRequestType =
 
 export type GameChoiceRequestType =
   | SelectionChoiceRequestType
+  | 'battle.guard_select'
+  | 'mulligan.select_cards'
   | 'confirm.boolean'
 
 export type ChoiceRequestType = GameChoiceRequestType
@@ -101,7 +123,11 @@ export type SelectionChoiceRequest =
   | ChooseZoneRequest
   | ChooseOptionRequest
 
-export type GameChoiceRequest = SelectionChoiceRequest | ConfirmBooleanRequest
+export type GameChoiceRequest =
+  | SelectionChoiceRequest
+  | GuardChoiceRequest
+  | ConfirmBooleanRequest
+  | MulliganChoiceRequest
 
 export type PendingGameChoiceRequest = GameChoiceRequest
 
@@ -135,6 +161,15 @@ export interface PassChoiceResponse extends GameChoiceResponseBase<'answer.pass'
   readonly reason: ChoiceResponseSkipReason
 }
 
+export interface MulliganChoiceResponse extends GameChoiceResponseBase<'answer.mulligan'> {
+  readonly returnedPieceIds: readonly PieceId[]
+  readonly shuffledDeckPieceIds: readonly PieceId[]
+}
+
+export interface GuardChoiceResponse extends GameChoiceResponseBase<'answer.guard'> {
+  readonly selectedPieceIds: readonly PieceId[]
+}
+
 export type SelectionChoiceResponse =
   | PiecesChosenResponse
   | TargetChosenResponse
@@ -146,6 +181,8 @@ export type GameChoiceResponseType =
   | 'answer.target'
   | 'answer.zone'
   | 'answer.option'
+  | 'answer.guard'
+  | 'answer.mulligan'
   | 'answer.boolean'
   | 'answer.pass'
 
@@ -153,13 +190,20 @@ export type ChoiceResponseType = GameChoiceResponseType
 
 export type GameChoiceResponse =
   | SelectionChoiceResponse
+  | GuardChoiceResponse
+  | MulliganChoiceResponse
   | BooleanChoiceResponse
   | PassChoiceResponse
 
 export function isSelectionChoiceRequest(
   request: GameChoiceRequest,
 ): request is SelectionChoiceRequest {
-  return request.type !== 'confirm.boolean'
+  return (
+    request.type === 'choose.pieces' ||
+    request.type === 'choose.target' ||
+    request.type === 'choose.zone' ||
+    request.type === 'choose.option'
+  )
 }
 
 export function isPassChoiceResponse(
@@ -224,6 +268,60 @@ export function assertGameChoiceRequestInvariant(
       )
       return
     }
+    case 'mulligan.select_cards': {
+      assertRulesInvariant(
+        Number.isSafeInteger(request.minSelections) &&
+          request.minSelections >= 0,
+        `Choice request ${request.requestId} must declare a non-negative safe minSelections value.`,
+      )
+      assertRulesInvariant(
+        Number.isSafeInteger(request.maxSelections) &&
+          request.maxSelections >= 0,
+        `Choice request ${request.requestId} must declare a non-negative safe maxSelections value.`,
+      )
+      assertRulesInvariant(
+        request.maxSelections >= request.minSelections,
+        `Choice request ${request.requestId} must not declare maxSelections below minSelections.`,
+      )
+      assertRulesInvariant(
+        request.maxSelections <= request.eligiblePieceIds.length,
+        `Choice request ${request.requestId} cannot allow more mulligan returns than there are eligible hand cards.`,
+      )
+      assertUniqueStrings(
+        request.eligiblePieceIds.map((pieceId) => pieceId as string),
+        `Choice request ${request.requestId} must not repeat eligible mulligan piece ids.`,
+      )
+      assertUniqueStrings(
+        request.currentDeckPieceIds.map((pieceId) => pieceId as string),
+        `Choice request ${request.requestId} must not repeat current deck piece ids.`,
+      )
+      return
+    }
+    case 'battle.guard_select': {
+      assertRulesInvariant(
+        Number.isSafeInteger(request.minSelections) &&
+          request.minSelections >= 0,
+        `Choice request ${request.requestId} must declare a non-negative safe minSelections value.`,
+      )
+      assertRulesInvariant(
+        Number.isSafeInteger(request.maxSelections) &&
+          request.maxSelections >= 0,
+        `Choice request ${request.requestId} must declare a non-negative safe maxSelections value.`,
+      )
+      assertRulesInvariant(
+        request.maxSelections >= request.minSelections,
+        `Choice request ${request.requestId} must not declare maxSelections below minSelections.`,
+      )
+      assertRulesInvariant(
+        request.maxSelections <= request.eligiblePieceIds.length,
+        `Choice request ${request.requestId} cannot allow more guard selections than there are eligible guardian pieces.`,
+      )
+      assertUniqueStrings(
+        request.eligiblePieceIds.map((pieceId) => pieceId as string),
+        `Choice request ${request.requestId} must not repeat eligible guard piece ids.`,
+      )
+      return
+    }
     case 'confirm.boolean':
       return
   }
@@ -255,6 +353,22 @@ export function assertGameChoiceResponseInvariant(
       assertNonEmptyUniqueStrings(
         response.selectedOptionIds.map((optionId) => optionId as string),
         `Choice response ${response.requestId} must contain at least one unique selected option id.`,
+      )
+      return
+    case 'answer.guard':
+      assertNonEmptyUniqueStrings(
+        response.selectedPieceIds.map((pieceId) => pieceId as string),
+        `Choice response ${response.requestId} must contain at least one unique selected guard piece id.`,
+      )
+      return
+    case 'answer.mulligan':
+      assertUniqueStrings(
+        response.returnedPieceIds.map((pieceId) => pieceId as string),
+        `Choice response ${response.requestId} must not repeat returned mulligan piece ids.`,
+      )
+      assertUniqueStrings(
+        response.shuffledDeckPieceIds.map((pieceId) => pieceId as string),
+        `Choice response ${response.requestId} must not repeat shuffled deck piece ids.`,
       )
       return
     case 'answer.boolean':
@@ -353,6 +467,43 @@ export function assertChoiceResponseMatchesRequest(
         request.options.map((option) => option.optionId as string),
         request.requestId,
         'option ids',
+      )
+      return
+    case 'mulligan.select_cards':
+      assertRulesInvariant(
+        response.type === 'answer.mulligan',
+        `Choice request ${request.requestId} expects a mulligan response.`,
+      )
+      assertSelectionCount(
+        response.returnedPieceIds.length,
+        request.minSelections,
+        request.maxSelections,
+        request.requestId,
+      )
+      assertAllowedValues(
+        response.returnedPieceIds.map((pieceId) => pieceId as string),
+        request.eligiblePieceIds.map((pieceId) => pieceId as string),
+        request.requestId,
+        'returned mulligan piece ids',
+      )
+      assertMulliganDeckPermutation(request, response)
+      return
+    case 'battle.guard_select':
+      assertRulesInvariant(
+        response.type === 'answer.guard',
+        `Choice request ${request.requestId} expects a guard response.`,
+      )
+      assertSelectionCount(
+        response.selectedPieceIds.length,
+        Math.max(request.minSelections, 1),
+        request.maxSelections,
+        request.requestId,
+      )
+      assertAllowedValues(
+        response.selectedPieceIds.map((pieceId) => pieceId as string),
+        request.eligiblePieceIds.map((pieceId) => pieceId as string),
+        request.requestId,
+        'guard piece ids',
       )
       return
     case 'confirm.boolean':
@@ -486,6 +637,27 @@ function assertAllowedValues(
       `Choice response ${requestId} selected ${label} value ${selectedValue} that is not allowed.`,
     )
   }
+}
+
+function assertMulliganDeckPermutation(
+  request: MulliganChoiceRequest,
+  response: MulliganChoiceResponse,
+): void {
+  const expectedDeckPieceIds = [
+    ...request.currentDeckPieceIds,
+    ...response.returnedPieceIds,
+  ]
+
+  assertRulesInvariant(
+    response.shuffledDeckPieceIds.length === expectedDeckPieceIds.length,
+    `Choice response ${response.requestId} must provide a shuffled deck order covering the current deck plus all returned mulligan cards.`,
+  )
+  assertAllowedValues(
+    response.shuffledDeckPieceIds.map((pieceId) => pieceId as string),
+    expectedDeckPieceIds.map((pieceId) => pieceId as string),
+    request.requestId,
+    'shuffled deck piece ids',
+  )
 }
 
 function assertUniqueStrings(values: readonly string[], message: string): void {

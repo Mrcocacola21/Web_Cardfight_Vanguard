@@ -1,8 +1,12 @@
 import { assertRulesInvariant } from '../errors'
 import type { GameChoiceRequest, ZoneChoiceOption } from '../requests'
 import { assertGameChoiceRequestInvariant } from '../requests'
+import type { TargetReference } from '../references'
 
 import type {
+  BattleCheckState,
+  BattleState,
+  GamePieceStatusState,
   GameState,
   PlayerState,
   ZoneLayoutState,
@@ -209,6 +213,9 @@ export function assertGameStateInvariant(state: GameState): void {
   const requestIds = state.pendingRequests.map(
     (request) => request.requestId as string,
   )
+  const pieceStatePieceIds = state.pieceStates.map(
+    (pieceState) => pieceState.pieceId as string,
+  )
 
   assertUniqueValues(
     playerIds,
@@ -220,6 +227,10 @@ export function assertGameStateInvariant(state: GameState): void {
   )
   assertUniqueValues(zoneIds, 'Game state must not declare duplicate zones.')
   assertUniqueValues(pieceIds, 'Game state must not declare duplicate pieces.')
+  assertUniqueValues(
+    pieceStatePieceIds,
+    'Game state must not declare duplicate runtime piece state entries.',
+  )
   assertUniqueValues(
     requestIds,
     'Game state must not declare duplicate pending request ids.',
@@ -319,6 +330,17 @@ export function assertGameStateInvariant(state: GameState): void {
         `Card piece ${piece.pieceId} must reference a canonical card definition id.`,
       )
     }
+
+    if (piece.keywords !== undefined) {
+      assertUniqueValues(
+        piece.keywords.map((keyword) => keyword as string),
+        `Piece ${piece.pieceId} must not repeat gameplay keywords.`,
+      )
+    }
+  }
+
+  for (const pieceState of state.pieceStates) {
+    assertGamePieceStatusStateInvariant(pieceState, pieceIdSet)
   }
 
   for (const request of state.pendingRequests) {
@@ -348,6 +370,24 @@ export function assertGameStateInvariant(state: GameState): void {
 
     assertRequestStateReferences(request, pieceIdSet, playerIdSet, state.zones)
   }
+
+  if (state.battle !== undefined) {
+    assertBattleStateInvariant(state.battle, state)
+  }
+}
+
+function assertGamePieceStatusStateInvariant(
+  pieceState: GamePieceStatusState,
+  pieceIdSet: ReadonlySet<string>,
+): void {
+  assertRulesInvariant(
+    pieceIdSet.has(pieceState.pieceId),
+    `Runtime piece state ${pieceState.pieceId} must reference an existing game piece.`,
+  )
+  assertUniqueValues(
+    pieceState.flags.map((flag) => flag as string),
+    `Runtime piece state ${pieceState.pieceId} must not repeat flag keys.`,
+  )
 }
 
 function assertRequestStateReferences(
@@ -386,6 +426,48 @@ function assertRequestStateReferences(
         assertZoneChoiceOptionReferences(request.requestId, zone, zones)
       }
       return
+    case 'mulligan.select_cards':
+      for (const pieceId of request.eligiblePieceIds) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown selectable mulligan piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.currentDeckPieceIds) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown current deck piece ${pieceId}.`,
+        )
+      }
+      assertRulesInvariant(
+        zones.some((zone) => zone.zoneId === request.handZoneId),
+        `Pending request ${request.requestId} references an unknown mulligan hand zone ${request.handZoneId}.`,
+      )
+      assertRulesInvariant(
+        zones.some((zone) => zone.zoneId === request.deckZoneId),
+        `Pending request ${request.requestId} references an unknown mulligan deck zone ${request.deckZoneId}.`,
+      )
+      return
+    case 'battle.guard_select':
+      for (const pieceId of request.eligiblePieceIds) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown selectable guard piece ${pieceId}.`,
+        )
+      }
+      assertRulesInvariant(
+        zones.some((zone) => zone.zoneId === request.handZoneId),
+        `Pending request ${request.requestId} references an unknown guard hand zone ${request.handZoneId}.`,
+      )
+      assertRulesInvariant(
+        zones.some((zone) => zone.zoneId === request.guardZoneId),
+        `Pending request ${request.requestId} references an unknown guard zone ${request.guardZoneId}.`,
+      )
+      assertRulesInvariant(
+        pieceIdSet.has(request.attackerPieceId),
+        `Pending request ${request.requestId} references an unknown battle attacker ${request.attackerPieceId}.`,
+      )
+      return
     case 'choose.option':
     case 'confirm.boolean':
       return
@@ -418,4 +500,211 @@ function assertZoneChoiceOptionReferences(
       `Pending request ${requestId} references an unknown selectable slot ${slotId} for zone ${option.zoneId}.`,
     )
   }
+}
+
+function assertBattleStateInvariant(
+  battle: BattleState,
+  state: GameState,
+): void {
+  const playerIdSet = new Set(
+    state.players.map((player) => player.playerId as string),
+  )
+  const pieceIdSet = new Set(
+    state.pieces.map((piece) => piece.pieceId as string),
+  )
+  const zoneIdSet = new Set(state.zones.map((zone) => zone.zoneId as string))
+  const pendingRequestIds = new Set(
+    state.pendingRequests.map((request) => request.requestId as string),
+  )
+
+  assertRulesInvariant(
+    playerIdSet.has(battle.attackingPlayerId),
+    `Battle ${battle.battleId} references an unknown attacking player ${battle.attackingPlayerId}.`,
+  )
+  assertRulesInvariant(
+    playerIdSet.has(battle.defendingPlayerId),
+    `Battle ${battle.battleId} references an unknown defending player ${battle.defendingPlayerId}.`,
+  )
+  assertRulesInvariant(
+    battle.attackingPlayerId !== battle.defendingPlayerId,
+    `Battle ${battle.battleId} must not target the attacking player as its own defender.`,
+  )
+  assertRulesInvariant(
+    pieceIdSet.has(battle.attackerPieceId),
+    `Battle ${battle.battleId} references an unknown attacker piece ${battle.attackerPieceId}.`,
+  )
+  assertRulesInvariant(
+    zoneIdSet.has(battle.attackerZoneId),
+    `Battle ${battle.battleId} references an unknown attacker zone ${battle.attackerZoneId}.`,
+  )
+
+  if (battle.boostingPieceId !== undefined) {
+    assertRulesInvariant(
+      pieceIdSet.has(battle.boostingPieceId),
+      `Battle ${battle.battleId} references an unknown boosting piece ${battle.boostingPieceId}.`,
+    )
+  }
+
+  if (battle.boostingZoneId !== undefined) {
+    assertRulesInvariant(
+      zoneIdSet.has(battle.boostingZoneId),
+      `Battle ${battle.battleId} references an unknown boosting zone ${battle.boostingZoneId}.`,
+    )
+  }
+
+  if (battle.guardZoneId !== undefined) {
+    assertRulesInvariant(
+      zoneIdSet.has(battle.guardZoneId),
+      `Battle ${battle.battleId} references an unknown guard zone ${battle.guardZoneId}.`,
+    )
+  }
+
+  if (battle.guardRequestId !== undefined) {
+    assertRulesInvariant(
+      pendingRequestIds.has(battle.guardRequestId),
+      `Battle ${battle.battleId} references a missing pending guard request ${battle.guardRequestId}.`,
+    )
+  }
+
+  assertUniqueValues(
+    battle.guardPieceIds.map((pieceId) => pieceId as string),
+    `Battle ${battle.battleId} must not repeat committed guard pieces.`,
+  )
+
+  for (const pieceId of battle.guardPieceIds) {
+    assertRulesInvariant(
+      pieceIdSet.has(pieceId),
+      `Battle ${battle.battleId} references an unknown guard piece ${pieceId}.`,
+    )
+  }
+
+  assertTargetReferenceInvariant(
+    battle.battleId,
+    battle.target,
+    playerIdSet,
+    pieceIdSet,
+  )
+
+  const attackerZone = state.zones.find(
+    (zone) => zone.zoneId === battle.attackerZoneId,
+  )
+
+  assertRulesInvariant(
+    attackerZone?.occupants.some(
+      (occupant) => occupant.pieceId === battle.attackerPieceId,
+    ) === true,
+    `Battle ${battle.battleId} attacker piece ${battle.attackerPieceId} must remain in attacker zone ${battle.attackerZoneId}.`,
+  )
+
+  if (battle.guardZoneId !== undefined && battle.guardPieceIds.length > 0) {
+    const guardZone = state.zones.find(
+      (zone) => zone.zoneId === battle.guardZoneId,
+    )
+
+    assertRulesInvariant(
+      guardZone !== undefined,
+      `Battle ${battle.battleId} guard zone ${battle.guardZoneId} must exist when guard pieces are committed.`,
+    )
+
+    for (const pieceId of battle.guardPieceIds) {
+      assertRulesInvariant(
+        guardZone?.occupants.some(
+          (occupant) => occupant.pieceId === pieceId,
+        ) === true,
+        `Battle ${battle.battleId} guard piece ${pieceId} must be present in guard zone ${battle.guardZoneId}.`,
+      )
+    }
+  }
+
+  if (battle.status === 'guard_requested') {
+    assertRulesInvariant(
+      battle.guardRequestId !== undefined,
+      `Battle ${battle.battleId} must reference a pending request while guard selection is active.`,
+    )
+  }
+
+  if (battle.lastCheck !== undefined) {
+    assertBattleCheckStateInvariant(
+      battle.battleId,
+      battle.lastCheck,
+      playerIdSet,
+      pieceIdSet,
+      zoneIdSet,
+      state,
+    )
+  }
+
+  if (battle.status === 'drive_checked') {
+    assertRulesInvariant(
+      battle.lastCheck?.kind === 'drive',
+      `Battle ${battle.battleId} must keep a drive check record while in drive_checked status.`,
+    )
+  }
+
+  if (battle.status === 'damage_checked') {
+    assertRulesInvariant(
+      battle.lastCheck?.kind === 'damage',
+      `Battle ${battle.battleId} must keep a damage check record while in damage_checked status.`,
+    )
+  }
+}
+
+function assertBattleCheckStateInvariant(
+  battleId: BattleState['battleId'],
+  check: BattleCheckState,
+  playerIdSet: ReadonlySet<string>,
+  pieceIdSet: ReadonlySet<string>,
+  zoneIdSet: ReadonlySet<string>,
+  state: GameState,
+): void {
+  assertRulesInvariant(
+    playerIdSet.has(check.playerId),
+    `Battle ${battleId} references an unknown check player ${check.playerId}.`,
+  )
+  assertRulesInvariant(
+    zoneIdSet.has(check.fromZoneId),
+    `Battle ${battleId} references an unknown check source zone ${check.fromZoneId}.`,
+  )
+  assertRulesInvariant(
+    zoneIdSet.has(check.toZoneId),
+    `Battle ${battleId} references an unknown check destination zone ${check.toZoneId}.`,
+  )
+
+  for (const revealedCard of check.revealedCards) {
+    assertRulesInvariant(
+      pieceIdSet.has(revealedCard.pieceId),
+      `Battle ${battleId} references an unknown revealed check piece ${revealedCard.pieceId}.`,
+    )
+
+    const piece = state.pieces.find(
+      (candidate) => candidate.pieceId === revealedCard.pieceId,
+    )
+
+    if (revealedCard.cardDefinitionId !== undefined) {
+      assertRulesInvariant(
+        piece?.cardDefinitionId === revealedCard.cardDefinitionId,
+        `Battle ${battleId} revealed check piece ${revealedCard.pieceId} must keep a matching canonical card definition id.`,
+      )
+    }
+  }
+}
+
+function assertTargetReferenceInvariant(
+  battleId: BattleState['battleId'],
+  target: TargetReference,
+  playerIdSet: ReadonlySet<string>,
+  pieceIdSet: ReadonlySet<string>,
+): void {
+  if (target.kind === 'player') {
+    assertRulesInvariant(
+      playerIdSet.has(target.playerId),
+      `Battle ${battleId} references an unknown player target ${target.playerId}.`,
+    )
+    return
+  }
+
+  assertRulesInvariant(
+    pieceIdSet.has(target.pieceId),
+    `Battle ${battleId} references an unknown piece target ${target.pieceId}.`,
+  )
 }

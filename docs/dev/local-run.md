@@ -1,28 +1,85 @@
-# Local Run
+# Local Docker Dev Workflow
 
-## 1. Prerequisites
+This repo uses Supabase CLI as the canonical Docker lifecycle manager. There is
+no repo-owned `docker-compose.yml`; do not start the Supabase containers with
+ad hoc Docker or Compose commands.
 
-- Windows PowerShell examples below assume the repo root is `Web_VG`.
-- Node.js `20.9+` with `corepack` available.
-- Docker Desktop running before starting Supabase.
-- No global `pnpm` or global `supabase` install is required.
+The web app is still a normal Next.js dev process. Start and stop it separately
+with `corepack pnpm dev`.
 
-## 2. Install
+## Prerequisites
+
+- Node.js `20.9+` with Corepack.
+- Docker Desktop running.
+- Run commands from the repo root.
+
+Install dependencies:
 
 ```powershell
-cd C:\codes\Web_VG
 corepack pnpm install
 ```
 
-Notes:
+## Canonical Commands
 
-- This repo is a `pnpm` workspace (`pnpm-workspace.yaml`) with `turbo.json`.
-- Root `dev` and `build` scripts proxy to `@web-vg/web`.
-- `corepack enable` is optional. On some Windows setups it fails with a permissions error under `C:\Program Files\nodejs`; `corepack pnpm ...` still works.
+Start local Supabase containers:
 
-## 3. Env setup
+```powershell
+corepack pnpm dev:up
+```
 
-Create `apps/web/.env.local` from the running local Supabase instance:
+Stop containers and keep local Supabase data volumes:
+
+```powershell
+corepack pnpm dev:down
+```
+
+Restart the stack:
+
+```powershell
+corepack pnpm dev:restart
+```
+
+Show container health, URLs, and stopped/unhealthy services:
+
+```powershell
+corepack pnpm dev:status
+```
+
+Show logs:
+
+```powershell
+corepack pnpm dev:logs
+corepack pnpm dev:logs -- db
+corepack pnpm dev:logs:follow
+corepack pnpm dev:logs:follow -- kong
+```
+
+Reset the local database to migrations plus `supabase/seeds/dev_minimal_dataset.sql`:
+
+```powershell
+corepack pnpm dev:reset
+```
+
+Hard reset when Docker/Supabase is wedged. This deletes only this repo's
+Supabase containers, network, and volumes, then starts clean:
+
+```powershell
+corepack pnpm dev:hard-reset
+```
+
+## Data Policy
+
+- `dev:down` is non-destructive. It stops containers, removes leftover
+  containers/networks, and preserves `supabase_db_Web_VG` and
+  `supabase_storage_Web_VG` volumes.
+- `dev:reset` is a database reset. It keeps Docker volumes but rewrites local DB
+  contents from migrations and seed.
+- `dev:hard-reset` is destructive for local Supabase data. Use it only when the
+  stack is broken or you want a clean environment.
+
+## App Environment
+
+Create or refresh `apps/web/.env.local` from the running local Supabase stack:
 
 ```powershell
 $supabaseEnv = corepack pnpm dlx supabase@2.88.0 status -o env
@@ -41,34 +98,49 @@ Required for `apps/web`:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-Optional for DB utility scripts only:
-
-- `DATABASE_URL`
-- `SUPABASE_DB_URL`
-- `DATABASE_SSL`
-
-## 4. Infra startup
+Start the app after `dev:up`:
 
 ```powershell
-corepack pnpm dlx supabase@2.88.0 start
-corepack pnpm dlx supabase@2.88.0 db reset --local
-corepack pnpm dlx supabase@2.88.0 status -o env
+corepack pnpm dev
 ```
 
-What this does:
+## What The Lifecycle Script Does
 
-- starts the local Supabase stack on `127.0.0.1`
-- applies all migrations
-- loads `supabase/seeds/dev_minimal_dataset.sql`
-- prints the exact local API/DB/auth values used by the app
+`scripts/dev-stack.mjs` wraps Supabase CLI and Docker for predictable local
+lifecycle behavior:
 
-## 5. Optional: Expanded Standard Content
+- starts Supabase via `supabase@2.88.0 start`;
+- excludes local-only analytics/vector and edge-runtime services that are not
+  needed by this repo;
+- disables Docker restart policies before stopping so a crashing sidecar cannot
+  recreate itself during shutdown;
+- shuts Postgres down from inside the DB container with `pg_ctl -m fast -w`
+  before `supabase stop`, avoiding the Supabase CLI generated shell PID 1 /
+  one-second Docker timeout path;
+- sends `docker stop --timeout 30` for any already-restarting containers before
+  cleanup;
+- removes orphaned project containers/networks after stop while preserving data
+  volumes unless `dev:hard-reset` was explicitly requested;
+- fails fast when any project container is unhealthy or restarting.
 
-`db reset --local` only loads the minimal synthetic dev seed. If you want the
-fuller Standard slice used by the repo's importer/publication runtime checks
-(`Bastion`, `Bastion Prime`, `Rezael`, `D-SD03`, `DZ-BT01`, `DZ-LBT01`,
-`DZ-SS05`, keyword tags, legality provenance, and printing variant semantics),
-run this after the reset:
+## If Shutdown Gets Stuck
+
+1. Run `corepack pnpm dev:status`.
+2. Inspect logs with `corepack pnpm dev:logs -- <service>`, for example
+   `corepack pnpm dev:logs -- db`.
+3. Try a normal stop: `corepack pnpm dev:down`.
+4. If a container is still in `Restarting`, `Stopping`, or `unhealthy`, run
+   `corepack pnpm dev:hard-reset`.
+
+Do not run `docker system prune` for this repo workflow. The lifecycle commands
+filter by `com.supabase.cli.project=Web_VG` so other local projects are not
+touched.
+
+## Optional Expanded Standard Content
+
+`dev:reset` loads only the minimal synthetic dev seed. If you want the fuller
+Standard slice used by importer/publication runtime checks, run this after
+`dev:reset`:
 
 ```powershell
 function Apply-RepoSql($path) {
@@ -84,47 +156,9 @@ corepack pnpm dlx tsx .\scripts\run-standard-content-expansion-wave.ts
 corepack pnpm dlx tsx .\scripts\run-standard-data-enrichment.ts
 ```
 
-## 6. Build / typecheck
-
-```powershell
-corepack pnpm typecheck
-corepack pnpm build
-```
-
-## 7. Run commands
-
-Start the web app:
-
-```powershell
-corepack pnpm dev
-```
-
-Useful direct entrypoints:
-
-```powershell
-corepack pnpm --filter @web-vg/web dev
-corepack pnpm --filter @web-vg/web build
-corepack pnpm --filter @web-vg/db run test:db
-```
-
-## 8. Common failure modes
-
-- `corepack enable` fails with `EPERM` on Windows: use `corepack pnpm ...` directly.
-- `supabase start` or `db reset --local` fails while Docker is stopped: start Docker Desktop first.
-- `apps/web/.env.local` still contains placeholder or stale Supabase values: regenerate it from `supabase status -o env`.
-- `db reset --local` fails around `user_data.public_profiles`: make sure the repo includes the migration fix in `supabase/migrations/20260418190000_add_profile_privacy_flags.sql`.
-- Catalog still shows only `Azure Vanguard ...` cards after reset: you have not yet run the optional expanded Standard content bootstrap above.
-
-## 9. What was fixed during this task
-
-- Fixed migration ordering in `20260418190000_add_profile_privacy_flags.sql` so local `supabase db reset --local` no longer fails on dependencies between `user_data.public_profiles`, social views, and `friend_relationships_requester_insert`.
-- Fixed an async dependency contract in `apps/web/src/features/profiles/server/public-profile-read.ts`.
-- Fixed an incomplete typed test fixture in `apps/web/src/features/matches/server/match-history-list-read.test.ts`.
-
-## 10. Verified local URLs
+## Useful URLs
 
 - App root: `http://127.0.0.1:3000/`
-- Catalog: `http://127.0.0.1:3000/catalog`
-- Login: `http://127.0.0.1:3000/login`
 - Supabase API: `http://127.0.0.1:54321`
 - Supabase Studio: `http://127.0.0.1:54323`
+- Mailpit: `http://127.0.0.1:54324`

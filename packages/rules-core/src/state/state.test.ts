@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import type { CardId, CardPrintingId, FormatId } from '@web-vg/shared'
+import type { CardId, CardPrintingId, FormatId, Keyword } from '@web-vg/shared'
 
 import { RulesInvariantError } from '../errors'
 import type { PieceId, PlayerId, ZoneId, ZoneSlotId } from '../index'
@@ -99,6 +99,7 @@ function makeGameState(): GameState {
         controllerPlayerId: 'player-1' as PlayerId,
       },
     ],
+    pieceStates: [],
     flags: [
       {
         key: 'mulligan-open',
@@ -114,6 +115,9 @@ describe('@web-vg/rules-core state model', () => {
     expectTypeOf<GameState['formatId']>().toEqualTypeOf<FormatId>()
     expectTypeOf<GamePieceState['cardDefinitionId']>().toEqualTypeOf<
       CardId | undefined
+    >()
+    expectTypeOf<GamePieceState['keywords']>().toEqualTypeOf<
+      readonly Keyword[] | undefined
     >()
     expectTypeOf<
       HasKey<GamePieceState, 'cardPrintingId'>

@@ -52,6 +52,14 @@ export default defineConfig({
         rootDir,
         '../../packages/legality/src/index.ts',
       ),
+      '@web-vg/match-session': path.resolve(
+        rootDir,
+        '../../packages/match-session/src/index.ts',
+      ),
+      '@web-vg/rules-core': path.resolve(
+        rootDir,
+        '../../packages/rules-core/src/index.ts',
+      ),
       '@web-vg/shared': path.resolve(
         rootDir,
         '../../packages/shared/src/index.ts',

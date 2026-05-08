@@ -39,19 +39,47 @@ If you want to use the Supabase integration foundation later, copy
 
 ## Run Locally
 
-Start the current web app shell:
+Start local Supabase, then the web app:
 
 ```bash
-corepack pnpm --filter @web-vg/web dev
+corepack pnpm dev:up
+corepack pnpm dev
 ```
 
 Open `http://localhost:3000`.
+
+The canonical local Docker workflow is documented in
+[`docs/dev/local-run.md`](docs/dev/local-run.md).
 
 ## Common Commands
 
 ```bash
 # Start the web app
-corepack pnpm --filter @web-vg/web dev
+corepack pnpm dev
+
+# Start local Supabase containers
+corepack pnpm dev:up
+
+# Stop local Supabase containers without deleting data
+corepack pnpm dev:down
+
+# Show local Supabase status
+corepack pnpm dev:status
+
+# Show local Supabase logs
+corepack pnpm dev:logs
+
+# Follow local Supabase logs
+corepack pnpm dev:logs:follow
+
+# Restart local Supabase containers
+corepack pnpm dev:restart
+
+# Reset the local DB to migrations + seed
+corepack pnpm dev:reset
+
+# Reset local Supabase data and recreate the stack
+corepack pnpm dev:hard-reset
 
 # Build the web app
 corepack pnpm --filter @web-vg/web build
@@ -121,6 +149,7 @@ Current package set:
 - `packages/importer`
 - `packages/legality`
 - `packages/rules-core`
+- `packages/match-session`
 - `packages/social`
 
 Import boundaries are lint-enforced:
@@ -159,6 +188,8 @@ Current practical coverage is strongest around:
 - social foundation and protected profile/public-profile flows
 - deck domain, deck builder UI, autosave, and metadata flows
 - deck validation core, format-aware baseline rules, and integration tests
+- gameplay engine actions/transitions/effects/format adapters
+- match room/session lifecycle and local playable match UI flow
 - deck DB persistence hardening:
   - atomic write RPC coverage
   - dense summary/detail read RPC coverage
@@ -256,8 +287,21 @@ Available now:
   - explicit `GameState` / `PlayerState` / `ZoneState` contracts
   - action, event, request, and deterministic transition foundation
   - engine/UI validation boundary with structured accepted/invalid/blocked results
-  - first format-adapter layer under `src/formats`
-  - Standard adapter baseline with ride-deck-aware legality and ride transition flow
+  - Standard, Premium, and V-Premium format adapters with shared hook support
+  - zone transfers, runtime piece flag lifecycle, draw/shuffle/mulligan,
+    ride/call, attack/boost/guard, drive/damage checks, and battle completion
+  - effect registry, resolution queue, event-triggered resolution, and first
+    core effect definitions
+  - keyword mechanics registry with baseline keyword/effect bindings
+- local gameplay prototype:
+  - `packages/match-session` room/session boundary over `rules-core`
+  - local route at `/matches/play/local`
+  - room-id route at `/matches/play/[roomId]`
+  - deterministic two-player Standard bootstrap for manual testing
+  - match board projection across main zones, hand, deck, ride deck, G deck,
+    damage, soul, drop, and bind
+  - available action panel backed by room/engine validation probes
+  - pending request handling, local event log, and closed-room feedback
 - application-layer refactoring:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries
@@ -271,8 +315,10 @@ Not implemented yet:
 - collection/binder product flow
 - notifications, recommendations, and richer social graph/product workflows
 - public/shared match history workflows and richer match-detail editing flows
-- full gameplay mechanics and effect system
-- additional format adapters beyond the current Standard baseline
+- realtime multiplayer transport, room persistence, reconnect/recovery, and
+  production match synchronization
+- full Vanguard gameplay coverage, card-specific effect library, and polished
+  product-facing match UX
 - advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the

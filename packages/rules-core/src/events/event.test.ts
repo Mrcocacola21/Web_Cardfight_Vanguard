@@ -7,6 +7,11 @@ import type {
   BattleEvent,
   BattleEventType,
   CardEventType,
+  CheckTriggerResolutionState,
+  DriveCheckedEvent,
+  EffectEvent,
+  EffectEventType,
+  EffectResolvedEvent,
   EventType,
   GameEvent,
   GameState,
@@ -24,6 +29,7 @@ import type {
   TransitionId,
   TurnEvent,
   TurnEventType,
+  ZoneTransferReason,
   ZoneId,
 } from '../index'
 import {
@@ -39,18 +45,34 @@ type HasKey<TValue, TKey extends PropertyKey> = TKey extends keyof TValue
 type ExpectedEventTypes =
   | 'match.started'
   | 'match.ended'
+  | 'mulligan.started'
+  | 'mulligan.completed'
   | 'turn.started'
   | 'turn.ended'
   | 'turn.phase_advanced'
   | 'turn.step_advanced'
   | 'piece.moved'
+  | 'piece.rested'
+  | 'piece.stood'
+  | 'piece.locked'
+  | 'piece.unlocked'
+  | 'zone.shuffled'
   | 'card.played'
   | 'card.rode'
   | 'card.called'
+  | 'cards.drawn'
   | 'battle.attack_declared'
+  | 'battle.boost_declared'
+  | 'battle.drive_checked'
+  | 'battle.damage_checked'
+  | 'battle.completed'
+  | 'battle.guard_requested'
   | 'battle.guard_declared'
+  | 'battle.guard_passed'
+  | 'choice.response_resolved'
   | 'player.counter_changed'
   | 'player.flag_changed'
+  | 'effect.resolved'
 
 const matchStartedEvent: MatchStartedEvent = {
   eventId: 'event-1' as MatchStartedEvent['eventId'],
@@ -73,11 +95,34 @@ const attackDeclaredEvent: AttackDeclaredEvent = {
     kind: 'player',
     playerId: 'player-1' as PlayerId,
   },
+  battleId: 'battle-1' as AttackDeclaredEvent['battleId'],
   attackerPieceId: 'piece-1' as PieceId,
   target: {
     kind: 'player',
     playerId: 'player-2' as PlayerId,
   },
+}
+
+const driveCheckedEvent: DriveCheckedEvent = {
+  eventId: 'event-3' as DriveCheckedEvent['eventId'],
+  type: 'battle.drive_checked',
+  sequence: 2,
+  sourceActionId: 'action-drive' as ActionId,
+  origin: {
+    kind: 'system',
+    system: 'automatic-flow',
+  },
+  battleId: 'battle-1' as DriveCheckedEvent['battleId'],
+  playerId: 'player-1' as PlayerId,
+  fromZoneId: 'zone-deck' as ZoneId,
+  toZoneId: 'zone-hand' as ZoneId,
+  revealedCards: [
+    {
+      pieceId: 'piece-3' as PieceId,
+    },
+  ],
+  triggerResolutionState:
+    'pending_future_engine' as CheckTriggerResolutionState,
 }
 
 describe('@web-vg/rules-core event model', () => {
@@ -96,15 +141,35 @@ describe('@web-vg/rules-core event model', () => {
       | 'turn.phase_advanced'
       | 'turn.step_advanced'
     >()
-    expectTypeOf<PieceEventType>().toEqualTypeOf<'piece.moved'>()
+    expectTypeOf<PieceEventType>().toEqualTypeOf<
+      | 'piece.moved'
+      | 'piece.rested'
+      | 'piece.stood'
+      | 'piece.locked'
+      | 'piece.unlocked'
+    >()
     expectTypeOf<CardEventType>().toEqualTypeOf<
-      'card.played' | 'card.rode' | 'card.called'
+      'card.played' | 'card.rode' | 'card.called' | 'cards.drawn'
     >()
     expectTypeOf<BattleEvent['type']>().toEqualTypeOf<
-      'battle.attack_declared' | 'battle.guard_declared'
+      | 'battle.attack_declared'
+      | 'battle.boost_declared'
+      | 'battle.drive_checked'
+      | 'battle.damage_checked'
+      | 'battle.completed'
+      | 'battle.guard_requested'
+      | 'battle.guard_declared'
+      | 'battle.guard_passed'
     >()
     expectTypeOf<BattleEventType>().toEqualTypeOf<
-      'battle.attack_declared' | 'battle.guard_declared'
+      | 'battle.attack_declared'
+      | 'battle.boost_declared'
+      | 'battle.drive_checked'
+      | 'battle.damage_checked'
+      | 'battle.completed'
+      | 'battle.guard_requested'
+      | 'battle.guard_declared'
+      | 'battle.guard_passed'
     >()
   })
 
@@ -115,12 +180,23 @@ describe('@web-vg/rules-core event model', () => {
     expectTypeOf<
       AttackDeclaredEvent['origin']
     >().toEqualTypeOf<PlayerEventOrigin>()
+    expectTypeOf<
+      DriveCheckedEvent['origin']
+    >().toEqualTypeOf<SystemEventOrigin>()
     expectTypeOf<PieceMovedEvent['pieceId']>().toEqualTypeOf<PieceId>()
     expectTypeOf<PieceMovedEvent['to']['zoneId']>().toEqualTypeOf<ZoneId>()
+    expectTypeOf<
+      PieceMovedEvent['reason']
+    >().toEqualTypeOf<ZoneTransferReason>()
     expectTypeOf<PhaseAdvancedEvent['sourceActionId']>().toEqualTypeOf<
       ActionId | undefined
     >()
     expectTypeOf<PlayerResourceEvent['playerId']>().toEqualTypeOf<PlayerId>()
+    expectTypeOf<EffectEvent['type']>().toEqualTypeOf<'effect.resolved'>()
+    expectTypeOf<EffectEventType>().toEqualTypeOf<'effect.resolved'>()
+    expectTypeOf<EffectResolvedEvent['sourcePieceId']>().toEqualTypeOf<
+      PieceId | undefined
+    >()
     expectTypeOf<TurnEvent['turnNumber']>().toEqualTypeOf<number>()
   })
 
@@ -142,6 +218,7 @@ describe('@web-vg/rules-core event model', () => {
     expect(isPlayerOriginatedEvent(matchStartedEvent)).toBe(false)
     expect(isPlayerOriginatedEvent(attackDeclaredEvent)).toBe(true)
     expect(isSystemOriginatedEvent(attackDeclaredEvent)).toBe(false)
+    expect(isSystemOriginatedEvent(driveCheckedEvent)).toBe(true)
   })
 
   it('keeps transition outputs sequence-compatible for ordered event results', () => {
@@ -168,6 +245,7 @@ describe('@web-vg/rules-core event model', () => {
       ],
       zones: [],
       pieces: [],
+      pieceStates: [],
       flags: [],
       pendingRequests: [],
     }
@@ -176,11 +254,13 @@ describe('@web-vg/rules-core event model', () => {
       createTransitionResult(transitionId, state, [
         matchStartedEvent,
         attackDeclaredEvent,
+        driveCheckedEvent,
       ]),
     ).not.toThrow()
 
     expect(() =>
       createTransitionResult(transitionId, state, [
+        driveCheckedEvent,
         attackDeclaredEvent,
         matchStartedEvent,
       ]),

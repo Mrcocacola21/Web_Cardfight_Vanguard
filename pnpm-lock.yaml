@@ -77,6 +77,12 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.102.1
         version: 2.102.1
+      '@web-vg/match-session':
+        specifier: workspace:*
+        version: link:../../packages/match-session
+      '@web-vg/rules-core':
+        specifier: workspace:*
+        version: link:../../packages/rules-core
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -165,6 +171,15 @@ importers:
 
   packages/legality:
     dependencies:
+      '@web-vg/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/match-session:
+    dependencies:
+      '@web-vg/rules-core':
+        specifier: workspace:*
+        version: link:../rules-core
       '@web-vg/shared':
         specifier: workspace:*
         version: link:../shared

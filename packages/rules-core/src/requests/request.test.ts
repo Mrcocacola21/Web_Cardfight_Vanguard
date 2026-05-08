@@ -10,9 +10,13 @@ import type {
   ChooseTargetRequest,
   ChooseZoneRequest,
   ConfirmBooleanRequest,
+  GuardChoiceRequest,
+  GuardChoiceResponse,
   GameChoiceRequest,
   GameChoiceResponse,
   GameState,
+  MulliganChoiceRequest,
+  MulliganChoiceResponse,
   PassChoiceResponse,
   PieceId,
   PlayerId,
@@ -43,6 +47,8 @@ type ExpectedRequestTypes =
   | 'choose.target'
   | 'choose.zone'
   | 'choose.option'
+  | 'battle.guard_select'
+  | 'mulligan.select_cards'
   | 'confirm.boolean'
 
 type ExpectedResponseTypes =
@@ -50,6 +56,8 @@ type ExpectedResponseTypes =
   | 'answer.target'
   | 'answer.zone'
   | 'answer.option'
+  | 'answer.guard'
+  | 'answer.mulligan'
   | 'answer.boolean'
   | 'answer.pass'
 
@@ -68,28 +76,6 @@ function makeChoosePiecesRequest(): ChoosePiecesRequest {
       relatedPieceIds: ['piece-1' as PieceId],
       relatedZoneIds: ['zone-hand' as ZoneId],
     },
-  }
-}
-
-function makeChooseTargetRequest(): ChooseTargetRequest {
-  return {
-    requestId: 'request-target-1' as RequestId,
-    type: 'choose.target',
-    responderPlayerId: 'player-1' as PlayerId,
-    purpose: 'target',
-    visibility: 'public',
-    minSelections: 1,
-    maxSelections: 1,
-    eligibleTargets: [
-      {
-        kind: 'piece',
-        pieceId: 'piece-2' as PieceId,
-      },
-      {
-        kind: 'player',
-        playerId: 'player-2' as PlayerId,
-      },
-    ],
   }
 }
 
@@ -114,6 +100,51 @@ function makeChooseZoneRequest(): ChooseZoneRequest {
   }
 }
 
+function makeMulliganRequest(): MulliganChoiceRequest {
+  return {
+    requestId: 'request-mulligan-1' as RequestId,
+    type: 'mulligan.select_cards',
+    responderPlayerId: 'player-1' as PlayerId,
+    purpose: 'rule',
+    visibility: 'responder-only',
+    handZoneId: 'zone-hand' as ZoneId,
+    deckZoneId: 'zone-deck' as ZoneId,
+    minSelections: 0,
+    maxSelections: 2,
+    eligiblePieceIds: ['piece-1' as PieceId, 'piece-3' as PieceId],
+    currentDeckPieceIds: ['piece-4' as PieceId],
+    context: {
+      relatedZoneIds: ['zone-hand' as ZoneId, 'zone-deck' as ZoneId],
+    },
+  }
+}
+
+function makeGuardRequest(): GuardChoiceRequest {
+  return {
+    requestId: 'request-guard-1' as RequestId,
+    type: 'battle.guard_select',
+    responderPlayerId: 'player-1' as PlayerId,
+    purpose: 'battle',
+    visibility: 'responder-only',
+    allowPass: true,
+    battleId: 'battle-1' as GuardChoiceRequest['battleId'],
+    handZoneId: 'zone-hand' as ZoneId,
+    guardZoneId: 'zone-guardian' as ZoneId,
+    attackerPieceId: 'piece-2' as PieceId,
+    minSelections: 0,
+    maxSelections: 2,
+    eligiblePieceIds: ['piece-1' as PieceId, 'piece-3' as PieceId],
+    context: {
+      relatedPieceIds: [
+        'piece-1' as PieceId,
+        'piece-2' as PieceId,
+        'piece-3' as PieceId,
+      ],
+      relatedZoneIds: ['zone-hand' as ZoneId, 'zone-guardian' as ZoneId],
+    },
+  }
+}
+
 function makePendingRequestState(
   pendingRequests: readonly GameChoiceRequest[],
 ): GameState {
@@ -134,7 +165,12 @@ function makePendingRequestState(
         playerId: 'player-1' as PlayerId,
         seat: 0,
         status: 'active',
-        ownedZoneIds: ['zone-hand' as ZoneId, 'zone-field' as ZoneId],
+        ownedZoneIds: [
+          'zone-hand' as ZoneId,
+          'zone-field' as ZoneId,
+          'zone-deck' as ZoneId,
+          'zone-guardian' as ZoneId,
+        ],
         counters: [],
         flags: [],
       },
@@ -162,6 +198,25 @@ function makePendingRequestState(
           {
             pieceId: 'piece-1' as PieceId,
           },
+          {
+            pieceId: 'piece-3' as PieceId,
+          },
+        ],
+      },
+      {
+        zoneId: 'zone-deck' as ZoneId,
+        kind: 'deck',
+        scope: 'player',
+        ownerPlayerId: 'player-1' as PlayerId,
+        visibility: 'owner-private',
+        layout: {
+          ordering: 'ordered',
+          occupancy: 'multi',
+        },
+        occupants: [
+          {
+            pieceId: 'piece-4' as PieceId,
+          },
         ],
       },
       {
@@ -174,6 +229,18 @@ function makePendingRequestState(
           ordering: 'unordered',
           occupancy: 'slotted',
           slotIds: ['slot-left' as ZoneSlotId, 'slot-right' as ZoneSlotId],
+        },
+        occupants: [],
+      },
+      {
+        zoneId: 'zone-guardian' as ZoneId,
+        kind: 'guardian_circle',
+        scope: 'player',
+        ownerPlayerId: 'player-1' as PlayerId,
+        visibility: 'public',
+        layout: {
+          ordering: 'unordered',
+          occupancy: 'multi',
         },
         occupants: [],
       },
@@ -209,7 +276,22 @@ function makePendingRequestState(
         ownerPlayerId: 'player-2' as PlayerId,
         controllerPlayerId: 'player-2' as PlayerId,
       },
+      {
+        pieceId: 'piece-3' as PieceId,
+        kind: 'card',
+        cardDefinitionId: 'card-3' as CardId,
+        ownerPlayerId: 'player-1' as PlayerId,
+        controllerPlayerId: 'player-1' as PlayerId,
+      },
+      {
+        pieceId: 'piece-4' as PieceId,
+        kind: 'card',
+        cardDefinitionId: 'card-4' as CardId,
+        ownerPlayerId: 'player-1' as PlayerId,
+        controllerPlayerId: 'player-1' as PlayerId,
+      },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests,
   }
@@ -289,6 +371,39 @@ describe('@web-vg/rules-core choice/request model', () => {
     ).not.toThrow()
   })
 
+  it('validates mulligan request-response pairs with deterministic shuffled deck order', () => {
+    const request = makeMulliganRequest()
+    const response: MulliganChoiceResponse = {
+      requestId: request.requestId,
+      responderPlayerId: request.responderPlayerId,
+      type: 'answer.mulligan',
+      returnedPieceIds: ['piece-1' as PieceId],
+      shuffledDeckPieceIds: ['piece-1' as PieceId, 'piece-4' as PieceId],
+    }
+
+    expect(() => assertGameChoiceRequestInvariant(request)).not.toThrow()
+    expect(() => assertGameChoiceResponseInvariant(response)).not.toThrow()
+    expect(() =>
+      assertChoiceResponseMatchesRequest(request, response),
+    ).not.toThrow()
+  })
+
+  it('validates guard request-response pairs as engine-owned battle choices', () => {
+    const request = makeGuardRequest()
+    const response: GuardChoiceResponse = {
+      requestId: request.requestId,
+      responderPlayerId: request.responderPlayerId,
+      type: 'answer.guard',
+      selectedPieceIds: ['piece-1' as PieceId],
+    }
+
+    expect(() => assertGameChoiceRequestInvariant(request)).not.toThrow()
+    expect(() => assertGameChoiceResponseInvariant(response)).not.toThrow()
+    expect(() =>
+      assertChoiceResponseMatchesRequest(request, response),
+    ).not.toThrow()
+  })
+
   it('rejects responses that do not satisfy request constraints', () => {
     const request = makeChooseZoneRequest()
     const invalidSlotResponse: GameChoiceResponse = {
@@ -323,21 +438,19 @@ describe('@web-vg/rules-core choice/request model', () => {
   })
 
   it('allows pending requests to live inside game state and validates their state references', () => {
-    const request = makeChooseTargetRequest()
+    const request = makeMulliganRequest()
+    const guardRequest = makeGuardRequest()
     const validState = makePendingRequestState([request])
     const invalidState = makePendingRequestState([
       {
         ...request,
-        eligibleTargets: [
-          {
-            kind: 'piece',
-            pieceId: 'piece-missing' as PieceId,
-          },
-        ],
+        eligiblePieceIds: ['piece-missing' as PieceId],
       },
     ])
+    const validGuardState = makePendingRequestState([guardRequest])
 
     expect(() => assertGameStateInvariant(validState)).not.toThrow()
+    expect(() => assertGameStateInvariant(validGuardState)).not.toThrow()
     expect(() => assertGameStateInvariant(invalidState)).toThrow(
       RulesInvariantError,
     )

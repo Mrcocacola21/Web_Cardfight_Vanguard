@@ -4,6 +4,21 @@ import type { CollectionInventoryApplicationServices } from './collection-invent
 import type { StoredCollectionInventoryItem } from './collection-inventory-repository'
 import { listCollectionInventoryViewUseCase } from './collection-inventory-use-cases'
 
+type CollectionInventoryPrinting = NonNullable<
+  StoredCollectionInventoryItem['printing']
+>
+type CollectionInventoryProduct = NonNullable<
+  CollectionInventoryPrinting['product']
+>
+type CollectionInventoryCard = NonNullable<CollectionInventoryPrinting['card']>
+type CollectionInventoryPrintingFixture = Omit<
+  Partial<CollectionInventoryPrinting>,
+  'product' | 'card'
+> & {
+  readonly product?: Partial<CollectionInventoryProduct> | null
+  readonly card?: Partial<CollectionInventoryCard> | null
+}
+
 describe('listCollectionInventoryViewUseCase', () => {
   it('returns owner-scoped inventory totals and keeps distinct printings distinct', async () => {
     const services = createServices([
@@ -290,7 +305,7 @@ function createItem(input?: {
   readonly cardPrintingId?: string
   readonly quantity?: number
   readonly updatedAt?: string
-  readonly printing?: StoredCollectionInventoryItem['printing']
+  readonly printing?: CollectionInventoryPrintingFixture | null
   readonly catalogState?: 'ready' | 'stale'
 }) {
   return {
@@ -302,39 +317,59 @@ function createItem(input?: {
     updatedAt: input?.updatedAt ?? '2026-04-22T11:00:00.000Z',
     catalogState: input?.catalogState ?? 'ready',
     printing:
-      input?.printing === undefined
-        ? {
-            id: input?.cardPrintingId ?? 'printing-1',
-            printingKey: 'printing.default',
-            collectorNumber: '001',
-            rarity: 'C',
-            localeCode: 'en',
-            regionCode: 'en',
-            printedName: 'Default Card',
-            artVariant: null,
-            isAlternateArt: false,
-            isPromoVariant: false,
-            product: {
-              id: 'product-1',
-              canonicalKey: 'product.default',
-              officialCode: 'D-BT01',
-              name: 'Default Set',
-              productCategory: 'booster',
-              productKind: 'main',
-              releaseDate: '2021-01-01',
-              regionCode: 'en',
-            },
-            card: {
-              id: 'card-1',
-              canonicalKey: 'card.default',
-              name: 'Default Card',
-              grade: 3,
-              cardType: 'normal-unit',
-              nation: 'Dragon Empire',
-              clan: null,
-              triggerType: null,
-            },
-          }
-        : input.printing,
+      input?.printing === null
+        ? null
+        : createPrintingFixture(input?.printing, input?.cardPrintingId),
+  }
+}
+
+function createPrintingFixture(
+  input?: CollectionInventoryPrintingFixture,
+  fallbackPrintingId = 'printing-1',
+): CollectionInventoryPrinting {
+  return {
+    id: input?.id ?? fallbackPrintingId,
+    printingKey: input?.printingKey ?? 'printing.default',
+    collectorNumber: input?.collectorNumber ?? '001',
+    rarity: input?.rarity ?? 'C',
+    localeCode: input?.localeCode ?? 'en',
+    regionCode: input?.regionCode ?? 'en',
+    printedName: input?.printedName ?? 'Default Card',
+    artVariant: input?.artVariant ?? null,
+    isAlternateArt: input?.isAlternateArt ?? false,
+    isPromoVariant: input?.isPromoVariant ?? false,
+    product:
+      input?.product === null ? null : createProductFixture(input?.product),
+    card: input?.card === null ? null : createCardFixture(input?.card),
+  }
+}
+
+function createProductFixture(
+  input?: Partial<CollectionInventoryProduct>,
+): CollectionInventoryProduct {
+  return {
+    id: input?.id ?? 'product-1',
+    canonicalKey: input?.canonicalKey ?? 'product.default',
+    officialCode: input?.officialCode ?? 'D-BT01',
+    name: input?.name ?? 'Default Set',
+    productCategory: input?.productCategory ?? 'booster',
+    productKind: input?.productKind ?? 'main',
+    releaseDate: input?.releaseDate ?? '2021-01-01',
+    regionCode: input?.regionCode ?? 'en',
+  }
+}
+
+function createCardFixture(
+  input?: Partial<CollectionInventoryCard>,
+): CollectionInventoryCard {
+  return {
+    id: input?.id ?? 'card-1',
+    canonicalKey: input?.canonicalKey ?? 'card.default',
+    name: input?.name ?? 'Default Card',
+    grade: input?.grade ?? 3,
+    cardType: input?.cardType ?? 'normal-unit',
+    nation: input?.nation ?? 'Dragon Empire',
+    clan: input?.clan ?? null,
+    triggerType: input?.triggerType ?? null,
   }
 }

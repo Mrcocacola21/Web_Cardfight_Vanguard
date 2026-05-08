@@ -9,6 +9,7 @@ import {
   type BlockedTransitionCode,
   type GameChoiceResponseSubmission,
   type InvalidTransitionCode,
+  type TransitionTimingWindow,
   type TransitionResult,
 } from '../transitions'
 
@@ -33,6 +34,7 @@ interface EngineDispatchResultBase<TStatus extends EngineDispatchStatus> {
   readonly transitionId: TransitionId
   readonly state: GameState
   readonly events: readonly GameEvent[]
+  readonly timingWindows: readonly TransitionTimingWindow[]
   readonly pendingRequests: readonly PendingGameChoiceRequest[]
 }
 
@@ -84,6 +86,7 @@ export function createEngineDispatchResult(
         transitionId: transitionResult.transitionId,
         state: transitionResult.nextState,
         events: transitionResult.events,
+        timingWindows: transitionResult.timingWindows,
         pendingRequests: transitionResult.pendingRequests,
       }
     case 'invalid':
@@ -92,6 +95,7 @@ export function createEngineDispatchResult(
         transitionId: transitionResult.transitionId,
         state: transitionResult.currentState,
         events: transitionResult.events,
+        timingWindows: transitionResult.timingWindows,
         pendingRequests: transitionResult.pendingRequests,
         code: transitionResult.code,
         message: transitionResult.message,
@@ -102,6 +106,7 @@ export function createEngineDispatchResult(
         transitionId: transitionResult.transitionId,
         state: transitionResult.currentState,
         events: transitionResult.events,
+        timingWindows: transitionResult.timingWindows,
         pendingRequests: transitionResult.pendingRequests,
         code: transitionResult.code,
         message: transitionResult.message,

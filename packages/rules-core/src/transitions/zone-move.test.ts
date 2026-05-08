@@ -151,6 +151,7 @@ function makeZoneMoveState(
           'player-2' as GameState['players'][number]['playerId'],
       },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests,
   }
@@ -184,6 +185,7 @@ describe('@web-vg/rules-core zone move scenarios', () => {
         to: {
           zoneId: 'zone-drop' as GameState['zones'][number]['zoneId'],
         },
+        reason: 'retire',
       },
       expectedRevision: 2,
     }
@@ -219,6 +221,10 @@ describe('@web-vg/rules-core zone move scenarios', () => {
     expect(firstResult.events.map((event) => event.type)).toEqual([
       'piece.moved',
     ])
+    expect(firstResult.events[0]).toMatchObject({
+      type: 'piece.moved',
+      reason: 'retire',
+    })
   })
 
   it('rejects moves to an occupied slot without mutating the current state', () => {
@@ -239,6 +245,7 @@ describe('@web-vg/rules-core zone move scenarios', () => {
           zoneId: 'zone-field' as GameState['zones'][number]['zoneId'],
           slotId: 'slot-vanguard' as ZoneSlotId,
         },
+        reason: 'generic',
       },
       expectedRevision: 2,
     })
@@ -275,6 +282,7 @@ describe('@web-vg/rules-core zone move scenarios', () => {
           zoneId: 'zone-field' as GameState['zones'][number]['zoneId'],
           slotId: 'slot-left' as ZoneSlotId,
         },
+        reason: 'generic',
       },
     })
 
@@ -309,6 +317,7 @@ describe('@web-vg/rules-core zone move scenarios', () => {
         to: {
           zoneId: 'zone-drop' as GameState['zones'][number]['zoneId'],
         },
+        reason: 'retire',
       },
     })
 

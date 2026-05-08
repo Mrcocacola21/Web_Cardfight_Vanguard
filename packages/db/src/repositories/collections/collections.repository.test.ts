@@ -800,10 +800,17 @@ describe('collections repository', () => {
           expect(query.onConflict).toBe(
             'owner_profile_id,card_printing_id,preference_kind',
           )
-          expect(query.values?.owner_profile_id).toBe('profile-1')
-          expect(query.values?.card_printing_id).toBe('printing-1')
-          expect(query.values?.preference_kind).toBe('wishlist')
-          expect(typeof query.values?.updated_at).toBe('string')
+          const values = query.values as {
+            readonly owner_profile_id?: unknown
+            readonly card_printing_id?: unknown
+            readonly preference_kind?: unknown
+            readonly updated_at?: unknown
+          }
+
+          expect(values.owner_profile_id).toBe('profile-1')
+          expect(values.card_printing_id).toBe('printing-1')
+          expect(values.preference_kind).toBe('wishlist')
+          expect(typeof values.updated_at).toBe('string')
         },
         response: {
           data: {

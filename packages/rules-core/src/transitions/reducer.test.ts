@@ -48,6 +48,7 @@ function makeReadyState(): GameState {
         status: 'ready',
         ownedZoneIds: [
           'zone-hand' as GameState['players'][number]['ownedZoneIds'][number],
+          'zone-vanguard' as GameState['players'][number]['ownedZoneIds'][number],
           'zone-field' as GameState['players'][number]['ownedZoneIds'][number],
           'zone-drop' as GameState['players'][number]['ownedZoneIds'][number],
         ],
@@ -83,26 +84,33 @@ function makeReadyState(): GameState {
         ],
       },
       {
+        zoneId: 'zone-vanguard' as GameState['zones'][number]['zoneId'],
+        kind: 'vanguard_circle',
+        scope: 'player',
+        ownerPlayerId: 'player-1' as GameState['players'][number]['playerId'],
+        visibility: 'public',
+        layout: {
+          ordering: 'unordered',
+          occupancy: 'single',
+        },
+        occupants: [
+          {
+            pieceId: 'piece-vanguard' as GameState['pieces'][number]['pieceId'],
+          },
+        ],
+      },
+      {
         zoneId: 'zone-field' as GameState['zones'][number]['zoneId'],
-        kind: 'field',
+        kind: 'rear_guard_circle',
         scope: 'player',
         ownerPlayerId: 'player-1' as GameState['players'][number]['playerId'],
         visibility: 'public',
         layout: {
           ordering: 'unordered',
           occupancy: 'slotted',
-          slotIds: [
-            'slot-vanguard' as ZoneSlotId,
-            'slot-left' as ZoneSlotId,
-            'slot-right' as ZoneSlotId,
-          ],
+          slotIds: ['slot-left' as ZoneSlotId, 'slot-right' as ZoneSlotId],
         },
-        occupants: [
-          {
-            pieceId: 'piece-vanguard' as GameState['pieces'][number]['pieceId'],
-            slotId: 'slot-vanguard' as ZoneSlotId,
-          },
-        ],
+        occupants: [],
       },
       {
         zoneId: 'zone-drop' as GameState['zones'][number]['zoneId'],
@@ -118,7 +126,7 @@ function makeReadyState(): GameState {
       },
       {
         zoneId: 'zone-opponent-field' as GameState['zones'][number]['zoneId'],
-        kind: 'field',
+        kind: 'rear_guard_circle',
         scope: 'player',
         ownerPlayerId: 'player-2' as GameState['players'][number]['playerId'],
         visibility: 'public',
@@ -159,6 +167,7 @@ function makeReadyState(): GameState {
         cardDefinitionId: 'card-3' as CardId,
       },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests: [],
   }
@@ -299,6 +308,7 @@ describe('@web-vg/rules-core reducer / transition model', () => {
           to: {
             zoneId: 'zone-drop' as GameState['zones'][number]['zoneId'],
           },
+          reason: 'retire',
         },
       },
     })
@@ -327,6 +337,7 @@ describe('@web-vg/rules-core reducer / transition model', () => {
       throw new Error('Expected a piece.moved event from zone.move_piece.')
     }
 
+    expect(movedEvent.reason).toBe('retire')
     expect(movedEvent.to).toEqual({
       zoneId: 'zone-drop' as GameState['zones'][number]['zoneId'],
       position: 0,
@@ -367,6 +378,10 @@ describe('@web-vg/rules-core reducer / transition model', () => {
       'piece.moved',
       'card.called',
     ])
+    expect(appliedResult.events[0]).toMatchObject({
+      type: 'piece.moved',
+      reason: 'call',
+    })
   })
 
   it('returns blocked when the engine is waiting for a pending request', () => {
@@ -409,6 +424,14 @@ describe('@web-vg/rules-core reducer / transition model', () => {
     expect(appliedResult.nextState.revision).toBe(1)
     expect(appliedResult.nextState.pendingRequests).toEqual([])
     expect(appliedResult.nextState.status).toBe('in_progress')
+    expect(appliedResult.events).toEqual([
+      expect.objectContaining({
+        type: 'choice.response_resolved',
+        requestId: request.requestId,
+        responseType: 'answer.boolean',
+        outcome: 'boolean_confirmed',
+      }),
+    ])
   })
 
   it('returns a structured invalid result for mismatched choice responses', () => {

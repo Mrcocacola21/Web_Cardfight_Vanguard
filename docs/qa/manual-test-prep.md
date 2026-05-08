@@ -9,8 +9,8 @@ cd C:\codes\Web_VG
 
 corepack pnpm install
 
-corepack pnpm dlx supabase@2.88.0 start
-corepack pnpm dlx supabase@2.88.0 db reset --local
+corepack pnpm dev:up
+corepack pnpm dev:reset
 
 $supabaseEnv = corepack pnpm dlx supabase@2.88.0 status -o env
 $apiUrl = ($supabaseEnv | Select-String '^API_URL=').Line.Split('"')[1]
@@ -38,8 +38,9 @@ corepack pnpm build
 corepack pnpm dev
 ```
 
-For a pristine rerun, repeat `db reset --local`, regenerate `apps/web/.env.local`,
-reapply the expansion/enrichment commands, then restart `pnpm dev`.
+For a pristine rerun, repeat `corepack pnpm dev:reset`, regenerate
+`apps/web/.env.local`, reapply the expansion/enrichment commands, then restart
+`pnpm dev`.
 
 ## 2. Env file location
 
@@ -54,7 +55,7 @@ Required values for local manual testing:
 
 ## 3. Data preparation steps
 
-`db reset --local` gives the synthetic baseline only:
+`corepack pnpm dev:reset` gives the synthetic baseline only:
 
 - 3 formats
 - 4 products
@@ -121,8 +122,8 @@ Useful direct catalog URLs after the Standard expansion:
 
 ## 6. Common startup failures
 
-- Docker Desktop is not running: `supabase start` and `supabase db reset --local`
-  will fail until the Docker engine is healthy.
+- Docker Desktop is not running: `corepack pnpm dev:up` and
+  `corepack pnpm dev:reset` will fail until the Docker engine is healthy.
 - `apps/web/.env.local` still contains stale values: regenerate it from
   `supabase status -o env`.
 - Port `3000` is already occupied: stop the previous dev server or update
@@ -133,6 +134,10 @@ Useful direct catalog URLs after the Standard expansion:
   expansion/enrichment commands were skipped.
 - Reusing the same test emails after a previous run: either use new email
   suffixes or reset the local DB again.
+- A Supabase container is stuck in `Restarting`, `Stopping`, or `unhealthy`:
+  run `corepack pnpm dev:status`, inspect `corepack pnpm dev:logs`, then use
+  `corepack pnpm dev:hard-reset` if a normal `corepack pnpm dev:down` does not
+  recover it.
 
 ## 7. What was fixed during this task
 

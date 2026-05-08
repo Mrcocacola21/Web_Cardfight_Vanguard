@@ -1,5 +1,5 @@
 import type { GameAction, GameActionSubmission } from '../actions'
-import type { TransitionId } from '../contracts'
+import type { BattleId, PieceId, RequestId, TransitionId } from '../contracts'
 import { assertRulesInvariant } from '../errors'
 import type { GameEvent } from '../events'
 import type { GameChoiceResponse, PendingGameChoiceRequest } from '../requests'
@@ -7,6 +7,17 @@ import { assertGameStateInvariant, type GameState } from '../state'
 
 export type TransitionRequestKind = 'action' | 'choice_response'
 export type TransitionResultStatus = 'applied' | 'invalid' | 'blocked'
+export type EffectTimingWindow = 'before' | 'on' | 'after'
+export type EffectTimingPoint =
+  | 'card.ride'
+  | 'zone.transfer'
+  | 'choice.response'
+  | 'battle.attack'
+  | 'battle.boost'
+  | 'battle.guard'
+  | 'battle.drive_check'
+  | 'battle.damage_check'
+  | 'battle.completion'
 
 export type InvalidTransitionCode =
   | 'revision_mismatch'
@@ -25,6 +36,16 @@ export interface GameChoiceResponseSubmission<
 > {
   readonly response: TResponse
   readonly expectedRevision?: number
+}
+
+export interface TransitionTimingWindow {
+  readonly sequence: number
+  readonly window: EffectTimingWindow
+  readonly point: EffectTimingPoint
+  readonly relatedEventSequence?: number
+  readonly battleId?: BattleId
+  readonly pieceId?: PieceId
+  readonly requestId?: RequestId
 }
 
 export interface ActionTransitionInput<
@@ -51,6 +72,7 @@ interface TransitionResultBase {
   readonly transitionId: TransitionId
   readonly inputKind: TransitionRequestKind
   readonly events: readonly GameEvent[]
+  readonly timingWindows: readonly TransitionTimingWindow[]
   readonly pendingRequests: readonly PendingGameChoiceRequest[]
 }
 
@@ -142,9 +164,13 @@ export function createTransitionResult(
   transitionId: TransitionId,
   nextState: GameState,
   events: readonly GameEvent[] = [],
-  options: { readonly inputKind?: TransitionRequestKind } = {},
+  options: {
+    readonly inputKind?: TransitionRequestKind
+    readonly timingWindows?: readonly TransitionTimingWindow[]
+  } = {},
 ): AppliedTransitionResult {
   assertTransitionEventsAreOrdered(events)
+  assertTransitionTimingWindowsAreOrdered(options.timingWindows ?? [])
   assertRulesInvariant(
     Number.isSafeInteger(nextState.revision) && nextState.revision >= 0,
     'Game state revisions must be non-negative safe integers.',
@@ -157,6 +183,7 @@ export function createTransitionResult(
     status: 'applied',
     nextState,
     events,
+    timingWindows: options.timingWindows ?? [],
     pendingRequests: nextState.pendingRequests,
   }
 }
@@ -176,6 +203,7 @@ export function createInvalidTransitionResult(
     code,
     message,
     events: [],
+    timingWindows: [],
     pendingRequests: currentState.pendingRequests,
   }
 }
@@ -204,6 +232,7 @@ export function createBlockedTransitionResult(
     message,
     blockingRequests,
     events: [],
+    timingWindows: [],
     pendingRequests: currentState.pendingRequests,
   }
 }
@@ -226,6 +255,60 @@ export function isBlockedTransitionResult(
   return result.status === 'blocked'
 }
 
+export function createTransitionTimingWindowTriplet(
+  point: EffectTimingPoint,
+  options: {
+    readonly startingSequence?: number
+    readonly relatedEventSequence?: number
+    readonly battleId?: BattleId
+    readonly pieceId?: PieceId
+    readonly requestId?: RequestId
+  } = {},
+): readonly TransitionTimingWindow[] {
+  const startingSequence = options.startingSequence ?? 0
+  const base = {
+    point,
+    ...(options.relatedEventSequence === undefined
+      ? {}
+      : {
+          relatedEventSequence: options.relatedEventSequence,
+        }),
+    ...(options.battleId === undefined
+      ? {}
+      : {
+          battleId: options.battleId,
+        }),
+    ...(options.pieceId === undefined
+      ? {}
+      : {
+          pieceId: options.pieceId,
+        }),
+    ...(options.requestId === undefined
+      ? {}
+      : {
+          requestId: options.requestId,
+        }),
+  }
+
+  return [
+    {
+      ...base,
+      sequence: startingSequence,
+      window: 'before',
+    },
+    {
+      ...base,
+      sequence: startingSequence + 1,
+      window: 'on',
+    },
+    {
+      ...base,
+      sequence: startingSequence + 2,
+      window: 'after',
+    },
+  ]
+}
+
 function assertTransitionEventsAreOrdered(events: readonly GameEvent[]): void {
   let previousSequence = -1
   const eventIds = new Set<string>()
@@ -246,5 +329,24 @@ function assertTransitionEventsAreOrdered(events: readonly GameEvent[]): void {
 
     previousSequence = event.sequence
     eventIds.add(event.eventId)
+  }
+}
+
+function assertTransitionTimingWindowsAreOrdered(
+  timingWindows: readonly TransitionTimingWindow[],
+): void {
+  let previousSequence = -1
+
+  for (const timingWindow of timingWindows) {
+    assertRulesInvariant(
+      Number.isSafeInteger(timingWindow.sequence) && timingWindow.sequence >= 0,
+      'Transition timing windows must have non-negative safe-integer sequence numbers.',
+    )
+    assertRulesInvariant(
+      timingWindow.sequence > previousSequence,
+      'Transition timing windows must be provided in strictly increasing sequence order.',
+    )
+
+    previousSequence = timingWindow.sequence
   }
 }

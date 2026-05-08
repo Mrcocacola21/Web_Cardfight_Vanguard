@@ -3270,13 +3270,10 @@ async function main() {
   console.log('Starting DB checkpoint verification...')
   const runDeckBoundaryOnly = process.argv.slice(2).includes('--suite=decks')
 
-  runCorepack(
-    ['pnpm', 'dlx', `supabase@${cliVersion}`, 'start'],
-    'Failed to start local Supabase services.\n',
-  )
+  runCorepack(['pnpm', 'dev:up'], 'Failed to start local Supabase services.\n')
 
   runCorepack(
-    ['pnpm', 'dlx', `supabase@${cliVersion}`, 'db', 'reset', '--local'],
+    ['pnpm', 'dev:reset'],
     'Failed to reset local Supabase database.\n',
   )
 

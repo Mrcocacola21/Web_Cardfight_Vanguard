@@ -209,6 +209,7 @@ function makeStandardState(options: StandardStateOptions = {}): GameState {
         cardDefinitionId: 'card-opponent-vanguard' as CardId,
       },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests,
   }

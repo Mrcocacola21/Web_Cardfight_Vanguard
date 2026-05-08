@@ -47,6 +47,7 @@
       "@web-vg/decks": ["packages/decks/src/index.ts"],
       "@web-vg/importer": ["packages/importer/src/index.ts"],
       "@web-vg/legality": ["packages/legality/src/index.ts"],
+      "@web-vg/match-session": ["packages/match-session/src/index.ts"],
       "@web-vg/rules-core": ["packages/rules-core/src/index.ts"],
       "@web-vg/shared": ["packages/shared/src/index.ts"],
       "@web-vg/social": ["packages/social/src/index.ts"],

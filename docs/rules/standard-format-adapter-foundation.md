@@ -44,6 +44,8 @@ Premium and Premium are added.
 The shared format layer now defines a small adapter contract:
 
 - `formatId`
+- `constructionBasis`
+- `gameplayMarkers`
 - `supportedActionTypes`
 - `dispatch(currentState, command)`
 
@@ -60,14 +62,12 @@ The Standard adapter lives inside `packages/rules-core/src/formats/standard`.
 It composes with the core through:
 
 - the shared `EngineCommand` / `EngineDispatchResult` boundary
-- generic transition helpers such as revision checks and transition-result
-  constructors
-- a shared pure zone-relocation primitive used by both the reducer foundation
-  and the Standard ride transition
+- format guard hooks for reserved zone semantics
+- delegation to the core reducer for generic lifecycle and board mechanics
 
 The composition rule is simple:
 
-- Standard-specific logic handles only Standard-specific branches
+- Standard-specific logic handles only Standard-specific gates
 - all unchanged commands delegate back to the generic engine boundary
 
 ## 6. Which Standard-Specific Semantics Are Implemented Now
@@ -79,13 +79,9 @@ subset:
 - Standard action support declaration through `STANDARD_FORMAT_ACTION_TYPES`
 - Standard legality gate: `card.call` cannot use the ride deck as a normal call
   source or destination
-- Standard custom transition: `card.ride`
-  - requires a Standard ride deck zone
-  - requires a Standard vanguard circle zone
-  - requires a Standard soul zone
-  - moves the previous vanguard to soul
-  - moves the selected ride-deck card to the vanguard circle
-  - emits `piece.moved` and `card.rode` facts
+- Standard ride policy over the core `card.ride` mechanic
+  - requires the ride source to be the Standard ride deck
+  - reuses the core vanguard-to-soul handling and emitted `card.rode` facts
 
 This is enough to prove the adapter pattern without pretending Standard
 mechanics are broadly implemented.

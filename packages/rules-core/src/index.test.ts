@@ -6,6 +6,7 @@ import * as entry from './index'
 import type {
   EngineCommand,
   EngineDispatchResult,
+  EffectDefinitionId,
   GameActionSubmission,
   GameChoiceRequest,
   GameEvent,
@@ -95,6 +96,7 @@ function makeGameState(revision = 0): GameState {
         cardDefinitionId: 'card-1' as CardId,
       },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests: [],
   }
@@ -123,10 +125,18 @@ describe('@web-vg/rules-core', () => {
     expect(entry.advanceGameStateRevision).toBeTypeOf('function')
     expect(entry.assertChoiceResponseMatchesRequest).toBeTypeOf('function')
     expect(entry.createTransitionResult).toBeTypeOf('function')
+    expect(entry.createEffectRegistry).toBeTypeOf('function')
+    expect(entry.createKeywordMechanicsRegistry).toBeTypeOf('function')
     expect(entry.dispatchEngineCommand).toBeTypeOf('function')
+    expect(entry.dispatchPremiumCommand).toBeTypeOf('function')
     expect(entry.dispatchStandardCommand).toBeTypeOf('function')
+    expect(entry.dispatchVPremiumCommand).toBeTypeOf('function')
     expect(entry.reduceGameState).toBeTypeOf('function')
+    expect(entry.coreEffectRegistry.size).toBeGreaterThan(0)
+    expect(entry.keywordMechanicsRegistry.size).toBeGreaterThan(0)
+    expect(entry.premiumFormatAdapter).toBeDefined()
     expect(entry.standardFormatAdapter).toBeDefined()
+    expect(entry.vPremiumFormatAdapter).toBeDefined()
   })
 
   it('keeps gameplay contracts aligned with shared identifiers', () => {
@@ -147,7 +157,16 @@ describe('@web-vg/rules-core', () => {
       TransitionResult['events'][number]
     >().toEqualTypeOf<GameEvent>()
     expectTypeOf<
+      (typeof entry.CORE_EFFECT_DEFINITIONS)[number]['id']
+    >().toEqualTypeOf<EffectDefinitionId>()
+    expectTypeOf<
+      typeof entry.premiumFormatAdapter.formatId
+    >().toEqualTypeOf<FormatId>()
+    expectTypeOf<
       typeof entry.standardFormatAdapter.formatId
+    >().toEqualTypeOf<FormatId>()
+    expectTypeOf<
+      typeof entry.vPremiumFormatAdapter.formatId
     >().toEqualTypeOf<FormatId>()
   })
 

@@ -1,6 +1,13 @@
-import type { ActionId, PieceId, PlayerId, ZoneId } from '../contracts'
+import type {
+  ActionId,
+  BattleId,
+  PieceId,
+  PlayerId,
+  ZoneId,
+} from '../contracts'
 import type { AttackTarget, ZoneLocationReference } from '../references'
 import type { PhaseId, StepId } from '../state'
+import type { ZoneTransferReason } from '../transfers'
 
 export type SystemActionSource =
   | 'rules-engine'
@@ -37,13 +44,23 @@ export type PlayerGameActionType =
   | 'card.ride'
   | 'card.call'
   | 'battle.declare_attack'
+  | 'battle.commit_boost'
   | 'battle.guard'
 
 export type SystemGameActionType =
   | 'match.start'
+  | 'system.begin_mulligan'
+  | 'system.drive_check'
+  | 'system.damage_check'
+  | 'piece.rest'
+  | 'piece.stand'
+  | 'piece.lock'
+  | 'piece.unlock'
   | 'system.advance_phase'
   | 'system.advance_step'
   | 'system.resolve_mandatory_flow'
+  | 'zone.shuffle'
+  | 'zone.draw'
   | 'zone.move_piece'
 
 export type GameActionType = PlayerGameActionType | SystemGameActionType
@@ -67,6 +84,12 @@ export type MatchConcedeAction = PlayerGameActionBase<'match.concede'>
 
 export type MatchStartAction = SystemGameActionBase<'match.start'>
 
+export interface BeginMulliganAction extends SystemGameActionBase<'system.begin_mulligan'> {
+  readonly playerId: PlayerId
+  readonly handZoneId: ZoneId
+  readonly deckZoneId: ZoneId
+}
+
 export type TurnPassPriorityAction = PlayerGameActionBase<'turn.pass_priority'>
 
 export type TurnEndPhaseAction = PlayerGameActionBase<'turn.end_phase'>
@@ -77,6 +100,19 @@ export interface MovePieceAction extends SystemGameActionBase<'zone.move_piece'>
   readonly pieceId: PieceId
   readonly from: ZoneLocationReference
   readonly to: ZoneLocationReference
+  readonly reason: ZoneTransferReason
+}
+
+export interface ShuffleZoneAction extends SystemGameActionBase<'zone.shuffle'> {
+  readonly zoneId: ZoneId
+  readonly orderedPieceIds: readonly PieceId[]
+}
+
+export interface DrawCardsAction extends SystemGameActionBase<'zone.draw'> {
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
+  readonly count: number
 }
 
 interface PieceCommitActionFields {
@@ -101,11 +137,46 @@ export interface DeclareAttackAction extends PlayerGameActionBase<'battle.declar
   readonly target: AttackTarget
 }
 
+export interface CommitBoostAction extends PlayerGameActionBase<'battle.commit_boost'> {
+  readonly attackerPieceId: PieceId
+  readonly boosterPieceId: PieceId
+}
+
 export interface GuardAction extends PlayerGameActionBase<'battle.guard'> {
-  readonly guardianPieceIds: readonly PieceId[]
-  readonly fromZoneId: ZoneId
   readonly againstAttackerPieceId: PieceId
 }
+
+export interface DriveCheckAction extends SystemGameActionBase<'system.drive_check'> {
+  readonly battleId: BattleId
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
+  readonly count: number
+}
+
+export interface DamageCheckAction extends SystemGameActionBase<'system.damage_check'> {
+  readonly battleId: BattleId
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
+  readonly count: number
+}
+
+interface PieceStateActionFields {
+  readonly pieceId: PieceId
+}
+
+export interface RestPieceAction
+  extends SystemGameActionBase<'piece.rest'>, PieceStateActionFields {}
+
+export interface StandPieceAction
+  extends SystemGameActionBase<'piece.stand'>, PieceStateActionFields {}
+
+export interface LockPieceAction
+  extends SystemGameActionBase<'piece.lock'>, PieceStateActionFields {}
+
+export interface UnlockPieceAction
+  extends SystemGameActionBase<'piece.unlock'>, PieceStateActionFields {}
 
 export interface AdvancePhaseAction extends SystemGameActionBase<'system.advance_phase'> {
   readonly nextPhase: PhaseId
@@ -124,20 +195,27 @@ export type MatchAction =
   | MatchReadyAction
   | MatchConcedeAction
   | MatchStartAction
+  | BeginMulliganAction
 
 export type TurnFlowAction =
   | TurnPassPriorityAction
   | TurnEndPhaseAction
   | TurnEndTurnAction
+  | DriveCheckAction
+  | DamageCheckAction
+  | RestPieceAction
+  | StandPieceAction
+  | LockPieceAction
+  | UnlockPieceAction
   | AdvancePhaseAction
   | AdvanceStepAction
   | ResolveMandatoryFlowAction
 
-export type ZoneAction = MovePieceAction
+export type ZoneAction = MovePieceAction | ShuffleZoneAction | DrawCardsAction
 
 export type CardAction = PlayCardAction | RideCardAction | CallCardAction
 
-export type BattleAction = DeclareAttackAction | GuardAction
+export type BattleAction = DeclareAttackAction | CommitBoostAction | GuardAction
 
 export type PlayerGameAction =
   | MatchReadyAction
@@ -149,11 +227,21 @@ export type PlayerGameAction =
   | RideCardAction
   | CallCardAction
   | DeclareAttackAction
+  | CommitBoostAction
   | GuardAction
 
 export type SystemGameAction =
   | MatchStartAction
+  | BeginMulliganAction
+  | DriveCheckAction
+  | DamageCheckAction
+  | RestPieceAction
+  | StandPieceAction
+  | LockPieceAction
+  | UnlockPieceAction
   | MovePieceAction
+  | ShuffleZoneAction
+  | DrawCardsAction
   | AdvancePhaseAction
   | AdvanceStepAction
   | ResolveMandatoryFlowAction

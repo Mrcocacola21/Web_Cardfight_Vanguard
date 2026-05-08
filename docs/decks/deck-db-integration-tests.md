@@ -25,8 +25,8 @@ policies, so they need a live DB-backed harness.
 The deck DB tests run through the existing `@web-vg/db` local Supabase harness
 in `packages/db/scripts/test-db.mjs`. The harness:
 
-- starts local Supabase through the Supabase CLI;
-- runs `supabase db reset --local` so every migration is replayed from zero;
+- starts local Supabase through `corepack pnpm dev:up`;
+- runs `corepack pnpm dev:reset` so every migration is replayed from zero;
 - executes the tests against the real local Postgres instance;
 - uses database role switching plus JWT claim injection to simulate separate
   authenticated users.
@@ -73,8 +73,8 @@ corepack pnpm --filter @web-vg/db run test:db:decks
 
 What it does:
 
-- `supabase start`
-- `supabase db reset --local`
+- `corepack pnpm dev:up`
+- `corepack pnpm dev:reset`
 - deck-only live DB boundary verification against the reset local database
 
 The broader DB checkpoint remains available through:

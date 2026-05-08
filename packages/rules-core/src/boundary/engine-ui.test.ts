@@ -103,6 +103,7 @@ function makeReadyState(): GameState {
         cardDefinitionId: 'card-1' as CardId,
       },
     ],
+    pieceStates: [],
     flags: [],
     pendingRequests: [],
   }
