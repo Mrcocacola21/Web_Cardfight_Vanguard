@@ -23,6 +23,7 @@ function makeBattleReadyState(
   options: {
     readonly pendingRequests?: readonly GameChoiceRequest[]
     readonly battle?: GameState['battle']
+    readonly turnNumber?: number
   } = {},
 ): GameState {
   const pendingRequests = options.pendingRequests ?? []
@@ -34,7 +35,7 @@ function makeBattleReadyState(
     status,
     revision: 0,
     turn: {
-      turnNumber: 1,
+      turnNumber: options.turnNumber ?? 2,
       turnPlayerId: 'player-1' as GameState['turn']['turnPlayerId'],
       priorityPlayerId: 'player-1' as NonNullable<
         GameState['turn']['priorityPlayerId']
@@ -111,13 +112,16 @@ function makeBattleReadyState(
         layout: {
           ordering: 'unordered',
           occupancy: 'slotted',
-          slotIds: ['slot-left' as ZoneSlotId, 'slot-right' as ZoneSlotId],
+          slotIds: [
+            'p1:front-left' as ZoneSlotId,
+            'p1:back-center' as ZoneSlotId,
+          ],
         },
         occupants: [
           {
             pieceId:
               'piece-p1-booster' as GameState['pieces'][number]['pieceId'],
-            slotId: 'slot-right' as ZoneSlotId,
+            slotId: 'p1:back-center' as ZoneSlotId,
           },
         ],
       },
@@ -297,7 +301,60 @@ function declareAttack(state: GameState): TransitionResult {
   })
 }
 
+function addWrongColumnBooster(state: GameState): GameState {
+  return {
+    ...state,
+    zones: state.zones.map((zone) =>
+      zone.zoneId ===
+      ('zone-p1-rearguard' as GameState['zones'][number]['zoneId'])
+        ? {
+            ...zone,
+            layout: {
+              ...zone.layout,
+              slotIds: [
+                ...(zone.layout.slotIds ?? []),
+                'p1:back-left' as ZoneSlotId,
+              ],
+            },
+            occupants: [
+              ...zone.occupants,
+              {
+                pieceId:
+                  'piece-p1-back-left' as GameState['pieces'][number]['pieceId'],
+                slotId: 'p1:back-left' as ZoneSlotId,
+              },
+            ],
+          }
+        : zone,
+    ),
+    pieces: [
+      ...state.pieces,
+      {
+        pieceId: 'piece-p1-back-left' as GameState['pieces'][number]['pieceId'],
+        kind: 'card',
+        ownerPlayerId: 'player-1' as GameState['players'][number]['playerId'],
+        controllerPlayerId:
+          'player-1' as GameState['players'][number]['playerId'],
+        cardDefinitionId: 'card-p1-back-left' as CardId,
+      },
+    ],
+  }
+}
+
 describe('@web-vg/rules-core attack / boost / guard foundation', () => {
+  it("rejects attacks on the first player's first turn with a structured reason", () => {
+    const state = makeBattleReadyState({
+      turnNumber: 1,
+    })
+    const result = declareAttack(state)
+    const invalidResult = expectInvalid(result)
+
+    expect(invalidResult.code).toBe('attack_first_turn_restricted')
+    expect(invalidResult.message).toMatch(/first player/i)
+    expect(invalidResult.currentState).toEqual(state)
+    expect(invalidResult.events).toEqual([])
+  })
+
   it('declares an attack and creates coherent battle state', () => {
     const state = makeBattleReadyState()
     const result = declareAttack(state)
@@ -344,6 +401,57 @@ describe('@web-vg/rules-core attack / boost / guard foundation', () => {
         relatedEventSequence: 1,
       }),
     ])
+  })
+
+  it("allows the second player to attack on that player's first turn when otherwise legal", () => {
+    const baseState = makeBattleReadyState()
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        turnNumber: 2,
+        turnPlayerId: 'player-2' as GameState['turn']['turnPlayerId'],
+        priorityPlayerId: 'player-2' as NonNullable<
+          GameState['turn']['priorityPlayerId']
+        >,
+      },
+      players: baseState.players.map((player) =>
+        player.playerId === 'player-2'
+          ? {
+              ...player,
+              status: 'active',
+            }
+          : {
+              ...player,
+              status: 'waiting',
+            },
+      ),
+    }
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-attack-second-player-first-turn' as ActionId,
+        type: 'battle.declare_attack',
+        actor: {
+          kind: 'player',
+          playerId: 'player-2' as GameState['players'][number]['playerId'],
+        },
+        attackerPieceId:
+          'piece-p2-vanguard' as GameState['pieces'][number]['pieceId'],
+        target: {
+          kind: 'player',
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+      },
+      expectedRevision: state.revision,
+    })
+    const appliedResult = expectApplied(result)
+
+    expect(appliedResult.nextState.battle).toMatchObject({
+      status: 'attack_declared',
+      attackingPlayerId: 'player-2',
+      defendingPlayerId: 'player-1',
+      attackerPieceId: 'piece-p2-vanguard',
+    })
   })
 
   it('rejects attacks from non-battle zones structurally', () => {
@@ -431,6 +539,55 @@ describe('@web-vg/rules-core attack / boost / guard foundation', () => {
     const invalidResult = expectInvalid(duplicateBoostResult)
 
     expect(invalidResult.code).toBe('invalid_action')
+  })
+
+  it('rejects boosters that are not in the attacker column', () => {
+    const state = addWrongColumnBooster(makeBattleReadyState())
+    const attackResult = expectApplied(declareAttack(state))
+    const boostResult = applyGameAction(attackResult.nextState, {
+      action: {
+        actionId: 'action-boost-wrong-column-invalid-1' as ActionId,
+        type: 'battle.commit_boost',
+        actor: {
+          kind: 'player',
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+        attackerPieceId:
+          'piece-p1-vanguard' as GameState['pieces'][number]['pieceId'],
+        boosterPieceId:
+          'piece-p1-back-left' as GameState['pieces'][number]['pieceId'],
+      },
+      expectedRevision: attackResult.nextState.revision,
+    })
+    const invalidResult = expectInvalid(boostResult)
+
+    expect(invalidResult.code).toBe('invalid_action')
+    expect(invalidResult.message).toMatch(/same board column/i)
+  })
+
+  it('rejects attacks declared from back-row support circles', () => {
+    const state = makeBattleReadyState()
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-attack-back-row-invalid-1' as ActionId,
+        type: 'battle.declare_attack',
+        actor: {
+          kind: 'player',
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+        attackerPieceId:
+          'piece-p1-booster' as GameState['pieces'][number]['pieceId'],
+        target: {
+          kind: 'player',
+          playerId: 'player-2' as GameState['players'][number]['playerId'],
+        },
+      },
+      expectedRevision: state.revision,
+    })
+    const invalidResult = expectInvalid(result)
+
+    expect(invalidResult.code).toBe('invalid_action')
+    expect(invalidResult.message).toMatch(/front-row battlefield circle/i)
   })
 
   it('rejects already-rested boosters without corrupting the active battle state', () => {

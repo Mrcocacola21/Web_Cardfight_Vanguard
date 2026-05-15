@@ -16,6 +16,20 @@ export {
 } from './effect'
 export { EffectRegistry, createEffectRegistry } from './registry'
 export {
+  EffectHandlerRegistry,
+  createEffectHandlerRegistry,
+  resolveEffectDefinitionHandlerKey,
+} from './handler-registry'
+export {
+  CARDS_DRAWN_FINALIZE_EFFECT_HANDLER_KEY,
+  CHECK_TRIGGER_REVEAL_EFFECT_HANDLER_KEY,
+  CORE_EFFECT_HANDLERS,
+  PERSONA_RIDE_EFFECT_HANDLER_KEY,
+  UNIT_ATTACK_AUTO_EFFECT_HANDLER_KEY,
+  coreEffectHandlerRegistry,
+} from './core-handlers'
+export { resolveEffectRuntimeQueueItem } from './runtime-dispatch'
+export {
   BOOST_KEYWORD_EFFECT,
   BOOST_KEYWORD_EFFECT_IDENTITY,
   CARDS_DRAWN_FINALIZE_EFFECT,
@@ -38,6 +52,12 @@ export {
   resolveEventTriggeredEffects,
 } from './triggered-resolution'
 export {
+  OVER_TRIGGER_POWER_BONUS,
+  TRIGGER_CRITICAL_BONUS,
+  TRIGGER_EFFECT_OPERATION_KINDS,
+  TRIGGER_POWER_BONUS,
+} from './trigger-resolution'
+export {
   DEFAULT_EFFECT_RESOLUTION_QUEUE_MAX_DEPTH,
   compareEffectResolutionQueueItems,
   compareEffectResolutionQueueItemSeeds,
@@ -49,6 +69,8 @@ export {
 export type {
   AdjustCheckCountOperation,
   ApplyPowerModifierOperation,
+  CounterBlastOperation,
+  CounterChargeOperation,
   DeclarativeEffectExecutionStrategy,
   DeclarativeEffectDefinition,
   DeclarativeEffectDuration,
@@ -77,12 +99,26 @@ export type {
   HybridEffectDefinition,
   HybridEffectExecutionStrategy,
   ManualEffectTrigger,
+  ResourceEffectOperation,
+  ResourceEffectOperationRole,
+  ResourceEffectOperationSelection,
+  SoulBlastOperation,
+  SoulChargeOperation,
   StaticEffectTrigger,
   TimingEffectTrigger,
   TypedEffectDefinition,
   TypedEffectExecutionStrategy,
 } from './effect'
 export type { EffectRegistryLookupContext } from './registry'
+export type {
+  EffectHandler,
+  EffectHandlerInput,
+  EffectHandlerResult,
+} from './handler-registry'
+export type {
+  EffectRuntimeDispatchInput,
+  EffectRuntimeDispatchResult,
+} from './runtime-dispatch'
 export type {
   EffectResolutionQueue,
   EffectResolutionQueueItem,

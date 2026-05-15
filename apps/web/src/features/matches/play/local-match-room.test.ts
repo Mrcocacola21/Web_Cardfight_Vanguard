@@ -35,11 +35,13 @@ describe('createLocalPrototypeMatchRoom', () => {
           participantId: LOCAL_MATCH_PARTICIPANT_ONE_ID,
           displayName: 'Aichi Sendou',
           enginePlayerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          submittedDeckId: 'local-demo-deck-aichi',
         }),
         expect.objectContaining({
           participantId: LOCAL_MATCH_PARTICIPANT_TWO_ID,
           displayName: 'Toshiki Kai',
           enginePlayerId: LOCAL_MATCH_PLAYER_TWO_ID,
+          submittedDeckId: 'local-demo-deck-kai',
         }),
       ]),
     )
@@ -63,6 +65,7 @@ describe('createLocalPrototypeMatchRoom', () => {
           'hand',
           'vanguard_circle',
           'rear_guard_circle',
+          'guardian_circle',
           'damage',
           'soul',
           'drop',
@@ -97,6 +100,7 @@ describe('createLocalPrototypeMatchRoom', () => {
       LOCAL_MATCH_PLAYER_ONE_ID,
       'hand',
     )?.occupants.map((occupant) => occupant.pieceId)
+    const firstDeckPieceBefore = request.currentDeckPieceIds[0]
     const choiceSubmission = createMulliganFirstCardChoiceCommand(
       request,
       createLocalActionId(pendingResult.room.revision, 5, 'mulligan-first'),
@@ -131,7 +135,79 @@ describe('createLocalPrototypeMatchRoom', () => {
     )
     expect(handAfter).toHaveLength(handBefore?.length ?? 0)
     expect(handAfter).not.toContain(handBefore?.[0])
-    expect(handAfter).toContain('p1:piece:deck-1')
+    expect(handAfter).toContain(firstDeckPieceBefore)
+  })
+
+  it('can produce a player-visible projection for the local room without private-zone leakage', () => {
+    const room = createLocalPrototypeMatchRoom('tests-checkpoint-projection')
+    const result = matchSession.projectMatchRoomForParticipant(
+      room,
+      LOCAL_MATCH_PARTICIPANT_ONE_ID,
+    )
+
+    expect(result.ok).toBe(true)
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    const playerOneDeck = result.projection.visibleState.zones.find(
+      (zone) => zone.zoneId === 'p1:zone:deck',
+    )
+    const playerTwoHand = result.projection.visibleState.zones.find(
+      (zone) => zone.zoneId === 'p2:zone:hand',
+    )
+
+    expect(result.projection).not.toHaveProperty('engineState')
+    expect(playerOneDeck?.contentsVisibility).toBe('masked')
+    expect(playerOneDeck?.occupants[0]).not.toHaveProperty('pieceId')
+    expect(playerTwoHand?.contentsVisibility).toBe('masked')
+    expect(playerTwoHand?.occupants[0]).not.toHaveProperty('pieceId')
+    expect(JSON.stringify(result.projection.visibleState)).not.toContain(
+      'p2:piece:main',
+    )
+  })
+
+  it('can serialize and restore the deck-backed local room for reconnect-style inspection', () => {
+    const room = createLocalPrototypeMatchRoom('tests-checkpoint-serialization')
+    const document = matchSession.createSerializableMatchSessionDocument({
+      room,
+    })
+
+    expect(document.ok).toBe(true)
+
+    if (!document.ok) {
+      throw new Error(document.message)
+    }
+
+    const serialized = matchSession.serializeMatchSessionDocument(
+      document.document,
+    )
+
+    expect(serialized.ok).toBe(true)
+
+    if (!serialized.ok) {
+      throw new Error(serialized.message)
+    }
+
+    const restored = matchSession.deserializeMatchSessionDocument(
+      serialized.json,
+    )
+
+    expect(restored.ok).toBe(true)
+
+    if (!restored.ok) {
+      throw new Error(restored.message)
+    }
+
+    expect(restored.session.room).toEqual(room)
+
+    const projection = matchSession.projectMatchRoomForParticipant(
+      restored.session.room,
+      LOCAL_MATCH_PARTICIPANT_ONE_ID,
+    )
+
+    expect(projection.ok).toBe(true)
   })
 })
 

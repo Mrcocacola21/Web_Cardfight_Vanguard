@@ -28,6 +28,7 @@ export type {
   PlayerActionActor,
   PlayerGameAction,
   PlayerGameActionType,
+  ResolveCombatAction,
   ResolveMandatoryFlowAction,
   RestPieceAction,
   RideCardAction,

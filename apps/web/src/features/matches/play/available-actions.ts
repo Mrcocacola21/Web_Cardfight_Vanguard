@@ -13,6 +13,7 @@ import {
   createBeginMulliganCommand,
   createCallFirstHandCardCommand,
   createConcedeCommand,
+  createEndTurnCommand,
   createKeepHandChoiceCommand,
   createLocalActionId,
   createMulliganFirstCardChoiceCommand,
@@ -178,11 +179,20 @@ function buildLocalPrototypeCandidates(
     {
       id: 'phase.advance',
       label: 'Advance phase',
-      description: 'Advance the turn from the current phase to draw.',
+      description: 'Advance the turn to the next legal engine phase.',
       group: 'turn_flow',
       relatedPlayerId: activePlayerId,
       createSubmission: (actionId) =>
-        createAdvancePhaseCommand(actionId, state.revision),
+        createAdvancePhaseCommand(actionId, state.revision, state.turn.phase),
+    },
+    {
+      id: 'turn.end-turn',
+      label: 'End turn',
+      description: 'End the current turn and switch to the next active player.',
+      group: 'turn_flow',
+      relatedPlayerId: activePlayerId,
+      createSubmission: (actionId) =>
+        createEndTurnCommand(activePlayerId, actionId, state.revision),
     },
     {
       id: 'board.ride-first-ride-deck-card',

@@ -125,6 +125,7 @@ function getCategoryBadgeVariant(category: LocalMatchEventLogCategory) {
     case 'battle':
       return 'accent'
     case 'effect':
+    case 'trigger':
       return 'success'
     case 'resource':
     case 'other':

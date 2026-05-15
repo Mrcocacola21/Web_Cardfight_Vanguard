@@ -16,6 +16,7 @@ import type {
 import {
   applyGameAction,
   applyGameChoiceResponse,
+  buildEngineCardStatsSnapshot,
   isAppliedTransitionResult,
   isBlockedTransitionResult,
   isInvalidTransitionResult,
@@ -167,9 +168,32 @@ function makeReadyState(): GameState {
         cardDefinitionId: 'card-3' as CardId,
       },
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-1' as CardId, 0),
+      makeUnitStats('card-2' as CardId, 1),
+      makeUnitStats('card-3' as CardId, 1),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests: [],
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 8000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 
@@ -181,6 +205,11 @@ function makeInProgressState(
   return {
     ...baseState,
     status: pendingRequests.length > 0 ? 'awaiting_choice' : 'in_progress',
+    turn: {
+      ...baseState.turn,
+      phase: 'main' as GameState['turn']['phase'],
+      step: 'main' as NonNullable<GameState['turn']['step']>,
+    },
     players: baseState.players.map((player) =>
       player.playerId === baseState.turn.turnPlayerId
         ? {

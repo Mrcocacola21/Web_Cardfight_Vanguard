@@ -2,6 +2,7 @@ import {
   PREMIUM_FORMAT_ID,
   STANDARD_FORMAT_ID,
   V_PREMIUM_FORMAT_ID,
+  assertGameStateCardStatsComplete,
   assertGameStateInvariant,
   isPlayerGameAction,
   isSystemGameAction,
@@ -307,6 +308,7 @@ export function initializeMatchRoom(
   )
 
   assertGameStateInvariant(input.initialState)
+  assertGameStateCardStatsComplete(input.initialState)
 
   const participants = bindParticipantsToEnginePlayers(
     room.participants,

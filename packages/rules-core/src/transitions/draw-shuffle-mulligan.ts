@@ -17,6 +17,7 @@ import type {
   PlayerState,
   ZoneState,
 } from '../state'
+import { buildGameStateIndex, findPlayerById, findZoneById } from '../state'
 
 import {
   advanceGameStateRevision,
@@ -27,7 +28,6 @@ import {
 } from './transition'
 import {
   drawTopPiecesBetweenZones,
-  findZoneById,
   movePiecesByIdBetweenZones,
   type PieceZoneMovement,
   reorderOrderedMultiZoneOccupants,
@@ -101,9 +101,8 @@ export function applyDrawCardsTransition(
     )
   }
 
-  const player = currentState.players.find(
-    (candidate) => candidate.playerId === action.playerId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const player = findPlayerById(stateIndex, action.playerId)
 
   if (player === undefined) {
     return createInvalidTransitionResult(
@@ -114,8 +113,8 @@ export function applyDrawCardsTransition(
     )
   }
 
-  const sourceZone = findZoneById(currentState, action.fromZoneId)
-  const destinationZone = findZoneById(currentState, action.toZoneId)
+  const sourceZone = findZoneById(stateIndex, action.fromZoneId)
+  const destinationZone = findZoneById(stateIndex, action.toZoneId)
   const zoneReferenceError = resolveOwnedPlayerZones(
     action.type,
     player,
@@ -213,9 +212,8 @@ export function applyBeginMulliganTransition(
     )
   }
 
-  const player = currentState.players.find(
-    (candidate) => candidate.playerId === action.playerId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const player = findPlayerById(stateIndex, action.playerId)
 
   if (player === undefined) {
     return createInvalidTransitionResult(
@@ -235,8 +233,8 @@ export function applyBeginMulliganTransition(
     )
   }
 
-  const handZone = findZoneById(currentState, action.handZoneId)
-  const deckZone = findZoneById(currentState, action.deckZoneId)
+  const handZone = findZoneById(stateIndex, action.handZoneId)
+  const deckZone = findZoneById(stateIndex, action.deckZoneId)
   const zoneReferenceError = resolveOwnedPlayerZones(
     action.type,
     player,
@@ -330,9 +328,8 @@ export function applyMulliganChoiceResponseTransition(
     { readonly type: 'choice.response_resolved' }
   >,
 ): TransitionResult {
-  const player = currentState.players.find(
-    (candidate) => candidate.playerId === request.responderPlayerId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const player = findPlayerById(stateIndex, request.responderPlayerId)
 
   if (player === undefined) {
     return createInvalidTransitionResult(
@@ -344,8 +341,8 @@ export function applyMulliganChoiceResponseTransition(
     )
   }
 
-  const handZone = findZoneById(currentState, request.handZoneId)
-  const deckZone = findZoneById(currentState, request.deckZoneId)
+  const handZone = findZoneById(stateIndex, request.handZoneId)
+  const deckZone = findZoneById(stateIndex, request.deckZoneId)
   const zoneReferenceError = resolveOwnedPlayerZones(
     'mulligan.select_cards',
     player,

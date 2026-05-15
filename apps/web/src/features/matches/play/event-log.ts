@@ -10,8 +10,9 @@ export type LocalMatchEventLogCategory =
   | 'piece'
   | 'zone'
   | 'battle'
-  | 'effect'
   | 'resource'
+  | 'effect'
+  | 'trigger'
   | 'other'
 
 export interface LocalMatchEventRecord {
@@ -116,8 +117,14 @@ function getEventCategory(event: GameEvent): LocalMatchEventLogCategory {
   if (event.type.startsWith('battle.')) {
     return 'battle'
   }
+  if (event.type.startsWith('resource.')) {
+    return 'resource'
+  }
   if (event.type.startsWith('effect.')) {
     return 'effect'
+  }
+  if (event.type.startsWith('trigger.')) {
+    return 'trigger'
   }
   if (event.type.startsWith('player.')) {
     return 'resource'
@@ -139,6 +146,8 @@ function formatEventSummary(
       return `Turn ${event.turnNumber} started for ${formatPlayer(event.turnPlayerId, options)}.`
     case 'turn.ended':
       return `Turn ${event.turnNumber} ended for ${formatPlayer(event.turnPlayerId, options)}.`
+    case 'turn.cleanup_applied':
+      return `Turn cleanup cleared ${event.cleanedPieceIds.length} piece states.`
     case 'turn.phase_advanced':
       return `Phase advanced from ${event.previousPhase ?? 'none'} to ${event.nextPhase}.`
     case 'turn.step_advanced':
@@ -177,20 +186,46 @@ function formatEventSummary(
       return `Guard requested from ${formatPlayer(event.defendingPlayerId, options)}.`
     case 'battle.guard_declared':
       return `${event.guardianPieceIds.length} guardians declared.`
+    case 'battle.intercept_declared':
+      return `${event.interceptPieceIds.length} interceptors declared.`
     case 'battle.guard_passed':
       return `Guard passed against ${event.attackerPieceId}.`
     case 'battle.drive_checked':
       return `${formatPlayer(event.playerId, options)} performed a drive check.`
+    case 'battle.combat_resolved':
+      return `Combat resolved as ${event.combat.result}: ${event.combat.attackPower} vs ${event.combat.totalDefensePower}.`
+    case 'battle.attack_hit':
+      return `${event.attackerPieceId} hit its target.`
+    case 'battle.attack_missed':
+      return `${event.attackerPieceId} missed its target.`
     case 'battle.damage_checked':
-      return `${formatPlayer(event.playerId, options)} performed a damage check.`
+      return `${formatPlayer(event.playerId, options)} performed a damage check (${event.damage.damageBefore} to ${event.damage.damageAfter}).`
+    case 'battle.guardians_cleaned_up':
+      return `${event.guardPieceIds.length} guardians cleaned up.`
     case 'battle.completed':
       return `Battle ${event.battleId} completed by ${event.reason}.`
     case 'player.counter_changed':
       return `${formatPlayer(event.playerId, options)} ${event.counterKey} changed from ${event.previousAmount} to ${event.nextAmount}.`
     case 'player.flag_changed':
       return `${formatPlayer(event.playerId, options)} flag ${event.flagKey} changed.`
+    case 'player.damage_changed':
+      return `${formatPlayer(event.playerId, options)} damage changed from ${event.previousDamage} to ${event.nextDamage}.`
+    case 'player.defeated':
+      return `${formatPlayer(event.playerId, options)} was defeated by ${event.reason}.`
+    case 'resource.counter_blasted':
+      return `${formatPlayer(event.playerId, options)} counter blasted ${event.count}.`
+    case 'resource.counter_charged':
+      return `${formatPlayer(event.playerId, options)} counter charged ${event.count}.`
+    case 'resource.soul_blasted':
+      return `${formatPlayer(event.playerId, options)} soul blasted ${event.count}.`
+    case 'resource.soul_charged':
+      return `${formatPlayer(event.playerId, options)} soul charged ${event.count}.`
     case 'effect.resolved':
       return `Effect ${event.effectDefinitionId} resolved.`
+    case 'trigger.revealed':
+      return `${formatPlayer(event.playerId, options)} revealed a ${event.triggerType} trigger.`
+    case 'trigger.resolved':
+      return `${event.triggerType} trigger resolved with ${event.outcome}.`
   }
 }
 
@@ -258,6 +293,60 @@ function buildEventDetails(
         { label: 'Attacker', value: event.attackerPieceId },
         { label: 'Target', value: formatTarget(event.target) },
       ]
+    case 'battle.combat_resolved':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Result', value: event.combat.result },
+        { label: 'Attack', value: event.combat.attackPower.toString() },
+        {
+          label: 'Defense',
+          value: event.combat.totalDefensePower.toString(),
+        },
+      ]
+    case 'battle.attack_hit':
+    case 'battle.attack_missed':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Attacker', value: event.attackerPieceId },
+        { label: 'Attack', value: event.attackPower.toString() },
+        { label: 'Defense', value: event.totalDefensePower.toString() },
+      ]
+    case 'battle.damage_checked':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Player', value: event.playerId },
+        { label: 'Damage', value: event.damage.damageAfter.toString() },
+        { label: 'Outcome', value: event.damage.outcome },
+      ]
+    case 'battle.guardians_cleaned_up':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Guardians', value: event.guardPieceIds.length.toString() },
+        { label: 'From', value: event.fromZoneId },
+        { label: 'To', value: event.toZoneId },
+      ]
+    case 'player.damage_changed':
+      return [
+        ...baseDetails,
+        { label: 'Player', value: event.playerId },
+        { label: 'Previous', value: event.previousDamage.toString() },
+        { label: 'Next', value: event.nextDamage.toString() },
+        { label: 'Outcome', value: event.outcome },
+      ]
+    case 'player.defeated':
+      return [
+        ...baseDetails,
+        { label: 'Player', value: event.playerId },
+        { label: 'Reason', value: event.reason },
+        {
+          label: 'Damage',
+          value: event.damageCount?.toString() ?? 'unknown',
+        },
+      ]
     case 'effect.resolved':
       return [
         ...baseDetails,
@@ -266,6 +355,23 @@ function buildEventDetails(
           label: 'Operations',
           value: event.operationKinds.join(', ') || 'none',
         },
+      ]
+    case 'trigger.revealed':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Check', value: event.checkKind },
+        { label: 'Piece', value: event.revealedPieceId },
+        { label: 'Trigger', value: event.triggerType },
+      ]
+    case 'trigger.resolved':
+      return [
+        ...baseDetails,
+        { label: 'Battle', value: event.battleId },
+        { label: 'Check', value: event.checkKind },
+        { label: 'Piece', value: event.revealedPieceId },
+        { label: 'Trigger', value: event.triggerType },
+        { label: 'Outcome', value: event.outcome },
       ]
     default:
       return baseDetails

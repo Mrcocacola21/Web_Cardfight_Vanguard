@@ -11,6 +11,7 @@ import type {
 } from '../contracts'
 import type { GameChoiceRequest } from '../requests'
 import type { AttackTarget } from '../references'
+import type { EngineCardStatsSnapshot } from '../cards/card-stats-contract'
 
 export type GameStatus =
   | 'setup'
@@ -49,12 +50,16 @@ export type BattleStatus =
   | 'guard_requested'
   | 'guard_resolved'
   | 'drive_checked'
+  | 'combat_resolved'
   | 'damage_checked'
   | (string & {})
 export type BattleCheckKind = 'drive' | 'damage'
+export type BattleCombatResult = 'hit' | 'miss'
+export type BattleDamageOutcome = 'non_lethal' | 'lethal'
 export type CheckTriggerResolutionState =
   | 'pending_future_engine'
   | 'resolved_none'
+  | 'resolved_triggers'
   | (string & {})
 
 export interface TurnState {
@@ -126,6 +131,8 @@ export interface GamePieceStatusState {
   readonly pieceId: PieceId
   readonly orientation: GamePieceOrientation
   readonly flags: readonly GamePieceFlagKey[]
+  readonly powerModifier?: number
+  readonly criticalModifier?: number
 }
 
 export interface RevealedCheckCardState {
@@ -142,6 +149,38 @@ export interface BattleCheckState {
   readonly triggerResolutionState: CheckTriggerResolutionState
 }
 
+export interface BattleCombatPowerComponentState {
+  readonly source:
+    | 'attacker_base'
+    | 'booster_base'
+    | 'defender_base'
+    | 'piece_power_modifier'
+    | 'guard_shield'
+    | (string & {})
+  readonly pieceId?: PieceId
+  readonly amount: number
+}
+
+export interface BattleCombatState {
+  readonly attackPower: number
+  readonly attackerPowerComponents: readonly BattleCombatPowerComponentState[]
+  readonly defensePower: number
+  readonly defensePowerComponents: readonly BattleCombatPowerComponentState[]
+  readonly shieldPower: number
+  readonly shieldComponents: readonly BattleCombatPowerComponentState[]
+  readonly totalDefensePower: number
+  readonly result: BattleCombatResult
+}
+
+export interface BattleDamageState {
+  readonly playerId: PlayerId
+  readonly damageZoneId: ZoneId
+  readonly damageBefore: number
+  readonly damageAfter: number
+  readonly defeatThreshold: number
+  readonly outcome: BattleDamageOutcome
+}
+
 export interface BattleState {
   readonly battleId: BattleId
   readonly status: BattleStatus
@@ -156,6 +195,8 @@ export interface BattleState {
   readonly guardZoneId?: ZoneId
   readonly guardRequestId?: RequestId
   readonly lastCheck?: BattleCheckState
+  readonly combat?: BattleCombatState
+  readonly damage?: BattleDamageState
 }
 
 export interface GameState {
@@ -167,8 +208,23 @@ export interface GameState {
   readonly players: readonly PlayerState[]
   readonly zones: readonly ZoneState[]
   readonly pieces: readonly GamePieceState[]
+  readonly cardStats?: EngineCardStatsSnapshot
   readonly pieceStates: readonly GamePieceStatusState[]
   readonly flags: readonly GameFlagState[]
   readonly battle?: BattleState
+  /**
+   * Ordered FIFO queue of pending choice requests.
+   *
+   * **Contract:**
+   * - Index 0 is always the **active** request that the game is currently awaiting
+   *   a response for. When `status === 'awaiting_choice'`, exactly one request
+   *   at index 0 must be present and must be the target of the next choice response.
+   * - When a choice response is resolved, the head request is consumed
+   *   (`pendingRequests.slice(1)`). If the response produces new follow-up
+   *   requests (e.g. chained effects), they are appended to the tail.
+   * - Transitions that set `status = 'awaiting_choice'` must ensure
+   *   `pendingRequests.length >= 1`.
+   * - When `pendingRequests.length === 0`, `status` must not be `'awaiting_choice'`.
+   */
   readonly pendingRequests: readonly GameChoiceRequest[]
 }

@@ -14,6 +14,7 @@ import type {
 import {
   applyGameAction,
   assertGameStateInvariant,
+  buildEngineCardStatsSnapshot,
   isAppliedTransitionResult,
   isBlockedTransitionResult,
   isInvalidTransitionResult,
@@ -109,13 +110,16 @@ function makeFlagState(
         layout: {
           ordering: 'unordered',
           occupancy: 'slotted',
-          slotIds: ['slot-left' as ZoneSlotId, 'slot-right' as ZoneSlotId],
+          slotIds: [
+            'p1:front-left' as ZoneSlotId,
+            'p1:back-center' as ZoneSlotId,
+          ],
         },
         occupants: [
           {
             pieceId:
               'piece-p1-booster' as GameState['pieces'][number]['pieceId'],
-            slotId: 'slot-left' as ZoneSlotId,
+            slotId: 'p1:back-center' as ZoneSlotId,
           },
         ],
       },
@@ -155,9 +159,33 @@ function makeFlagState(
       makeCardPiece('piece-p1-booster', 'card-p1-booster', 'player-1'),
       makeCardPiece('piece-p2-vanguard', 'card-p2-vanguard', 'player-2'),
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-p1-hand' as CardId, 1),
+      makeUnitStats('card-p1-vanguard' as CardId, 1),
+      makeUnitStats('card-p1-booster' as CardId, 1),
+      makeUnitStats('card-p2-vanguard' as CardId, 1),
+    ]),
     pieceStates: options.pieceStates ?? [],
     flags: [],
     pendingRequests,
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 8000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 
@@ -528,7 +556,7 @@ describe('@web-vg/rules-core state flags foundation', () => {
         pieceId: 'piece-p1-booster' as GameState['pieces'][number]['pieceId'],
         from: {
           zoneId: 'zone-p1-rearguard' as GameState['zones'][number]['zoneId'],
-          slotId: 'slot-left' as ZoneSlotId,
+          slotId: 'p1:back-center' as ZoneSlotId,
         },
         to: {
           zoneId: 'zone-p1-soul' as GameState['zones'][number]['zoneId'],
@@ -551,7 +579,7 @@ describe('@web-vg/rules-core state flags foundation', () => {
   })
 
   it('resets stale runtime flags when a card enters a main circle from a non-board zone', () => {
-    const state = makeFlagState({
+    const baseState = makeFlagState({
       pieceStates: [
         {
           pieceId: 'piece-p1-hand' as GameState['pieces'][number]['pieceId'],
@@ -560,6 +588,13 @@ describe('@web-vg/rules-core state flags foundation', () => {
         },
       ],
     })
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
     const result = applyGameAction(state, {
       action: {
         actionId: 'action-zone-transfer-enter-board-flags-1' as ActionId,
@@ -574,7 +609,7 @@ describe('@web-vg/rules-core state flags foundation', () => {
         },
         to: {
           zoneId: 'zone-p1-rearguard' as GameState['zones'][number]['zoneId'],
-          slotId: 'slot-right' as ZoneSlotId,
+          slotId: 'p1:front-left' as ZoneSlotId,
         },
       },
       expectedRevision: state.revision,
@@ -609,7 +644,7 @@ describe('@web-vg/rules-core state flags foundation', () => {
         },
         to: {
           zoneId: 'zone-p1-rearguard' as GameState['zones'][number]['zoneId'],
-          slotId: 'slot-right' as ZoneSlotId,
+          slotId: 'p1:front-left' as ZoneSlotId,
         },
         reason: 'format',
       },

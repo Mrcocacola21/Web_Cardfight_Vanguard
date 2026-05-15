@@ -15,6 +15,8 @@ import type {
   EventType,
   GameEvent,
   GameState,
+  ResourceEvent,
+  ResourceEventType,
   MatchEvent,
   MatchEventType,
   MatchStartedEvent,
@@ -27,6 +29,7 @@ import type {
   PlayerResourceEvent,
   SystemEventOrigin,
   TransitionId,
+  TriggerEventType,
   TurnEvent,
   TurnEventType,
   ZoneTransferReason,
@@ -49,6 +52,7 @@ type ExpectedEventTypes =
   | 'mulligan.completed'
   | 'turn.started'
   | 'turn.ended'
+  | 'turn.cleanup_applied'
   | 'turn.phase_advanced'
   | 'turn.step_advanced'
   | 'piece.moved'
@@ -63,8 +67,13 @@ type ExpectedEventTypes =
   | 'cards.drawn'
   | 'battle.attack_declared'
   | 'battle.boost_declared'
+  | 'battle.intercept_declared'
   | 'battle.drive_checked'
+  | 'battle.combat_resolved'
+  | 'battle.attack_hit'
+  | 'battle.attack_missed'
   | 'battle.damage_checked'
+  | 'battle.guardians_cleaned_up'
   | 'battle.completed'
   | 'battle.guard_requested'
   | 'battle.guard_declared'
@@ -72,7 +81,15 @@ type ExpectedEventTypes =
   | 'choice.response_resolved'
   | 'player.counter_changed'
   | 'player.flag_changed'
+  | 'player.damage_changed'
+  | 'player.defeated'
+  | 'resource.counter_blasted'
+  | 'resource.counter_charged'
+  | 'resource.soul_blasted'
+  | 'resource.soul_charged'
   | 'effect.resolved'
+  | 'trigger.revealed'
+  | 'trigger.resolved'
 
 const matchStartedEvent: MatchStartedEvent = {
   eventId: 'event-1' as MatchStartedEvent['eventId'],
@@ -138,6 +155,7 @@ describe('@web-vg/rules-core event model', () => {
     expectTypeOf<TurnEventType>().toEqualTypeOf<
       | 'turn.started'
       | 'turn.ended'
+      | 'turn.cleanup_applied'
       | 'turn.phase_advanced'
       | 'turn.step_advanced'
     >()
@@ -154,8 +172,13 @@ describe('@web-vg/rules-core event model', () => {
     expectTypeOf<BattleEvent['type']>().toEqualTypeOf<
       | 'battle.attack_declared'
       | 'battle.boost_declared'
+      | 'battle.intercept_declared'
       | 'battle.drive_checked'
+      | 'battle.combat_resolved'
+      | 'battle.attack_hit'
+      | 'battle.attack_missed'
       | 'battle.damage_checked'
+      | 'battle.guardians_cleaned_up'
       | 'battle.completed'
       | 'battle.guard_requested'
       | 'battle.guard_declared'
@@ -164,8 +187,13 @@ describe('@web-vg/rules-core event model', () => {
     expectTypeOf<BattleEventType>().toEqualTypeOf<
       | 'battle.attack_declared'
       | 'battle.boost_declared'
+      | 'battle.intercept_declared'
       | 'battle.drive_checked'
+      | 'battle.combat_resolved'
+      | 'battle.attack_hit'
+      | 'battle.attack_missed'
       | 'battle.damage_checked'
+      | 'battle.guardians_cleaned_up'
       | 'battle.completed'
       | 'battle.guard_requested'
       | 'battle.guard_declared'
@@ -192,8 +220,18 @@ describe('@web-vg/rules-core event model', () => {
       ActionId | undefined
     >()
     expectTypeOf<PlayerResourceEvent['playerId']>().toEqualTypeOf<PlayerId>()
+    expectTypeOf<ResourceEvent['playerId']>().toEqualTypeOf<PlayerId>()
+    expectTypeOf<ResourceEventType>().toEqualTypeOf<
+      | 'resource.counter_blasted'
+      | 'resource.counter_charged'
+      | 'resource.soul_blasted'
+      | 'resource.soul_charged'
+    >()
     expectTypeOf<EffectEvent['type']>().toEqualTypeOf<'effect.resolved'>()
     expectTypeOf<EffectEventType>().toEqualTypeOf<'effect.resolved'>()
+    expectTypeOf<TriggerEventType>().toEqualTypeOf<
+      'trigger.revealed' | 'trigger.resolved'
+    >()
     expectTypeOf<EffectResolvedEvent['sourcePieceId']>().toEqualTypeOf<
       PieceId | undefined
     >()

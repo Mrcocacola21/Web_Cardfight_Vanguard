@@ -49,24 +49,30 @@ describe('Local gameplay prototype flow', () => {
     expect(screen.getByText('Aichi Sendou completed mulligan.')).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: /advance phase/i }))
+    fireEvent.click(screen.getByRole('button', { name: /advance phase/i }))
+    fireEvent.click(screen.getByRole('button', { name: /advance phase/i }))
     fireEvent.click(
       screen.getByRole('button', { name: /ride first ride deck card/i }),
     )
+    fireEvent.click(screen.getByRole('button', { name: /advance phase/i }))
     fireEvent.click(
       screen.getByRole('button', { name: /call first hand card/i }),
     )
 
     expect(
-      screen.getByText('Phase advanced from pregame to draw.'),
+      screen.getByText('Phase advanced from pregame to stand.'),
     ).toBeVisible()
+    expect(screen.getByText('Phase advanced from stand to draw.')).toBeVisible()
+    expect(screen.getByText('Phase advanced from draw to ride.')).toBeVisible()
+    expect(screen.getByText('Phase advanced from ride to main.')).toBeVisible()
+    expect(screen.getByText(/rode onto the vanguard circle\./)).toBeVisible()
+    expect(screen.getByText(/was called to rear-guard\./)).toBeVisible()
     expect(
-      screen.getByText('p1:piece:ride-deck-0 rode onto the vanguard circle.'),
-    ).toBeVisible()
+      screen.getAllByText('local-catalog:keter:wayward-boost').length,
+    ).toBeGreaterThan(0)
     expect(
-      screen.getByText('p1:piece:hand-2 was called to rear-guard.'),
-    ).toBeVisible()
-    expect(screen.getAllByText('p1:card:ride-deck-0').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('p1:card:hand-2').length).toBeGreaterThan(0)
+      screen.getAllByText('local-catalog:keter:main-g1-a').length,
+    ).toBeGreaterThan(0)
     expect(screen.getByText('Accepted')).toBeVisible()
   })
 

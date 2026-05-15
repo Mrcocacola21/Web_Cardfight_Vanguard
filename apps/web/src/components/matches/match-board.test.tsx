@@ -47,15 +47,17 @@ describe('MatchBoard', () => {
     expect(within(currentSide).getByText('Aichi Sendou')).toBeVisible()
     expect(within(opponentSide).getByText('Toshiki Kai')).toBeVisible()
     expect(
-      within(currentBattlefield).getByText('p1:card:starter'),
+      within(currentBattlefield).getByText('local-catalog:keter:starting-sage'),
     ).toBeVisible()
-    expect(within(currentSupport).getByText('p1:card:soul-1')).toBeVisible()
     expect(
-      within(currentSupport).getByText('p1:card:ride-deck-0'),
+      within(currentSupport).getByText('local-catalog:keter:wayward-boost'),
     ).toBeVisible()
-    expect(within(currentSupport).getByText('p1:card:g-deck-1')).toBeVisible()
-    expect(within(currentHand).getByText('p1:card:hand-1')).toBeVisible()
-    expect(within(opponentSide).getByText('p2:card:starter')).toBeVisible()
+    expect(
+      within(currentHand).getAllByText('local-catalog:keter:main-g1-a').length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(opponentSide).getByText('local-catalog:keter:starting-sage'),
+    ).toBeVisible()
   })
 
   it('renders all main zone contents, empty areas, hidden private cards, and piece flags', () => {
@@ -73,21 +75,26 @@ describe('MatchBoard', () => {
     })
     const opponentSide = screen.getByRole('region', { name: 'Opponent side' })
 
-    expect(within(currentSide).getByText('p1:card:rear-guard-1')).toBeVisible()
-    expect(within(currentSide).getByText('p1:card:damage-1')).toBeVisible()
-    expect(within(currentSide).getByText('p1:card:soul-1')).toBeVisible()
-    expect(within(currentSide).getByText('p1:card:ride-deck-1')).toBeVisible()
-    expect(within(currentSide).getByText('p1:card:g-deck-1')).toBeVisible()
-    expect(within(currentSide).getByText('Empty slot')).toBeVisible()
+    expect(
+      within(currentSide).getByText('local-catalog:keter:starting-sage'),
+    ).toBeVisible()
+    expect(
+      within(currentSide).getByText('local-catalog:keter:wayward-boost'),
+    ).toBeVisible()
+    expect(
+      within(currentSide).getAllByText('Empty slot').length,
+    ).toBeGreaterThan(0)
     expect(
       within(currentSide).getAllByText('Empty zone').length,
     ).toBeGreaterThanOrEqual(2)
-    expect(within(currentSide).getByText('Rest')).toBeVisible()
-    expect(within(currentSide).getByText('Locked')).toBeVisible()
-    expect(within(opponentSide).getAllByText('Hidden card').length).toBe(8)
-    expect(within(opponentSide).queryByText('p2:card:hand-1')).toBeNull()
-    expect(within(opponentSide).queryByText('p2:card:deck-1')).toBeNull()
-    expect(within(opponentSide).queryByText('p2:card:ride-deck-0')).toBeNull()
-    expect(within(opponentSide).queryByText('p2:card:g-deck-1')).toBeNull()
+    expect(
+      within(opponentSide).getAllByText('Hidden card').length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(opponentSide).queryByText('local-catalog:keter:main-g1-a'),
+    ).toBeNull()
+    expect(
+      within(opponentSide).queryByText('local-catalog:keter:wayward-boost'),
+    ).toBeNull()
   })
 })

@@ -9,6 +9,7 @@ import type {
   TransitionId,
   ZoneId,
 } from '../contracts'
+import { buildEngineCardStatsSnapshot } from '../cards'
 import type { BattleState, GameState, ZoneState } from '../state'
 import { PERSONA_RIDE_KEYWORD } from '../keywords'
 import type { GameChoiceRequest } from '../requests'
@@ -207,9 +208,33 @@ function makePersonaRideState(): GameState {
         controllerPlayerId: PLAYER_2,
       },
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-persona' as CardId, 3),
+      makeUnitStats('card-rear-guard' as CardId, 2),
+      makeUnitStats('card-drawn' as CardId, 1),
+      makeUnitStats('card-p2-vg' as CardId, 3),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests: [],
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 10000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 
@@ -550,7 +575,7 @@ describe('@web-vg/rules-core event-triggered resolution foundation', () => {
       type: 'effect.resolved',
       effectDefinitionId: CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id,
       triggerEventSequence: 1,
-      operationKinds: ['typed_handler'],
+      operationKinds: ['trigger_check_none'],
     })
     expect(result.nextState.battle?.lastCheck?.triggerResolutionState).toBe(
       'resolved_none',
@@ -558,8 +583,16 @@ describe('@web-vg/rules-core event-triggered resolution foundation', () => {
   })
 
   it('leaves no-match transitions unchanged', () => {
+    const baseState = makePersonaRideState()
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
     const result = requireApplied(
-      applyGameAction(makePersonaRideState(), {
+      applyGameAction(state, {
         action: {
           actionId: 'action-call-no-match' as ActionId,
           type: 'card.call',

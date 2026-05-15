@@ -7,8 +7,13 @@ import type {
   GamePieceFlagKey,
   GamePieceStatusState,
   GameState,
-  PlayerState,
-  ZoneState,
+} from '../state'
+import {
+  buildGameStateIndex,
+  findOwnedZoneByKind,
+  findPieceById,
+  findPlayerById,
+  listOwnedZonesByKind,
 } from '../state'
 import { drawTopPiecesBetweenZones } from '../transitions/ordered-zone-operations'
 import { createPieceMovedEvents } from '../transitions/zone-transfer'
@@ -27,10 +32,7 @@ import {
   type EffectDefinition,
 } from './effect'
 import { type EffectRegistry } from './registry'
-import {
-  PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY,
-  coreEffectRegistry,
-} from './samples'
+import { coreEffectRegistry } from './samples'
 
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
 export const PERSONA_RIDE_POWER_FLAG =
@@ -192,7 +194,6 @@ export function resolvePersonaRideEffect(
   input: PersonaRideEffectResolutionInput,
 ): PostRideEffectResolution {
   if (
-    input.effectDefinition.id !== PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY.id ||
     !canResolvePersonaRideEffect(
       input.currentState,
       input.rideEvent.pieceId,
@@ -253,9 +254,8 @@ function resolveKeywordEffectDefinitions(
   supportedKeywords: readonly string[],
   environment: FirstEffectEnvironment,
 ): readonly EffectDefinition[] {
-  const sourcePiece = currentState.pieces.find(
-    (piece) => piece.pieceId === sourcePieceId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const sourcePiece = findPieceById(stateIndex, sourcePieceId)
 
   if (sourcePiece?.keywords === undefined) {
     return []
@@ -289,12 +289,9 @@ function canResolvePersonaRideEffect(
     return false
   }
 
-  const rodePiece = currentState.pieces.find(
-    (piece) => piece.pieceId === rodePieceId,
-  )
-  const rodeOverPiece = currentState.pieces.find(
-    (piece) => piece.pieceId === ridingOverPieceId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const rodePiece = findPieceById(stateIndex, rodePieceId)
+  const rodeOverPiece = findPieceById(stateIndex, ridingOverPieceId)
 
   return (
     rodePiece?.cardDefinitionId !== undefined &&
@@ -371,9 +368,8 @@ function applyDrawCardsOperation(
   >,
   options: { readonly startingSequence: number },
 ): ApplyDeclarativeOperationsResult {
-  const sourcePiece = currentState.pieces.find(
-    (piece) => piece.pieceId === input.sourcePieceId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const sourcePiece = findPieceById(stateIndex, input.sourcePieceId)
   const controllerPlayerId = sourcePiece?.controllerPlayerId
 
   if (controllerPlayerId === undefined) {
@@ -384,17 +380,15 @@ function applyDrawCardsOperation(
     }
   }
 
-  const player = currentState.players.find(
-    (candidate) => candidate.playerId === controllerPlayerId,
-  )
+  const player = findPlayerById(stateIndex, controllerPlayerId)
   const deckZone =
     player === undefined
       ? undefined
-      : findOwnedZoneByKind(currentState, player, 'deck')
+      : findOwnedZoneByKind(stateIndex, player, 'deck')
   const handZone =
     player === undefined
       ? undefined
-      : findOwnedZoneByKind(currentState, player, 'hand')
+      : findOwnedZoneByKind(stateIndex, player, 'hand')
 
   if (
     player === undefined ||
@@ -466,22 +460,22 @@ function applyPowerModifierOperation(
   currentState: GameState,
   sourcePieceId: PieceId,
 ): GameState {
-  const sourcePiece = currentState.pieces.find(
-    (piece) => piece.pieceId === sourcePieceId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const sourcePiece = findPieceById(stateIndex, sourcePieceId)
   const controllerPlayerId = sourcePiece?.controllerPlayerId
 
   if (controllerPlayerId === undefined) {
     return currentState
   }
 
-  const frontRowPieceIds = currentState.zones
-    .filter(
-      (zone) =>
-        zone.ownerPlayerId === controllerPlayerId &&
-        (zone.kind === 'vanguard_circle' || zone.kind === 'rear_guard_circle'),
-    )
-    .flatMap((zone) => zone.occupants.map((occupant) => occupant.pieceId))
+  const frontRowPieceIds = [
+    ...listOwnedZonesByKind(stateIndex, controllerPlayerId, 'vanguard_circle'),
+    ...listOwnedZonesByKind(
+      stateIndex,
+      controllerPlayerId,
+      'rear_guard_circle',
+    ),
+  ].flatMap((zone) => zone.occupants.map((occupant) => occupant.pieceId))
 
   return {
     ...currentState,
@@ -556,16 +550,6 @@ function createEffectResolvedEvent(input: {
         }),
     operationKinds: input.operationKinds,
   }
-}
-
-function findOwnedZoneByKind(
-  currentState: GameState,
-  player: PlayerState,
-  kind: ZoneState['kind'],
-): ZoneState | undefined {
-  return currentState.zones.find(
-    (zone) => zone.ownerPlayerId === player.playerId && zone.kind === kind,
-  )
 }
 
 function createEventId(transitionId: TransitionId, sequence: number): EventId {

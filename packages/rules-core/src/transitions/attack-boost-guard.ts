@@ -3,8 +3,16 @@ import type {
   DeclareAttackAction,
   GuardAction,
 } from '../actions'
+import {
+  isFrontRowBoardPosition,
+  resolveBoardPositionForOccupant,
+  resolveBoardPositionForPiece,
+  resolveBoostRelation,
+} from '../board'
+import { resolveGamePieceCardStats } from '../cards'
 import type { BattleId, EventId, RequestId, TransitionId } from '../contracts'
 import type { GameEvent } from '../events'
+import { INTERCEPT_KEYWORD } from '../keywords'
 import type {
   GuardChoiceRequest,
   GuardChoiceResponse,
@@ -13,8 +21,17 @@ import type {
 import type {
   GamePieceState,
   GameState,
+  GameStateIndex,
   PlayerState,
   ZoneState,
+} from '../state'
+import {
+  buildGameStateIndex,
+  findOwnedZoneByKind,
+  findPieceLocation,
+  findPlayerById,
+  findZoneById,
+  listOwnedZonesByKind,
 } from '../state'
 
 import {
@@ -24,21 +41,17 @@ import {
   createTransitionTimingWindowTriplet,
   type TransitionResult,
 } from './transition'
-import {
-  findZoneById,
-  movePiecesByIdBetweenZones,
-} from './ordered-zone-operations'
+import { movePiecesByIdBetweenZones } from './ordered-zone-operations'
 import {
   applyRestPieceStateChange,
   LOCKED_PIECE_FLAG,
   resolveGamePieceStatusState,
 } from './piece-state-flags'
-import { createPieceMovedEvents } from './zone-transfer'
-
-interface PieceLocation {
-  readonly piece: GamePieceState
-  readonly zone: ZoneState
-}
+import {
+  createPieceMovedEvents,
+  resolveZoneTransferSequence,
+} from './zone-transfer'
+import { resolveFirstTurnAttackLegality } from './vanguard-legality'
 
 export function applyDeclareAttackTransition(
   transitionId: TransitionId,
@@ -63,7 +76,8 @@ export function applyDeclareAttackTransition(
     )
   }
 
-  const actingPlayer = findPlayerById(currentState, action.actor.playerId)
+  const stateIndex = buildGameStateIndex(currentState)
+  const actingPlayer = findPlayerById(stateIndex, action.actor.playerId)
 
   if (actingPlayer === undefined) {
     return createInvalidTransitionResult(
@@ -83,10 +97,21 @@ export function applyDeclareAttackTransition(
     )
   }
 
-  const attackerLocation = findPieceLocation(
+  const attackLegality = resolveFirstTurnAttackLegality({
     currentState,
-    action.attackerPieceId,
-  )
+    actionType: action.type,
+  })
+
+  if (!attackLegality.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      attackLegality.code,
+      attackLegality.message,
+    )
+  }
+
+  const attackerLocation = findPieceLocation(stateIndex, action.attackerPieceId)
 
   if (attackerLocation === undefined) {
     return createInvalidTransitionResult(
@@ -120,8 +145,32 @@ export function applyDeclareAttackTransition(
     )
   }
 
+  const attackerBoardPosition = resolveBoardPositionForPiece(
+    currentState,
+    action.attackerPieceId,
+  )
+
+  if (!attackerBoardPosition.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      attackerBoardPosition.issue.message,
+    )
+  }
+
+  if (!isFrontRowBoardPosition(attackerBoardPosition.position)) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} requires attacker piece ${action.attackerPieceId} to be on a front-row battlefield circle.`,
+    )
+  }
+
   const defendingPlayerIdResult = resolveDefendingPlayerId(
     currentState,
+    stateIndex,
     actingPlayer.playerId,
     action.target,
   )
@@ -261,7 +310,8 @@ export function applyCommitBoostTransition(
     )
   }
 
-  const boosterLocation = findPieceLocation(currentState, action.boosterPieceId)
+  const stateIndex = buildGameStateIndex(currentState)
+  const boosterLocation = findPieceLocation(stateIndex, action.boosterPieceId)
 
   if (boosterLocation === undefined) {
     return createInvalidTransitionResult(
@@ -283,12 +333,18 @@ export function applyCommitBoostTransition(
     )
   }
 
-  if (boosterLocation.zone.kind !== 'rear_guard_circle') {
+  const boostRelation = resolveBoostRelation(
+    currentState,
+    action.attackerPieceId,
+    action.boosterPieceId,
+  )
+
+  if (!boostRelation.ok) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
       'invalid_action',
-      `Action ${action.type} requires the boosting piece ${action.boosterPieceId} to be on a rear-guard circle under the current simplified battle foundation.`,
+      boostRelation.issue.message,
     )
   }
 
@@ -398,7 +454,8 @@ export function applyGuardTransition(
     )
   }
 
-  const defendingPlayer = findPlayerById(currentState, battle.defendingPlayerId)
+  const stateIndex = buildGameStateIndex(currentState)
+  const defendingPlayer = findPlayerById(stateIndex, battle.defendingPlayerId)
 
   if (defendingPlayer === undefined) {
     return createInvalidTransitionResult(
@@ -409,9 +466,9 @@ export function applyGuardTransition(
     )
   }
 
-  const handZone = findOwnedZoneByKind(currentState, defendingPlayer, 'hand')
+  const handZone = findOwnedZoneByKind(stateIndex, defendingPlayer, 'hand')
   const guardZone = findOwnedZoneByKind(
-    currentState,
+    stateIndex,
     defendingPlayer,
     'guardian_circle',
   )
@@ -438,6 +495,15 @@ export function applyGuardTransition(
   const eligiblePieceIds = handZone.occupants.map(
     (occupant) => occupant.pieceId,
   )
+  const eligibleInterceptPieceIds = resolveEligibleInterceptPieceIds(
+    currentState,
+    stateIndex,
+    defendingPlayer,
+  )
+  const eligibleGuardianPieceIds = [
+    ...eligiblePieceIds,
+    ...eligibleInterceptPieceIds,
+  ]
   const request: GuardChoiceRequest = {
     requestId,
     type: 'battle.guard_select',
@@ -450,15 +516,26 @@ export function applyGuardTransition(
     guardZoneId: guardZone.zoneId,
     attackerPieceId: battle.attackerPieceId,
     minSelections: 0,
-    maxSelections: eligiblePieceIds.length,
-    eligiblePieceIds,
+    maxSelections: eligibleGuardianPieceIds.length,
+    eligiblePieceIds: eligibleGuardianPieceIds,
+    handPieceIds: eligiblePieceIds,
+    interceptPieceIds: eligibleInterceptPieceIds,
     context: {
       sourceActionId: action.actionId,
       relatedPieceIds:
-        eligiblePieceIds.length === 0
+        eligibleGuardianPieceIds.length === 0
           ? [battle.attackerPieceId]
-          : [battle.attackerPieceId, ...eligiblePieceIds],
-      relatedZoneIds: [handZone.zoneId, guardZone.zoneId],
+          : [battle.attackerPieceId, ...eligibleGuardianPieceIds],
+      relatedZoneIds: Array.from(
+        new Set([
+          handZone.zoneId,
+          guardZone.zoneId,
+          ...resolveInterceptSourceZoneIds(
+            stateIndex,
+            eligibleInterceptPieceIds,
+          ),
+        ]),
+      ),
     },
   }
   const nextState = advanceGameStateRevision({
@@ -522,10 +599,8 @@ export function applyGuardChoiceResponseTransition(
     )
   }
 
-  const defendingPlayer = findPlayerById(
-    currentState,
-    request.responderPlayerId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const defendingPlayer = findPlayerById(stateIndex, request.responderPlayerId)
 
   if (defendingPlayer === undefined) {
     return createInvalidTransitionResult(
@@ -537,8 +612,8 @@ export function applyGuardChoiceResponseTransition(
     )
   }
 
-  const handZone = findZoneById(currentState, request.handZoneId)
-  const guardZone = findZoneById(currentState, request.guardZoneId)
+  const handZone = findZoneById(stateIndex, request.handZoneId)
+  const guardZone = findZoneById(stateIndex, request.guardZoneId)
 
   if (
     handZone === undefined ||
@@ -558,8 +633,10 @@ export function applyGuardChoiceResponseTransition(
   const currentHandPieceIds = handZone.occupants.map(
     (occupant) => occupant.pieceId,
   )
+  const requestHandPieceIds = request.handPieceIds ?? request.eligiblePieceIds
+  const requestInterceptPieceIds = request.interceptPieceIds ?? []
 
-  if (!haveExactMembers(currentHandPieceIds, request.eligiblePieceIds)) {
+  if (!haveExactMembers(currentHandPieceIds, requestHandPieceIds)) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
@@ -567,6 +644,24 @@ export function applyGuardChoiceResponseTransition(
       `Pending battle guard request ${request.requestId} no longer matches the current defending hand state.`,
       { inputKind: 'choice_response' },
     )
+  }
+
+  if (requestInterceptPieceIds.length > 0) {
+    const currentInterceptPieceIds = resolveEligibleInterceptPieceIds(
+      currentState,
+      stateIndex,
+      defendingPlayer,
+    )
+
+    if (!haveExactMembers(currentInterceptPieceIds, requestInterceptPieceIds)) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        'request_response_mismatch',
+        `Pending battle guard request ${request.requestId} no longer matches the current intercept state.`,
+        { inputKind: 'choice_response' },
+      )
+    }
   }
 
   if (response.type === 'answer.pass') {
@@ -623,20 +718,79 @@ export function applyGuardChoiceResponseTransition(
     )
   }
 
-  const guardMoveResult = movePiecesByIdBetweenZones(
-    currentState,
-    response.selectedPieceIds,
-    request.handZoneId,
-    request.guardZoneId,
-    'guard',
+  const selectedHandPieceIds = response.selectedPieceIds.filter((pieceId) =>
+    requestHandPieceIds.includes(pieceId),
   )
+  const selectedInterceptPieceIds = response.selectedPieceIds.filter(
+    (pieceId) => requestInterceptPieceIds.includes(pieceId),
+  )
+  const handMoveResult =
+    selectedHandPieceIds.length === 0
+      ? {
+          ok: true as const,
+          zones: currentState.zones,
+          pieceStates: currentState.pieceStates,
+          movedPieces: [],
+        }
+      : movePiecesByIdBetweenZones(
+          currentState,
+          selectedHandPieceIds,
+          request.handZoneId,
+          request.guardZoneId,
+          'guard',
+        )
 
-  if (!guardMoveResult.ok) {
+  if (!handMoveResult.ok) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
-      guardMoveResult.code,
-      guardMoveResult.message,
+      handMoveResult.code,
+      handMoveResult.message,
+      { inputKind: 'choice_response' },
+    )
+  }
+
+  const stateAfterHandGuards: GameState = {
+    ...currentState,
+    zones: handMoveResult.zones,
+    pieceStates: handMoveResult.pieceStates,
+  }
+  const stateAfterHandGuardsIndex = buildGameStateIndex(stateAfterHandGuards)
+  const interceptMoveResult =
+    selectedInterceptPieceIds.length === 0
+      ? {
+          ok: true as const,
+          zones: stateAfterHandGuards.zones,
+          pieceStates: stateAfterHandGuards.pieceStates,
+          transfers: [],
+        }
+      : resolveZoneTransferSequence(
+          stateAfterHandGuards,
+          selectedInterceptPieceIds.map((pieceId) => {
+            const location = findPieceLocation(
+              stateAfterHandGuardsIndex,
+              pieceId,
+            )
+
+            return {
+              pieceId,
+              from: {
+                zoneId: location?.zone.zoneId ?? request.guardZoneId,
+              },
+              to: {
+                zoneId: request.guardZoneId,
+              },
+              reason: 'intercept' as const,
+            }
+          }),
+        )
+
+  if (!interceptMoveResult.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      interceptMoveResult.code,
+      interceptMoveResult.message,
       { inputKind: 'choice_response' },
     )
   }
@@ -651,27 +805,69 @@ export function applyGuardChoiceResponseTransition(
       guardPieceIds: response.selectedPieceIds,
     }),
     pendingRequests: currentState.pendingRequests.slice(1),
-    zones: guardMoveResult.zones,
-    pieceStates: guardMoveResult.pieceStates,
+    zones: interceptMoveResult.zones,
+    pieceStates: interceptMoveResult.pieceStates,
   })
-  const pieceMovedEvents = createPieceMovedEvents(
+  const handMovedEvents = createPieceMovedEvents(
     transitionId,
-    guardMoveResult.movedPieces,
+    handMoveResult.movedPieces,
     createPlayerEventOrigin(defendingPlayer.playerId),
     {
       startingSequence: 1,
     },
   )
+  const interceptMovedEvents = createPieceMovedEvents(
+    transitionId,
+    interceptMoveResult.transfers,
+    createPlayerEventOrigin(defendingPlayer.playerId),
+    {
+      startingSequence: 1 + handMovedEvents.length,
+    },
+  )
+  const interceptEvent:
+    | Extract<GameEvent, { readonly type: 'battle.intercept_declared' }>
+    | undefined =
+    selectedInterceptPieceIds.length === 0
+      ? undefined
+      : {
+          eventId: createBattleEventId(
+            transitionId,
+            1 + handMovedEvents.length + interceptMovedEvents.length,
+          ),
+          type: 'battle.intercept_declared',
+          sequence: 1 + handMovedEvents.length + interceptMovedEvents.length,
+          origin: createPlayerEventOrigin(defendingPlayer.playerId),
+          battleId: battle.battleId,
+          interceptPieceIds: selectedInterceptPieceIds,
+          fromZoneIds: Array.from(
+            new Set(
+              interceptMoveResult.transfers.map(
+                (transfer) => transfer.from.zoneId,
+              ),
+            ),
+          ),
+          guardZoneId: request.guardZoneId,
+          attackerPieceId: battle.attackerPieceId,
+        }
+  const guardDeclaredSequence =
+    1 +
+    handMovedEvents.length +
+    interceptMovedEvents.length +
+    (interceptEvent === undefined ? 0 : 1)
   const events: readonly GameEvent[] = [
     choiceResponseEvent,
-    ...pieceMovedEvents,
+    ...handMovedEvents,
+    ...interceptMovedEvents,
+    ...(interceptEvent === undefined ? [] : [interceptEvent]),
     {
-      eventId: createBattleEventId(transitionId, pieceMovedEvents.length + 1),
+      eventId: createBattleEventId(transitionId, guardDeclaredSequence),
       type: 'battle.guard_declared',
-      sequence: pieceMovedEvents.length + 1,
+      sequence: guardDeclaredSequence,
       origin: createPlayerEventOrigin(defendingPlayer.playerId),
       battleId: battle.battleId,
       guardianPieceIds: response.selectedPieceIds,
+      handPieceIds: selectedHandPieceIds,
+      interceptPieceIds: selectedInterceptPieceIds,
       handZoneId: request.handZoneId,
       guardZoneId: request.guardZoneId,
       attackerPieceId: battle.attackerPieceId,
@@ -687,45 +883,12 @@ export function applyGuardChoiceResponseTransition(
       }),
       ...createTransitionTimingWindowTriplet('battle.guard', {
         startingSequence: 3,
-        relatedEventSequence: pieceMovedEvents.length + 1,
+        relatedEventSequence: guardDeclaredSequence,
         battleId: battle.battleId,
         requestId: request.requestId,
       }),
     ],
   })
-}
-
-function findPlayerById(
-  currentState: GameState,
-  playerId: PlayerState['playerId'],
-): PlayerState | undefined {
-  return currentState.players.find((player) => player.playerId === playerId)
-}
-
-function findPieceLocation(
-  currentState: GameState,
-  pieceId: GamePieceState['pieceId'],
-): PieceLocation | undefined {
-  const piece = currentState.pieces.find(
-    (candidate) => candidate.pieceId === pieceId,
-  )
-
-  if (piece === undefined) {
-    return undefined
-  }
-
-  const zone = currentState.zones.find((candidate) =>
-    candidate.occupants.some((occupant) => occupant.pieceId === pieceId),
-  )
-
-  if (zone === undefined) {
-    return undefined
-  }
-
-  return {
-    piece,
-    zone,
-  }
 }
 
 function resolvePieceController(
@@ -744,18 +907,90 @@ function clearGuardRequestId(
   return nextBattle
 }
 
-function findOwnedZoneByKind(
+function resolveEligibleInterceptPieceIds(
   currentState: GameState,
-  player: PlayerState,
-  kind: ZoneState['kind'],
-): ZoneState | undefined {
-  return currentState.zones.find(
-    (zone) => zone.ownerPlayerId === player.playerId && zone.kind === kind,
+  stateIndex: GameStateIndex,
+  defendingPlayer: PlayerState,
+): readonly GamePieceState['pieceId'][] {
+  return listOwnedZonesByKind(stateIndex, defendingPlayer, 'rear_guard_circle')
+    .flatMap((zone) =>
+      zone.occupants
+        .filter((occupant) => {
+          const position = resolveBoardPositionForOccupant(zone, occupant)
+
+          return position.ok && isFrontRowBoardPosition(position.position)
+        })
+        .map((occupant) => occupant.pieceId),
+    )
+    .filter((pieceId) =>
+      isLegalInterceptPiece(
+        currentState,
+        stateIndex,
+        defendingPlayer.playerId,
+        pieceId,
+      ),
+    )
+}
+
+function resolveInterceptSourceZoneIds(
+  stateIndex: GameStateIndex,
+  interceptPieceIds: readonly GamePieceState['pieceId'][],
+): readonly ZoneState['zoneId'][] {
+  return interceptPieceIds.flatMap((pieceId) => {
+    const location = findPieceLocation(stateIndex, pieceId)
+
+    return location === undefined ? [] : [location.zone.zoneId]
+  })
+}
+
+function isLegalInterceptPiece(
+  currentState: GameState,
+  stateIndex: GameStateIndex,
+  defendingPlayerId: PlayerState['playerId'],
+  pieceId: GamePieceState['pieceId'],
+): boolean {
+  const location = findPieceLocation(stateIndex, pieceId)
+
+  if (
+    location === undefined ||
+    location.zone.kind !== 'rear_guard_circle' ||
+    resolvePieceController(location.piece) !== defendingPlayerId
+  ) {
+    return false
+  }
+
+  const pieceStatus = resolveGamePieceStatusState(currentState, pieceId)
+
+  if (pieceStatus.flags.includes(LOCKED_PIECE_FLAG)) {
+    return false
+  }
+
+  if (location.piece.keywords?.includes(INTERCEPT_KEYWORD) === true) {
+    return true
+  }
+
+  const statsResolution = resolveGamePieceCardStats(
+    currentState,
+    location.piece,
   )
+
+  if (!statsResolution.ok) {
+    return false
+  }
+
+  return (
+    statsResolution.stats.grade === 2 &&
+    isUnitCardType(statsResolution.stats.cardType)
+  )
+}
+
+function isUnitCardType(cardType: string): boolean {
+  return cardType === 'normal-unit' || cardType === 'trigger-unit'
 }
 
 function resolveDefendingPlayerId(
   currentState: GameState,
+  stateIndex: GameStateIndex,
   attackingPlayerId: PlayerState['playerId'],
   target: DeclareAttackAction['target'],
 ):
@@ -774,7 +1009,7 @@ function resolveDefendingPlayerId(
       }
     }
 
-    const defendingPlayer = findPlayerById(currentState, target.playerId)
+    const defendingPlayer = findPlayerById(stateIndex, target.playerId)
 
     if (defendingPlayer === undefined) {
       return {
@@ -786,7 +1021,7 @@ function resolveDefendingPlayerId(
     return { defendingPlayerId: defendingPlayer.playerId }
   }
 
-  const targetLocation = findPieceLocation(currentState, target.pieceId)
+  const targetLocation = findPieceLocation(stateIndex, target.pieceId)
 
   if (targetLocation === undefined) {
     return {
@@ -802,6 +1037,25 @@ function resolveDefendingPlayerId(
     return {
       code: 'invalid_action',
       message: `Attack target piece ${target.pieceId} must be on a vanguard or rear-guard circle.`,
+    }
+  }
+
+  const targetBoardPosition = resolveBoardPositionForPiece(
+    currentState,
+    target.pieceId,
+  )
+
+  if (!targetBoardPosition.ok) {
+    return {
+      code: 'invalid_action',
+      message: targetBoardPosition.issue.message,
+    }
+  }
+
+  if (!isFrontRowBoardPosition(targetBoardPosition.position)) {
+    return {
+      code: 'invalid_action',
+      message: `Attack target piece ${target.pieceId} must be on a front-row battlefield circle.`,
     }
   }
 

@@ -13,6 +13,7 @@ import {
   STANDARD_ZONE_KINDS,
   V_PREMIUM_FORMAT_ID,
   V_PREMIUM_ZONE_KINDS,
+  buildEngineCardStatsSnapshot,
 } from '../index'
 
 interface FormatSmokeStateOptions {
@@ -192,6 +193,11 @@ export function makeStandardSmokeState(
         'card-standard-opponent-vanguard' as CardId,
       ),
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-standard-ride' as CardId, 1),
+      makeUnitStats('card-standard-vanguard' as CardId, 0),
+      makeUnitStats('card-standard-opponent-vanguard' as CardId, 0),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests,
@@ -383,6 +389,12 @@ export function makeVPremiumSmokeState(
     ],
     zones,
     pieces,
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-vp-hand-ride' as CardId, 3),
+      makeUnitStats('card-vp-vanguard' as CardId, 2),
+      makeUnitStats('card-vp-ride-deck' as CardId, 3),
+      makeUnitStats('card-vp-opponent-vanguard' as CardId, 2),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests,
@@ -628,5 +640,23 @@ function makeCardPiece(
     ownerPlayerId,
     controllerPlayerId: ownerPlayerId,
     cardDefinitionId,
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 10000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }

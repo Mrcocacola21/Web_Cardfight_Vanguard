@@ -29,6 +29,7 @@ type ExpectedActionTypes =
   | 'match.concede'
   | 'system.begin_mulligan'
   | 'system.drive_check'
+  | 'system.resolve_combat'
   | 'system.damage_check'
   | 'piece.rest'
   | 'piece.stand'
@@ -99,6 +100,7 @@ describe('@web-vg/rules-core action model', () => {
     >()
     expectTypeOf<TurnFlowAction['type']>().toEqualTypeOf<
       | 'system.drive_check'
+      | 'system.resolve_combat'
       | 'system.damage_check'
       | 'piece.rest'
       | 'piece.stand'

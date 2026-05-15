@@ -101,6 +101,8 @@ export interface GuardChoiceRequest extends GameChoiceRequestBase<'battle.guard_
   readonly minSelections: number
   readonly maxSelections: number
   readonly eligiblePieceIds: readonly PieceId[]
+  readonly handPieceIds?: readonly PieceId[]
+  readonly interceptPieceIds?: readonly PieceId[]
 }
 
 export type SelectionChoiceRequestType =
@@ -320,6 +322,30 @@ export function assertGameChoiceRequestInvariant(
         request.eligiblePieceIds.map((pieceId) => pieceId as string),
         `Choice request ${request.requestId} must not repeat eligible guard piece ids.`,
       )
+      if (request.handPieceIds !== undefined) {
+        assertUniqueStrings(
+          request.handPieceIds.map((pieceId) => pieceId as string),
+          `Choice request ${request.requestId} must not repeat eligible hand guard piece ids.`,
+        )
+        assertAllowedValues(
+          request.handPieceIds.map((pieceId) => pieceId as string),
+          request.eligiblePieceIds.map((pieceId) => pieceId as string),
+          request.requestId,
+          'hand guard piece ids',
+        )
+      }
+      if (request.interceptPieceIds !== undefined) {
+        assertUniqueStrings(
+          request.interceptPieceIds.map((pieceId) => pieceId as string),
+          `Choice request ${request.requestId} must not repeat eligible intercept piece ids.`,
+        )
+        assertAllowedValues(
+          request.interceptPieceIds.map((pieceId) => pieceId as string),
+          request.eligiblePieceIds.map((pieceId) => pieceId as string),
+          request.requestId,
+          'intercept piece ids',
+        )
+      }
       return
     }
     case 'confirm.boolean':

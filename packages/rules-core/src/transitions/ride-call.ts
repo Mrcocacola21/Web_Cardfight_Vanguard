@@ -4,8 +4,16 @@ import type { GameEvent } from '../events'
 import type {
   GamePieceState,
   GameState,
+  GameStateIndex,
   PlayerState,
   ZoneState,
+} from '../state'
+import {
+  buildGameStateIndex,
+  findOwnedZoneByKind,
+  findPieceById,
+  findPlayerById,
+  findZoneById,
 } from '../state'
 
 import {
@@ -15,6 +23,10 @@ import {
   createTransitionTimingWindowTriplet,
   type TransitionResult,
 } from './transition'
+import {
+  resolveNormalCallGradeLegality,
+  resolveNormalRideGradeLegality,
+} from './vanguard-legality'
 import { createPieceMovedEvents, resolveZoneTransfer } from './zone-transfer'
 
 interface PreparedPlayerBoardCardAction<
@@ -25,6 +37,7 @@ interface PreparedPlayerBoardCardAction<
   readonly piece: GamePieceState & { readonly kind: 'card' }
   readonly sourceZone: ZoneState
   readonly destinationZone: ZoneState
+  readonly stateIndex: GameStateIndex
 }
 
 interface PreparePlayerBoardCardActionOptions {
@@ -68,8 +81,9 @@ export function applyRideCardTransition(
     return preparedAction.result
   }
 
-  const { actingPlayer, destinationZone } = preparedAction.value
-  const soulZone = findOwnedZoneByKind(currentState, actingPlayer, 'soul')
+  const { actingPlayer, destinationZone, piece, stateIndex } =
+    preparedAction.value
+  const soulZone = findOwnedZoneByKind(stateIndex, actingPlayer, 'soul')
 
   if (soulZone === undefined) {
     return createInvalidTransitionResult(
@@ -91,6 +105,25 @@ export function applyRideCardTransition(
       currentState,
       'invalid_action_reference',
       `Ride target ${action.ridingOverPieceId} does not match the current vanguard piece ${displacedOccupant?.pieceId ?? 'none'}.`,
+    )
+  }
+
+  const gradeLegality = resolveNormalRideGradeLegality({
+    currentState,
+    actionType: action.type,
+    actingPlayer,
+    ridingPiece: piece,
+    ...(displacedOccupant === undefined
+      ? {}
+      : { currentVanguardPieceId: displacedOccupant.pieceId }),
+  })
+
+  if (!gradeLegality.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      gradeLegality.code,
+      gradeLegality.message,
     )
   }
 
@@ -231,7 +264,23 @@ export function applyCallCardTransition(
     return preparedAction.result
   }
 
-  const { actingPlayer } = preparedAction.value
+  const { actingPlayer, piece } = preparedAction.value
+  const gradeLegality = resolveNormalCallGradeLegality({
+    currentState,
+    actionType: action.type,
+    actingPlayer,
+    callingPiece: piece,
+  })
+
+  if (!gradeLegality.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      gradeLegality.code,
+      gradeLegality.message,
+    )
+  }
+
   const relocation = resolveZoneTransfer(currentState, {
     pieceId: action.pieceId,
     from: action.from,
@@ -309,9 +358,8 @@ function preparePlayerBoardCardAction<
     }
   }
 
-  const actingPlayer = currentState.players.find(
-    (player) => player.playerId === action.actor.playerId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const actingPlayer = findPlayerById(stateIndex, action.actor.playerId)
 
   if (actingPlayer === undefined) {
     return {
@@ -325,9 +373,7 @@ function preparePlayerBoardCardAction<
     }
   }
 
-  const piece = currentState.pieces.find(
-    (candidate) => candidate.pieceId === action.pieceId,
-  )
+  const piece = findPieceById(stateIndex, action.pieceId)
 
   if (piece === undefined || piece.kind !== 'card') {
     return {
@@ -341,9 +387,7 @@ function preparePlayerBoardCardAction<
     }
   }
 
-  const sourceZone = currentState.zones.find(
-    (zone) => zone.zoneId === action.from.zoneId,
-  )
+  const sourceZone = findZoneById(stateIndex, action.from.zoneId)
 
   if (
     sourceZone === undefined ||
@@ -375,9 +419,7 @@ function preparePlayerBoardCardAction<
     }
   }
 
-  const destinationZone = currentState.zones.find(
-    (zone) => zone.zoneId === action.to.zoneId,
-  )
+  const destinationZone = findZoneById(stateIndex, action.to.zoneId)
 
   if (
     destinationZone === undefined ||
@@ -414,18 +456,9 @@ function preparePlayerBoardCardAction<
       piece: piece as GamePieceState & { readonly kind: 'card' },
       sourceZone,
       destinationZone,
+      stateIndex,
     },
   }
-}
-
-function findOwnedZoneByKind(
-  currentState: GameState,
-  player: PlayerState,
-  kind: ZoneState['kind'],
-): ZoneState | undefined {
-  return currentState.zones.find(
-    (zone) => zone.ownerPlayerId === player.playerId && zone.kind === kind,
-  )
 }
 
 function createEventId(transitionId: TransitionId, sequence: number): EventId {

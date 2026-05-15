@@ -1,6 +1,5 @@
 import type {
   ActionActor,
-  AdvancePhaseAction,
   GameActionSubmission,
   MatchConcedeAction,
   MatchReadyAction,
@@ -42,7 +41,15 @@ import {
   applyGuardTransition,
 } from './attack-boost-guard'
 import { applyResolveMandatoryFlowTransition } from './battle-completion'
+import { applyResolveCombatTransition } from './combat-resolution'
 import { applyCallCardTransition, applyRideCardTransition } from './ride-call'
+import {
+  applyAdvancePhaseTransition,
+  applyEndPhaseTransition,
+  applyEndTurnTransition,
+  applyResolveTurnMandatoryFlowTransition,
+  resolvePhaseActionViolation,
+} from './turn-structure'
 import {
   advanceGameStateRevision,
   type ActionTransitionInput,
@@ -137,6 +144,20 @@ function reduceActionTransition(
     )
   }
 
+  const phaseActionViolation =
+    action.type === 'match.concede'
+      ? undefined
+      : resolvePhaseActionViolation(currentState, action)
+
+  if (phaseActionViolation !== undefined) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      phaseActionViolation,
+    )
+  }
+
   const baseResult = (() => {
     switch (action.type) {
       case 'match.ready':
@@ -149,6 +170,8 @@ function reduceActionTransition(
         return applyBeginMulliganTransition(transitionId, currentState, action)
       case 'system.drive_check':
         return applyDriveCheckTransition(transitionId, currentState, action)
+      case 'system.resolve_combat':
+        return applyResolveCombatTransition(transitionId, currentState, action)
       case 'system.damage_check':
         return applyDamageCheckTransition(transitionId, currentState, action)
       case 'piece.rest':
@@ -159,14 +182,24 @@ function reduceActionTransition(
         return applyLockPieceTransition(transitionId, currentState, action)
       case 'piece.unlock':
         return applyUnlockPieceTransition(transitionId, currentState, action)
+      case 'turn.end_phase':
+        return applyEndPhaseTransition(transitionId, currentState, action)
+      case 'turn.end_turn':
+        return applyEndTurnTransition(transitionId, currentState, action)
       case 'system.advance_phase':
         return applyAdvancePhaseTransition(transitionId, currentState, action)
       case 'system.resolve_mandatory_flow':
-        return applyResolveMandatoryFlowTransition(
-          transitionId,
-          currentState,
-          action,
-        )
+        return action.scope === 'turn'
+          ? applyResolveTurnMandatoryFlowTransition(
+              transitionId,
+              currentState,
+              action,
+            )
+          : applyResolveMandatoryFlowTransition(
+              transitionId,
+              currentState,
+              action,
+            )
       case 'zone.shuffle':
         return applyShuffleZoneTransition(transitionId, currentState, action)
       case 'zone.draw':
@@ -492,8 +525,9 @@ function applyMatchConcedeTransition(
       player.playerId !== concedingPlayer.playerId &&
       player.status !== 'defeated',
   )
+  const { battle: _activeBattle, ...stateWithoutBattle } = currentState
   const nextState = advanceGameStateRevision({
-    ...currentState,
+    ...stateWithoutBattle,
     status: 'completed',
     pendingRequests: [],
     players: currentState.players.map((player) =>
@@ -520,54 +554,6 @@ function applyMatchConcedeTransition(
         }),
   }
   const events: readonly GameEvent[] = [matchEndedEvent]
-
-  return createTransitionResult(transitionId, nextState, events)
-}
-
-function applyAdvancePhaseTransition(
-  transitionId: TransitionId,
-  currentState: GameState,
-  action: AdvancePhaseAction,
-): TransitionResult {
-  if (currentState.status !== 'in_progress') {
-    return createInvalidTransitionResult(
-      transitionId,
-      currentState,
-      'invalid_action',
-      `Action ${action.type} requires the match to be in progress.`,
-    )
-  }
-
-  if (action.nextPhase === currentState.turn.phase) {
-    return createInvalidTransitionResult(
-      transitionId,
-      currentState,
-      'invalid_action',
-      `Action ${action.type} must advance to a different phase than ${currentState.turn.phase}.`,
-    )
-  }
-
-  const nextState = advanceGameStateRevision({
-    ...currentState,
-    turn: {
-      turnNumber: currentState.turn.turnNumber,
-      turnPlayerId: currentState.turn.turnPlayerId,
-      priorityPlayerId: currentState.turn.turnPlayerId,
-      phase: action.nextPhase,
-    },
-  })
-  const events: readonly GameEvent[] = [
-    {
-      eventId: createEventId(transitionId, 0),
-      type: 'turn.phase_advanced',
-      sequence: 0,
-      sourceActionId: action.actionId,
-      origin: createSystemEventOrigin(action.actor.system),
-      turnNumber: currentState.turn.turnNumber,
-      previousPhase: currentState.turn.phase,
-      nextPhase: action.nextPhase,
-    },
-  ]
 
   return createTransitionResult(transitionId, nextState, events)
 }
@@ -755,13 +741,19 @@ function resolveBattleSequenceViolation(
     case 'guard_requested':
       return `Action ${actionType} cannot be applied while battle ${battle.battleId} is waiting for guard choice resolution.`
     case 'guard_resolved':
-      return actionType === 'system.drive_check'
+      return actionType === 'system.drive_check' ||
+        actionType === 'system.resolve_combat'
         ? undefined
-        : `Action ${actionType} cannot be applied while battle ${battle.battleId} is awaiting drive check progression.`
+        : `Action ${actionType} cannot be applied while battle ${battle.battleId} is awaiting drive check or combat comparison progression.`
     case 'drive_checked':
-      return actionType === 'system.damage_check'
+      return actionType === 'system.resolve_combat'
         ? undefined
-        : `Action ${actionType} cannot be applied while battle ${battle.battleId} is awaiting damage check progression.`
+        : `Action ${actionType} cannot be applied while battle ${battle.battleId} is awaiting combat comparison progression.`
+    case 'combat_resolved':
+      return actionType === 'system.damage_check' ||
+        actionType === 'system.resolve_mandatory_flow'
+        ? undefined
+        : `Action ${actionType} cannot be applied while battle ${battle.battleId} is awaiting hit/miss follow-up progression.`
     case 'damage_checked':
       return actionType === 'system.resolve_mandatory_flow'
         ? undefined

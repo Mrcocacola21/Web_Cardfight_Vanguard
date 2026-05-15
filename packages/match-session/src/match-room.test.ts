@@ -1,8 +1,17 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import type { ActionId, GameState, PlayerId } from '@web-vg/rules-core'
-import { STANDARD_FORMAT_ID } from '@web-vg/rules-core'
-import type { UserId } from '@web-vg/shared'
+import type {
+  ActionId,
+  GameState,
+  PlayerId,
+  TransitionId,
+} from '@web-vg/rules-core'
+import {
+  RulesInvariantError,
+  STANDARD_FORMAT_ID,
+  buildEngineCardStatsSnapshot,
+} from '@web-vg/rules-core'
+import type { CardId, UserId } from '@web-vg/shared'
 
 import {
   MatchRoomInvariantError,
@@ -15,6 +24,7 @@ import {
 } from './match-room'
 import type {
   MatchRoom,
+  MatchRoomEngineAdapter,
   MatchRoomId,
   MatchRoomParticipant,
   MatchRoomParticipantId,
@@ -75,6 +85,72 @@ function makeGameState(
     pieceStates: [],
     flags: [],
     pendingRequests: [],
+  }
+}
+
+function makeGameStateWithCard(
+  options: { readonly includeCardStats?: boolean } = {},
+): GameState {
+  const baseState = makeGameState()
+  const cardDefinitionId = 'card-session-vanguard' as CardId
+
+  return {
+    ...baseState,
+    players: baseState.players.map((player) =>
+      player.playerId === PLAYER_1
+        ? {
+            ...player,
+            ownedZoneIds: [
+              'zone-session-vanguard' as GameState['zones'][number]['zoneId'],
+            ],
+          }
+        : player,
+    ),
+    zones: [
+      {
+        zoneId: 'zone-session-vanguard' as GameState['zones'][number]['zoneId'],
+        kind: 'vanguard_circle',
+        scope: 'player',
+        ownerPlayerId: PLAYER_1,
+        visibility: 'public',
+        layout: {
+          ordering: 'unordered',
+          occupancy: 'single',
+        },
+        occupants: [
+          {
+            pieceId:
+              'piece-session-vanguard' as GameState['pieces'][number]['pieceId'],
+          },
+        ],
+      },
+    ],
+    pieces: [
+      {
+        pieceId:
+          'piece-session-vanguard' as GameState['pieces'][number]['pieceId'],
+        kind: 'card',
+        cardDefinitionId,
+        ownerPlayerId: PLAYER_1,
+        controllerPlayerId: PLAYER_1,
+      },
+    ],
+    ...(options.includeCardStats === true
+      ? {
+          cardStats: buildEngineCardStatsSnapshot([
+            {
+              cardDefinitionId,
+              cardType: 'normal-unit',
+              grade: 3,
+              power: 13000,
+              shield: 0,
+              critical: 1,
+              triggerType: null,
+              keywords: [],
+            },
+          ]),
+        }
+      : {}),
   }
 }
 
@@ -189,6 +265,43 @@ describe('@web-vg/match-session match room model', () => {
         ],
       }),
     ).toThrow(MatchRoomInvariantError)
+  })
+
+  it('requires card stats before a card-backed match room can initialize', () => {
+    const createdRoom = makeCreatedRoom()
+
+    expect(() =>
+      initializeMatchRoom(createdRoom, {
+        initialState: makeGameStateWithCard(),
+        playerBindings: [
+          {
+            participantId: PARTICIPANT_1,
+            playerId: PLAYER_1,
+          },
+          {
+            participantId: PARTICIPANT_2,
+            playerId: PLAYER_2,
+          },
+        ],
+      }),
+    ).toThrow(RulesInvariantError)
+
+    const initializedRoom = initializeMatchRoom(createdRoom, {
+      initialState: makeGameStateWithCard({ includeCardStats: true }),
+      initializedAt: '2026-05-07T09:01:00.000Z',
+      playerBindings: [
+        {
+          participantId: PARTICIPANT_1,
+          playerId: PLAYER_1,
+        },
+        {
+          participantId: PARTICIPANT_2,
+          playerId: PLAYER_2,
+        },
+      ],
+    })
+
+    expect(initializedRoom.engineState.cardStats?.cards[0]?.power).toBe(13000)
   })
 
   it('keeps room lifecycle separate from engine battle and turn phases', () => {
@@ -411,5 +524,80 @@ describe('@web-vg/match-session match room model', () => {
     expectTypeOf<
       HasKey<MatchRoomParticipant, 'playerId'>
     >().toEqualTypeOf<false>()
+  })
+
+  it('closes the room from engine-owned damage defeat state without session-side win heuristics', () => {
+    const initializedRoom = makeInitializedRoom(
+      makeGameState({ status: 'ready' }),
+    )
+    const completedState: GameState = {
+      ...initializedRoom.engineState,
+      status: 'completed',
+      revision: initializedRoom.engineState.revision + 1,
+      pendingRequests: [],
+      players: initializedRoom.engineState.players.map((player) =>
+        player.playerId === PLAYER_2
+          ? {
+              ...player,
+              status: 'defeated',
+            }
+          : player,
+      ),
+    }
+    const adapter: MatchRoomEngineAdapter = {
+      adapterId: initializedRoom.engineAdapterId,
+      formatId: initializedRoom.formatId,
+      dispatch() {
+        return {
+          status: 'accepted',
+          transitionId: 'transition-damage-defeat-room-1' as TransitionId,
+          state: completedState,
+          events: [],
+          timingWindows: [],
+          pendingRequests: [],
+        }
+      },
+    }
+
+    const result = submitMatchRoomCommand(
+      initializedRoom,
+      {
+        source: {
+          kind: 'system',
+          source: 'match-runtime',
+        },
+        command: {
+          kind: 'action',
+          submission: {
+            action: {
+              actionId: 'action-room-consume-damage-defeat-1' as ActionId,
+              type: 'system.advance_phase',
+              actor: {
+                kind: 'system',
+                system: 'automatic-flow',
+              },
+              nextPhase: 'battle',
+            },
+            expectedRevision: initializedRoom.engineState.revision,
+          },
+        },
+      },
+      {
+        engineAdapters: [adapter],
+        submittedAt: '2026-05-07T09:04:00.000Z',
+      },
+    )
+
+    expect(result.status).toBe('accepted')
+
+    if (result.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted room command, received ${result.status}.`,
+      )
+    }
+
+    expect(result.room.status).toBe('completed')
+    expect(result.room.engineState).toBe(completedState)
+    expect(result.room.metadata.completedAt).toBe('2026-05-07T09:04:00.000Z')
   })
 })

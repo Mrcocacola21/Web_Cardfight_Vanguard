@@ -6,6 +6,7 @@ import type {
   GameActionType,
   MovePieceAction,
   PlayCardAction,
+  RideCardAction,
 } from '../../actions'
 import type { EngineCommand, EngineDispatchResult } from '../../boundary'
 import type { GameEvent } from '../../events'
@@ -58,17 +59,21 @@ export const PREMIUM_FORMAT_ACTION_TYPES = [
   'match.concede',
   'system.begin_mulligan',
   'system.drive_check',
+  'system.resolve_combat',
   'system.damage_check',
   'piece.rest',
   'piece.stand',
   'piece.lock',
   'piece.unlock',
+  'turn.end_phase',
+  'turn.end_turn',
   'system.advance_phase',
   'system.resolve_mandatory_flow',
   'zone.shuffle',
   'zone.draw',
   'zone.move_piece',
   'card.call',
+  'card.ride',
   'card.play',
   'battle.declare_attack',
   'battle.commit_boost',
@@ -136,6 +141,26 @@ function evaluatePremiumCommand(
         context.command.submission.action,
       )
     }
+    case 'card.ride': {
+      const rideZoneGuard = rejectZoneKindReferences(
+        context.currentState,
+        context.command.submission.action,
+        {
+          rejectedZoneKinds: ['ride_deck'],
+          message: () =>
+            'Premium adapter rejects ride deck zone references because Premium has no baseline ride deck runtime structure.',
+        },
+      )
+
+      if (rideZoneGuard !== undefined) {
+        return rideZoneGuard
+      }
+
+      return evaluatePremiumRideAction(
+        context.currentState,
+        context.command.submission.action,
+      )
+    }
     case 'card.play':
       return evaluatePremiumPlayAction(
         context.currentState,
@@ -182,6 +207,24 @@ function evaluatePremiumCallAction(
         `Premium adapter does not allow ${rejectedAction.type} to place runtime card pieces into the imaginary gift zone.`,
     }) ?? { status: 'allow' }
   )
+}
+
+function evaluatePremiumRideAction(
+  currentState: GameState,
+  action: RideCardAction,
+): FormatCommandDecision {
+  const sourceZone = findZoneById(currentState, action.from.zoneId)
+
+  if (sourceZone?.kind !== PREMIUM_ZONE_KINDS.hand) {
+    return {
+      status: 'invalid',
+      code: 'format_rule_violation',
+      message:
+        'Premium adapter currently requires card.ride to originate from hand.',
+    }
+  }
+
+  return { status: 'allow' }
 }
 
 function evaluatePremiumPlayAction(

@@ -51,6 +51,7 @@ export type SystemGameActionType =
   | 'match.start'
   | 'system.begin_mulligan'
   | 'system.drive_check'
+  | 'system.resolve_combat'
   | 'system.damage_check'
   | 'piece.rest'
   | 'piece.stand'
@@ -154,6 +155,10 @@ export interface DriveCheckAction extends SystemGameActionBase<'system.drive_che
   readonly count: number
 }
 
+export interface ResolveCombatAction extends SystemGameActionBase<'system.resolve_combat'> {
+  readonly battleId: BattleId
+}
+
 export interface DamageCheckAction extends SystemGameActionBase<'system.damage_check'> {
   readonly battleId: BattleId
   readonly playerId: PlayerId
@@ -202,6 +207,7 @@ export type TurnFlowAction =
   | TurnEndPhaseAction
   | TurnEndTurnAction
   | DriveCheckAction
+  | ResolveCombatAction
   | DamageCheckAction
   | RestPieceAction
   | StandPieceAction
@@ -234,6 +240,7 @@ export type SystemGameAction =
   | MatchStartAction
   | BeginMulliganAction
   | DriveCheckAction
+  | ResolveCombatAction
   | DamageCheckAction
   | RestPieceAction
   | StandPieceAction

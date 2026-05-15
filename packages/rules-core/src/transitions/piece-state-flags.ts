@@ -14,6 +14,7 @@ import type {
   GameState,
   ZoneState,
 } from '../state'
+import { buildGameStateIndex, findPieceById, findPieceLocation } from '../state'
 
 import {
   advanceGameStateRevision,
@@ -388,9 +389,8 @@ function resolvePieceStateContext(
       readonly value: PieceStateContext
     }
   | FailedPieceStateChange {
-  const piece = currentState.pieces.find(
-    (candidate) => candidate.pieceId === pieceId,
-  )
+  const stateIndex = buildGameStateIndex(currentState)
+  const piece = findPieceById(stateIndex, pieceId)
 
   if (piece === undefined) {
     return {
@@ -400,9 +400,7 @@ function resolvePieceStateContext(
     }
   }
 
-  const zone = currentState.zones.find((candidate) =>
-    candidate.occupants.some((occupant) => occupant.pieceId === pieceId),
-  )
+  const zone = findPieceLocation(stateIndex, pieceId)?.zone
 
   if (zone === undefined) {
     return {
@@ -465,14 +463,28 @@ function normalizeGamePieceStatusState(
 
   if (
     pieceState.orientation === DEFAULT_GAME_PIECE_ORIENTATION &&
-    nextFlags.length === 0
+    nextFlags.length === 0 &&
+    (pieceState.powerModifier ?? 0) === 0 &&
+    (pieceState.criticalModifier ?? 0) === 0
   ) {
     return undefined
   }
 
   return {
-    ...pieceState,
+    pieceId: pieceState.pieceId,
+    orientation: pieceState.orientation,
     flags: nextFlags,
+    ...(pieceState.powerModifier === undefined || pieceState.powerModifier === 0
+      ? {}
+      : {
+          powerModifier: pieceState.powerModifier,
+        }),
+    ...(pieceState.criticalModifier === undefined ||
+    pieceState.criticalModifier === 0
+      ? {}
+      : {
+          criticalModifier: pieceState.criticalModifier,
+        }),
   }
 }
 

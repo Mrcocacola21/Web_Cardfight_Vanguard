@@ -12,17 +12,23 @@ import type {
 } from '../index'
 import {
   applyGameAction,
+  buildEngineCardStatsSnapshot,
   isAppliedTransitionResult,
   isBlockedTransitionResult,
   isInvalidTransitionResult,
 } from '../index'
 
 interface BoardStateOptions {
+  readonly callGrade?: number
+  readonly currentVanguardGrade?: number
+  readonly includeCardStats?: boolean
   readonly pendingRequests?: readonly GameChoiceRequest[]
+  readonly rideGrade?: number
 }
 
 function makeBoardState(options: BoardStateOptions = {}): GameState {
   const pendingRequests = options.pendingRequests ?? []
+  const includeCardStats = options.includeCardStats ?? true
 
   return {
     gameId: 'game-board-1' as GameState['gameId'],
@@ -190,9 +196,40 @@ function makeBoardState(options: BoardStateOptions = {}): GameState {
         cardDefinitionId: 'card-opponent-vanguard' as CardId,
       },
     ],
+    ...(includeCardStats
+      ? {
+          cardStats: buildEngineCardStatsSnapshot([
+            makeUnitStats('card-ride' as CardId, options.rideGrade ?? 1),
+            makeUnitStats('card-call' as CardId, options.callGrade ?? 0),
+            makeUnitStats(
+              'card-vanguard' as CardId,
+              options.currentVanguardGrade ?? 0,
+            ),
+            makeUnitStats('card-opponent-vanguard' as CardId, 0),
+          ]),
+        }
+      : {}),
     pieceStates: [],
     flags: [],
     pendingRequests,
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 8000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 
@@ -306,6 +343,113 @@ describe('@web-vg/rules-core ride / call mechanics', () => {
     })
   })
 
+  it.each([
+    [0, 0],
+    [0, 1],
+    [1, 1],
+    [1, 2],
+    [2, 3],
+    [3, 3],
+  ])(
+    'allows normal ride grade progression from grade %i to grade %i',
+    (currentVanguardGrade, rideGrade) => {
+      const state = makeBoardState({
+        currentVanguardGrade,
+        rideGrade,
+      })
+      const result = applyGameAction(state, {
+        action: {
+          actionId:
+            `action-ride-grade-${currentVanguardGrade}-${rideGrade}` as ActionId,
+          type: 'card.ride' as const,
+          actor: {
+            kind: 'player' as const,
+            playerId: 'player-1' as GameState['players'][number]['playerId'],
+          },
+          pieceId: 'piece-ride' as GameState['pieces'][number]['pieceId'],
+          from: {
+            zoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+          },
+          to: {
+            zoneId: 'zone-p1-vanguard' as GameState['zones'][number]['zoneId'],
+          },
+          ridingOverPieceId:
+            'piece-vanguard' as GameState['pieces'][number]['pieceId'],
+        },
+      })
+
+      expectApplied(result)
+    },
+  )
+
+  it.each([
+    [0, 2],
+    [1, 3],
+    [2, 0],
+  ])(
+    'rejects illegal normal ride grade progression from grade %i to grade %i',
+    (currentVanguardGrade, rideGrade) => {
+      const state = makeBoardState({
+        currentVanguardGrade,
+        rideGrade,
+      })
+      const result = applyGameAction(state, {
+        action: {
+          actionId:
+            `action-ride-grade-invalid-${currentVanguardGrade}-${rideGrade}` as ActionId,
+          type: 'card.ride' as const,
+          actor: {
+            kind: 'player' as const,
+            playerId: 'player-1' as GameState['players'][number]['playerId'],
+          },
+          pieceId: 'piece-ride' as GameState['pieces'][number]['pieceId'],
+          from: {
+            zoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+          },
+          to: {
+            zoneId: 'zone-p1-vanguard' as GameState['zones'][number]['zoneId'],
+          },
+          ridingOverPieceId:
+            'piece-vanguard' as GameState['pieces'][number]['pieceId'],
+        },
+      })
+      const invalidResult = expectInvalid(result)
+
+      expect(invalidResult.code).toBe('ride_grade_restricted')
+      expect(invalidResult.currentState).toEqual(state)
+      expect(invalidResult.events).toEqual([])
+    },
+  )
+
+  it('rejects normal ride when card stats are missing instead of guessing grade', () => {
+    const state = makeBoardState({
+      includeCardStats: false,
+    })
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-ride-missing-stats' as ActionId,
+        type: 'card.ride' as const,
+        actor: {
+          kind: 'player' as const,
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+        pieceId: 'piece-ride' as GameState['pieces'][number]['pieceId'],
+        from: {
+          zoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+        },
+        to: {
+          zoneId: 'zone-p1-vanguard' as GameState['zones'][number]['zoneId'],
+        },
+        ridingOverPieceId:
+          'piece-vanguard' as GameState['pieces'][number]['pieceId'],
+      },
+    })
+    const invalidResult = expectInvalid(result)
+
+    expect(invalidResult.code).toBe('invalid_action_reference')
+    expect(invalidResult.message).toMatch(/card stats snapshot/i)
+  })
+
   it('rejects rides that target a rear-guard circle instead of the vanguard circle', () => {
     const state = makeBoardState()
     const result = applyGameAction(state, {
@@ -333,7 +477,17 @@ describe('@web-vg/rules-core ride / call mechanics', () => {
   })
 
   it('calls from hand into an open rear-guard slot and emits call facts', () => {
-    const state = makeBoardState()
+    const baseState = makeBoardState({
+      callGrade: 1,
+      currentVanguardGrade: 1,
+    })
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
     const result = applyGameAction(state, {
       action: {
         actionId: 'action-call-1' as ActionId,
@@ -386,8 +540,89 @@ describe('@web-vg/rules-core ride / call mechanics', () => {
     })
   })
 
+  it('rejects normal calls above the current vanguard grade', () => {
+    const baseState = makeBoardState({
+      callGrade: 2,
+      currentVanguardGrade: 1,
+    })
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-call-grade-invalid' as ActionId,
+        type: 'card.call' as const,
+        actor: {
+          kind: 'player' as const,
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+        pieceId: 'piece-call' as GameState['pieces'][number]['pieceId'],
+        from: {
+          zoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+        },
+        to: {
+          zoneId: 'zone-p1-rearguard' as GameState['zones'][number]['zoneId'],
+          slotId: 'slot-left' as ZoneSlotId,
+        },
+      },
+      expectedRevision: state.revision,
+    })
+    const invalidResult = expectInvalid(result)
+
+    expect(invalidResult.code).toBe('call_grade_restricted')
+    expect(invalidResult.currentState).toEqual(state)
+    expect(invalidResult.events).toEqual([])
+  })
+
+  it('rejects normal calls when card stats are missing instead of allowing blind calls', () => {
+    const baseState = makeBoardState({
+      includeCardStats: false,
+    })
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-call-missing-stats' as ActionId,
+        type: 'card.call' as const,
+        actor: {
+          kind: 'player' as const,
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+        },
+        pieceId: 'piece-call' as GameState['pieces'][number]['pieceId'],
+        from: {
+          zoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+        },
+        to: {
+          zoneId: 'zone-p1-rearguard' as GameState['zones'][number]['zoneId'],
+          slotId: 'slot-left' as ZoneSlotId,
+        },
+      },
+      expectedRevision: state.revision,
+    })
+    const invalidResult = expectInvalid(result)
+
+    expect(invalidResult.code).toBe('invalid_action_reference')
+    expect(invalidResult.message).toMatch(/card stats snapshot/i)
+  })
+
   it('rejects occupied rear-guard slot calls without corrupting state', () => {
-    const state = makeBoardState()
+    const baseState = makeBoardState()
+    const state: GameState = {
+      ...baseState,
+      turn: {
+        ...baseState.turn,
+        phase: 'main' as GameState['turn']['phase'],
+      },
+    }
     const occupiedState: GameState = {
       ...state,
       zones: state.zones.map((zone) =>
@@ -417,6 +652,10 @@ describe('@web-vg/rules-core ride / call mechanics', () => {
           cardDefinitionId: 'card-occupied-call' as CardId,
         },
       ],
+      cardStats: buildEngineCardStatsSnapshot([
+        ...(state.cardStats?.cards ?? []),
+        makeUnitStats('card-occupied-call' as CardId, 0),
+      ]),
     }
     const result = applyGameAction(occupiedState, {
       action: {

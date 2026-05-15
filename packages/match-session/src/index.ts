@@ -1,3 +1,71 @@
+export { createDeckBackedGameState } from './deck-bootstrap'
+export type {
+  CreateDeckBackedGameStateInput,
+  DeckBackedGameStateBootstrapIssueCode,
+  DeckBackedGameStateBootstrapResult,
+  DeckBackedMatchPlayerInput,
+  MatchDeckValidationProof,
+} from './deck-bootstrap'
+export {
+  projectMatchRoomForOmniscientViewer,
+  projectMatchRoomForParticipant,
+} from './projection'
+export type {
+  MatchRoomOmniscientProjectionResult,
+  MatchRoomProjectionIssueCode,
+  MatchRoomProjectionResult,
+  ProjectedMatchRoomForOmniscientViewer,
+  ProjectedMatchRoomForParticipant,
+  ProjectedMatchRoomViewer,
+} from './projection'
+export {
+  MATCH_SESSION_PERSISTENCE_MODEL,
+  MATCH_SESSION_SERIALIZATION_VERSION,
+  appendAcceptedMatchRoomCommandToHistory,
+  appendRoomLifecycleEventToHistory,
+  createSerializableMatchSessionDocument,
+  deserializeMatchSessionDocument,
+  recordMatchRoomCommandResult,
+  restoreMatchSessionDocument,
+  serializeMatchSessionDocument,
+  validateSerializableMatchSessionDocument,
+} from './session-persistence'
+export type {
+  EngineHistoryEvent,
+  MatchRoomHistoryEntry,
+  MatchRoomHistoryEntryId,
+  MatchRoomHistoryEvent,
+  MatchRoomHistoryEventKind,
+  MatchSessionJsonResult,
+  MatchSessionPersistenceModel,
+  MatchSessionRestoreResult,
+  MatchSessionSerializationIssueCode,
+  MatchSessionSerializationResult,
+  RestoredMatchSession,
+  RoomLifecycleHistoryEvent,
+  RoomLifecycleHistoryEventType,
+  SerializableMatchSessionDocument,
+} from './session-persistence'
+export {
+  MATCH_REALTIME_TRANSPORT_BASELINE,
+  createRealtimeParticipantSnapshot,
+  createRealtimeProjectedStatePushes,
+  submitRealtimeClientCommand,
+} from './realtime-runtime'
+export type {
+  RealtimeClientCommand,
+  RealtimeClientCommandAcceptedResult,
+  RealtimeClientCommandBlockedResult,
+  RealtimeClientCommandId,
+  RealtimeClientCommandInvalidResult,
+  RealtimeClientCommandResult,
+  RealtimeParticipantSnapshotResult,
+  RealtimeProjectedStatePush,
+  RealtimeProjectedStatePushReason,
+  RealtimeProjectedStatePushesResult,
+  RealtimeRuntimeInvalidCode,
+  RealtimeTransportBaseline,
+} from './realtime-runtime'
 export {
   MATCH_ROOM_PREMIUM_ENGINE_ADAPTER_ID,
   MATCH_ROOM_STANDARD_ENGINE_ADAPTER_ID,

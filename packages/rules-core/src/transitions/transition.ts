@@ -16,6 +16,7 @@ export type EffectTimingPoint =
   | 'battle.boost'
   | 'battle.guard'
   | 'battle.drive_check'
+  | 'battle.combat'
   | 'battle.damage_check'
   | 'battle.completion'
 

@@ -69,6 +69,9 @@ describe('buildMatchBoardProjection', () => {
     const rearGuardZone = currentSide?.centralZones.find(
       (zone) => zone.role === 'rear_guard',
     )
+    const vanguardZone = currentSide?.centralZones.find(
+      (zone) => zone.role === 'vanguard',
+    )
     const dropZone = currentSide?.supportZones.find(
       (zone) => zone.role === 'drop',
     )
@@ -88,31 +91,29 @@ describe('buildMatchBoardProjection', () => {
       (zone) => zone.role === 'bind',
     )
 
-    expect(rearGuardZone?.slotIds).toEqual(['p1:front-left', 'p1:front-right'])
-    expect(rearGuardZone?.pieces).toHaveLength(1)
-    expect(rearGuardZone?.pieces[0]).toMatchObject({
-      pieceId: 'p1:piece:rear-guard-1',
-      cardDefinitionId: 'p1:card:rear-guard-1',
-      slotId: 'p1:front-left',
-      orientation: 'rest',
-      flags: ['locked'],
+    expect(vanguardZone?.pieces[0]).toMatchObject({
+      pieceId: 'p1:piece:ride:3:1:local-catalog:keter:starting-sage',
+      cardDefinitionId: 'local-catalog:keter:starting-sage',
     })
+    expect(rearGuardZone?.slotIds).toEqual([
+      'p1:front-left',
+      'p1:back-left',
+      'p1:back-center',
+      'p1:front-right',
+      'p1:back-right',
+    ])
+    expect(rearGuardZone?.pieces).toHaveLength(0)
     expect(dropZone?.pieces).toHaveLength(0)
-    expect(damageZone?.pieces[0]).toMatchObject({
-      pieceId: 'p1:piece:damage-1',
-      cardDefinitionId: 'p1:card:damage-1',
-    })
-    expect(soulZone?.pieces[0]).toMatchObject({
-      pieceId: 'p1:piece:soul-1',
-      cardDefinitionId: 'p1:card:soul-1',
-    })
+    expect(damageZone?.pieces).toHaveLength(0)
+    expect(soulZone?.pieces).toHaveLength(0)
     expect(rideDeckZone?.pieces.map((piece) => piece.cardDefinitionId)).toEqual(
-      ['p1:card:ride-deck-0', 'p1:card:ride-deck-1'],
+      [
+        'local-catalog:keter:wayward-boost',
+        'local-catalog:keter:skyfall-knight',
+        'local-catalog:keter:apex-ruler',
+      ],
     )
-    expect(gDeckZone?.pieces[0]).toMatchObject({
-      pieceId: 'p1:piece:g-deck-1',
-      cardDefinitionId: 'p1:card:g-deck-1',
-    })
+    expect(gDeckZone?.pieces).toHaveLength(0)
     expect(bindZone?.pieces).toHaveLength(0)
   })
 

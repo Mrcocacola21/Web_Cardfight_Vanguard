@@ -17,6 +17,7 @@ import {
   V_PREMIUM_FORMAT_GAMEPLAY_MARKERS,
   V_PREMIUM_FORMAT_ID,
   V_PREMIUM_ZONE_KINDS,
+  buildEngineCardStatsSnapshot,
   dispatchEngineCommand,
   dispatchVPremiumCommand,
   isAcceptedEngineDispatchResult,
@@ -245,9 +246,33 @@ function makeVPremiumState(options: VPremiumStateOptions = {}): GameState {
     ],
     zones,
     pieces,
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-hand-ride' as CardId, 3),
+      makeUnitStats('card-vanguard' as CardId, 2),
+      makeUnitStats('card-ride-deck' as CardId, 3),
+      makeUnitStats('card-opponent-vanguard' as CardId, 2),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests,
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 10000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 

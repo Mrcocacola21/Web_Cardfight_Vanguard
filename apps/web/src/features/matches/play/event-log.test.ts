@@ -12,12 +12,14 @@ import type { MatchRoomWithEngineState } from '@web-vg/match-session'
 import {
   LOCAL_MATCH_PLAYER_ONE_ID,
   LOCAL_MATCH_PLAYER_TWO_ID,
+  createAdvancePhaseCommand,
   createBeginMulliganCommand,
   createCallFirstHandCardCommand,
   createKeepHandChoiceCommand,
   createLocalActionId,
   createLocalPrototypeMatchRoom,
   createReadyCommand,
+  createRideFirstRideDeckCardCommand,
   createStartMatchCommand,
 } from './local-match-room'
 import {
@@ -68,28 +70,12 @@ describe('local match event log', () => {
     )
     let records = appendAcceptedEngineEvents([], startResult)
 
-    const callSubmission = createCallFirstHandCardCommand(
-      LOCAL_MATCH_PLAYER_ONE_ID,
-      createLocalActionId(startedRoom.revision, 4, 'call-first-hand-card'),
-      startedRoom.engineState.revision,
-      startedRoom.engineState,
-    )
-
-    expect(callSubmission).not.toBeNull()
-
-    if (callSubmission === null) {
-      throw new Error('Expected local call command to be available.')
-    }
-
-    const callResult = acceptCommand(startedRoom, callSubmission)
-    records = appendAcceptedEngineEvents(records, callResult)
-
     const pendingResult = acceptCommand(
-      callResult.room,
+      startedRoom,
       createBeginMulliganCommand(
         LOCAL_MATCH_PLAYER_ONE_ID,
-        createLocalActionId(callResult.room.revision, 5, 'begin-mulligan'),
-        callResult.room.engineState.revision,
+        createLocalActionId(startedRoom.revision, 4, 'begin-mulligan'),
+        startedRoom.engineState.revision,
       ),
     )
     records = appendAcceptedEngineEvents(records, pendingResult)
@@ -106,35 +92,75 @@ describe('local match event log', () => {
       pendingResult.room,
       createKeepHandChoiceCommand(
         mulliganRequest,
-        createLocalActionId(pendingResult.room.revision, 6, 'keep-hand'),
+        createLocalActionId(pendingResult.room.revision, 5, 'keep-hand'),
         pendingResult.room.engineState.revision,
       ),
     )
     records = appendAcceptedEngineEvents(records, choiceResult)
+    const rideRoom = advanceRoomToPhase(choiceResult.room, 'ride')
+    const rideSubmission = createRideFirstRideDeckCardCommand(
+      LOCAL_MATCH_PLAYER_ONE_ID,
+      createLocalActionId(rideRoom.revision, 6, 'ride-first-card'),
+      rideRoom.engineState.revision,
+      rideRoom.engineState,
+    )
+
+    expect(rideSubmission).not.toBeNull()
+
+    if (rideSubmission === null) {
+      throw new Error('Expected local ride command to be available.')
+    }
+
+    const rideResult = acceptCommand(rideRoom, rideSubmission)
+    records = appendAcceptedEngineEvents(records, rideResult)
+
+    const mainRoom = advanceRoomToPhase(rideResult.room, 'main')
+
+    const callSubmission = createCallFirstHandCardCommand(
+      LOCAL_MATCH_PLAYER_ONE_ID,
+      createLocalActionId(mainRoom.revision, 7, 'call-first-hand-card'),
+      mainRoom.engineState.revision,
+      mainRoom.engineState,
+    )
+
+    expect(callSubmission).not.toBeNull()
+
+    if (callSubmission === null) {
+      throw new Error('Expected local call command to be available.')
+    }
+
+    const callResult = acceptCommand(mainRoom, callSubmission)
+    records = appendAcceptedEngineEvents(records, callResult)
 
     const entries = buildLocalMatchEventLogEntries(records)
 
     expect(entries.map((entry) => entry.type)).toEqual([
       'match.started',
       'turn.started',
-      'piece.moved',
-      'card.called',
       'mulligan.started',
       'choice.response_resolved',
       'zone.shuffled',
       'mulligan.completed',
+      'piece.moved',
+      'piece.moved',
+      'card.rode',
+      'piece.moved',
+      'card.called',
     ])
     expect(entries.map((entry) => entry.category)).toEqual([
       'match',
       'turn',
-      'piece',
-      'card',
       'mulligan',
       'choice',
       'zone',
       'mulligan',
+      'piece',
+      'piece',
+      'card',
+      'piece',
+      'card',
     ])
-    expect(entries.at(-1)?.summary).toContain('completed mulligan')
+    expect(entries.at(-1)?.summary).toContain('was called')
   })
 
   it('keeps follow-up effect events visible as ordered engine facts', () => {
@@ -209,6 +235,36 @@ function startLocalMatch(room: MatchRoomWithEngineState) {
     room: result.room,
     result,
   }
+}
+
+function advanceRoomToPhase(
+  room: MatchRoomWithEngineState,
+  targetPhase: string,
+): MatchRoomWithEngineState {
+  let nextRoom = room
+
+  for (
+    let sequence = 10;
+    sequence < 20 && nextRoom.engineState.turn.phase !== targetPhase;
+    sequence += 1
+  ) {
+    nextRoom = acceptCommand(
+      nextRoom,
+      createAdvancePhaseCommand(
+        createLocalActionId(
+          nextRoom.revision,
+          sequence,
+          `advance-${targetPhase}`,
+        ),
+        nextRoom.engineState.revision,
+        nextRoom.engineState.turn.phase,
+      ),
+    ).room
+  }
+
+  expect(nextRoom.engineState.turn.phase).toBe(targetPhase)
+
+  return nextRoom
 }
 
 function acceptCommand(

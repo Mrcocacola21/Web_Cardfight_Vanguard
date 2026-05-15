@@ -107,10 +107,56 @@ export interface ApplyPowerModifierOperation {
   readonly duration: Extract<DeclarativeEffectDuration, 'until_end_of_turn'>
 }
 
+export type ResourceEffectOperationSelection = 'deterministic_first'
+export type ResourceEffectOperationRole = 'cost' | 'effect'
+
+export interface CounterBlastOperation {
+  readonly kind: 'counter_blast'
+  readonly count: number
+  readonly player: Extract<DeclarativeEffectSubject, 'source_controller'>
+  readonly selection: ResourceEffectOperationSelection
+  readonly role: Extract<ResourceEffectOperationRole, 'cost'>
+  readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
+}
+
+export interface CounterChargeOperation {
+  readonly kind: 'counter_charge'
+  readonly count: number
+  readonly player: Extract<DeclarativeEffectSubject, 'source_controller'>
+  readonly selection: ResourceEffectOperationSelection
+  readonly role: Extract<ResourceEffectOperationRole, 'effect'>
+  readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
+}
+
+export interface SoulBlastOperation {
+  readonly kind: 'soul_blast'
+  readonly count: number
+  readonly player: Extract<DeclarativeEffectSubject, 'source_controller'>
+  readonly selection: ResourceEffectOperationSelection
+  readonly role: Extract<ResourceEffectOperationRole, 'cost'>
+  readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
+}
+
+export interface SoulChargeOperation {
+  readonly kind: 'soul_charge'
+  readonly count: number
+  readonly player: Extract<DeclarativeEffectSubject, 'source_controller'>
+  readonly selection: ResourceEffectOperationSelection
+  readonly role: Extract<ResourceEffectOperationRole, 'effect'>
+  readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
+}
+
+export type ResourceEffectOperation =
+  | CounterBlastOperation
+  | CounterChargeOperation
+  | SoulBlastOperation
+  | SoulChargeOperation
+
 export type DeclarativeEffectOperation =
   | AdjustCheckCountOperation
   | DrawCardsOperation
   | ApplyPowerModifierOperation
+  | ResourceEffectOperation
 
 export interface TypedEffectExecutionStrategy {
   readonly kind: 'typed_handler'
@@ -454,6 +500,19 @@ function assertDeclarativeOperationInvariant(
       assertSafeNonZeroInteger(
         operation.amount,
         `Effect definition ${definition.id} apply_power_modifier amount`,
+      )
+      return
+    case 'counter_blast':
+    case 'counter_charge':
+    case 'soul_blast':
+    case 'soul_charge':
+      assertRulesInvariant(
+        Number.isSafeInteger(operation.count) && operation.count > 0,
+        `Effect definition ${definition.id} ${operation.kind} count must be a positive safe integer.`,
+      )
+      assertRulesInvariant(
+        operation.selection === 'deterministic_first',
+        `Effect definition ${definition.id} ${operation.kind} must use deterministic_first selection under the current resource foundation.`,
       )
       return
   }

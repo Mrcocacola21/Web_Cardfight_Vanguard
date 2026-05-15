@@ -13,6 +13,7 @@ import {
   STANDARD_FORMAT_ACTION_TYPES,
   STANDARD_FORMAT_ID,
   STANDARD_ZONE_KINDS,
+  buildEngineCardStatsSnapshot,
   dispatchEngineCommand,
   dispatchStandardCommand,
   isAcceptedEngineDispatchResult,
@@ -209,9 +210,32 @@ function makeStandardState(options: StandardStateOptions = {}): GameState {
         cardDefinitionId: 'card-opponent-vanguard' as CardId,
       },
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-ride' as CardId, 1),
+      makeUnitStats('card-vanguard' as CardId, 0),
+      makeUnitStats('card-opponent-vanguard' as CardId, 0),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests,
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 8000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 

@@ -1,3 +1,5 @@
+import type { TriggerType } from '@web-vg/shared'
+
 import type {
   ActionId,
   BattleId,
@@ -22,7 +24,9 @@ import type {
   RequestVisibility,
 } from '../requests'
 import type {
+  BattleCombatState,
   BattleCheckState,
+  BattleDamageState,
   CheckTriggerResolutionState,
   PhaseId,
   PlayerCounterKey,
@@ -51,8 +55,17 @@ export interface SystemEventOrigin {
 export type EventOrigin = PlayerEventOrigin | SystemEventOrigin
 export type EventSequenceNumber = number
 
-export type MatchEndReason = 'concede' | 'rules' | 'draw' | (string & {})
-export type BattleCompletionReason = 'damage_check_completed' | (string & {})
+export type MatchEndReason =
+  | 'concede'
+  | 'rules'
+  | 'draw'
+  | 'damage_defeat'
+  | (string & {})
+export type BattleCompletionReason =
+  | 'damage_check_completed'
+  | 'damage_defeat'
+  | 'attack_missed'
+  | (string & {})
 export type ChoiceResponseOutcome =
   | 'selection_made'
   | 'branch_chosen'
@@ -68,6 +81,7 @@ export type MulliganEventType = 'mulligan.started' | 'mulligan.completed'
 export type TurnEventType =
   | 'turn.started'
   | 'turn.ended'
+  | 'turn.cleanup_applied'
   | 'turn.phase_advanced'
   | 'turn.step_advanced'
 
@@ -90,10 +104,15 @@ export type BattleEventType =
   | 'battle.attack_declared'
   | 'battle.boost_declared'
   | 'battle.guard_requested'
+  | 'battle.intercept_declared'
   | 'battle.guard_declared'
   | 'battle.guard_passed'
   | 'battle.drive_checked'
+  | 'battle.combat_resolved'
+  | 'battle.attack_hit'
+  | 'battle.attack_missed'
   | 'battle.damage_checked'
+  | 'battle.guardians_cleaned_up'
   | 'battle.completed'
 
 export type ChoiceEventType = 'choice.response_resolved'
@@ -101,8 +120,18 @@ export type ChoiceEventType = 'choice.response_resolved'
 export type PlayerResourceEventType =
   | 'player.counter_changed'
   | 'player.flag_changed'
+  | 'player.damage_changed'
+  | 'player.defeated'
+
+export type ResourceEventType =
+  | 'resource.counter_blasted'
+  | 'resource.counter_charged'
+  | 'resource.soul_blasted'
+  | 'resource.soul_charged'
 
 export type EffectEventType = 'effect.resolved'
+
+export type TriggerEventType = 'trigger.revealed' | 'trigger.resolved'
 
 export type GameEventType =
   | MatchEventType
@@ -114,7 +143,9 @@ export type GameEventType =
   | BattleEventType
   | ChoiceEventType
   | PlayerResourceEventType
+  | ResourceEventType
   | EffectEventType
+  | TriggerEventType
 
 export type EventType = GameEventType
 
@@ -170,6 +201,17 @@ export interface TurnStartedEvent extends EventBase<
 export interface TurnEndedEvent extends EventBase<'turn.ended', EventOrigin> {
   readonly turnNumber: number
   readonly turnPlayerId: PlayerId
+}
+
+export interface TurnCleanupAppliedEvent extends EventBase<
+  'turn.cleanup_applied',
+  SystemEventOrigin
+> {
+  readonly turnNumber: number
+  readonly turnPlayerId: PlayerId
+  readonly cleanedPieceIds: readonly PieceId[]
+  readonly removedFlagPieceIds: readonly PieceId[]
+  readonly clearedModifierPieceIds: readonly PieceId[]
 }
 
 export interface PhaseAdvancedEvent extends EventBase<
@@ -294,7 +336,20 @@ export interface GuardDeclaredEvent extends EventBase<
 > {
   readonly battleId: BattleId
   readonly guardianPieceIds: readonly PieceId[]
+  readonly handPieceIds?: readonly PieceId[]
+  readonly interceptPieceIds?: readonly PieceId[]
   readonly handZoneId: ZoneId
+  readonly guardZoneId: ZoneId
+  readonly attackerPieceId: PieceId
+}
+
+export interface InterceptDeclaredEvent extends EventBase<
+  'battle.intercept_declared',
+  PlayerEventOrigin
+> {
+  readonly battleId: BattleId
+  readonly interceptPieceIds: readonly PieceId[]
+  readonly fromZoneIds: readonly ZoneId[]
   readonly guardZoneId: ZoneId
   readonly attackerPieceId: PieceId
 }
@@ -327,7 +382,37 @@ export interface DriveCheckedEvent
 export interface DamageCheckedEvent
   extends
     EventBase<'battle.damage_checked', SystemEventOrigin>,
-    CheckResolvedEventFields {}
+    CheckResolvedEventFields {
+  readonly damage: BattleDamageState
+}
+
+export interface CombatResolvedEvent extends EventBase<
+  'battle.combat_resolved',
+  SystemEventOrigin
+> {
+  readonly battleId: BattleId
+  readonly attackerPieceId: PieceId
+  readonly target: AttackTarget
+  readonly combat: BattleCombatState
+}
+
+interface AttackResultEventFields {
+  readonly battleId: BattleId
+  readonly attackerPieceId: PieceId
+  readonly target: AttackTarget
+  readonly attackPower: number
+  readonly totalDefensePower: number
+}
+
+export interface AttackHitEvent
+  extends
+    EventBase<'battle.attack_hit', SystemEventOrigin>,
+    AttackResultEventFields {}
+
+export interface AttackMissedEvent
+  extends
+    EventBase<'battle.attack_missed', SystemEventOrigin>,
+    AttackResultEventFields {}
 
 export interface BattleCompletedEvent extends EventBase<
   'battle.completed',
@@ -345,9 +430,22 @@ export interface BattleCompletedEvent extends EventBase<
   readonly guardPieceIds: readonly PieceId[]
   readonly guardZoneId?: ZoneId
   readonly lastCheck?: BattleCheckState
+  readonly combat?: BattleCombatState
+  readonly damage?: BattleDamageState
   readonly cleanupMovedPieceIds: readonly PieceId[]
   readonly cleanupFromZoneId?: ZoneId
   readonly cleanupToZoneId?: ZoneId
+}
+
+export interface BattleGuardiansCleanedUpEvent extends EventBase<
+  'battle.guardians_cleaned_up',
+  SystemEventOrigin
+> {
+  readonly battleId: BattleId
+  readonly defendingPlayerId: PlayerId
+  readonly guardPieceIds: readonly PieceId[]
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
 }
 
 export interface ChoiceResponseResolvedEvent extends EventBase<
@@ -390,6 +488,72 @@ export interface PlayerFlagChangedEvent extends EventBase<
   readonly nextEnabled: boolean
 }
 
+export interface PlayerDamageChangedEvent extends EventBase<
+  'player.damage_changed',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly battleId?: BattleId
+  readonly damageZoneId: ZoneId
+  readonly previousDamage: number
+  readonly nextDamage: number
+  readonly defeatThreshold: number
+  readonly outcome: BattleDamageState['outcome']
+  readonly movedPieceIds: readonly PieceId[]
+}
+
+export interface PlayerDefeatedEvent extends EventBase<
+  'player.defeated',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly reason: 'damage' | (string & {})
+  readonly damageCount?: number
+  readonly defeatThreshold?: number
+}
+
+export interface CounterBlastedEvent extends EventBase<
+  'resource.counter_blasted',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly pieceIds: readonly PieceId[]
+  readonly count: number
+}
+
+export interface CounterChargedEvent extends EventBase<
+  'resource.counter_charged',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly toZoneId: ZoneId
+  readonly pieceIds: readonly PieceId[]
+  readonly count: number
+}
+
+export interface SoulBlastedEvent extends EventBase<
+  'resource.soul_blasted',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
+  readonly pieceIds: readonly PieceId[]
+  readonly count: number
+}
+
+export interface SoulChargedEvent extends EventBase<
+  'resource.soul_charged',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly toZoneId: ZoneId
+  readonly pieceIds: readonly PieceId[]
+  readonly count: number
+}
+
 export interface EffectResolvedEvent extends EventBase<
   'effect.resolved',
   SystemEventOrigin
@@ -400,6 +564,50 @@ export interface EffectResolvedEvent extends EventBase<
   readonly operationKinds: readonly string[]
 }
 
+export type TriggerCheckKind = 'drive' | 'damage'
+export type TriggerResolutionOutcome = 'applied' | 'not_applicable'
+
+export interface TriggerHealConditionState {
+  readonly met: boolean
+  readonly playerDamage: number
+  readonly opponentDamage: number
+}
+
+export interface TriggerRevealedEvent extends EventBase<
+  'trigger.revealed',
+  SystemEventOrigin
+> {
+  readonly battleId: BattleId
+  readonly checkKind: TriggerCheckKind
+  readonly playerId: PlayerId
+  readonly revealedPieceId: PieceId
+  readonly cardDefinitionId?: RevealedCheckCardState['cardDefinitionId']
+  readonly triggerType: TriggerType
+  readonly sourceCheckEventSequence: EventSequenceNumber
+}
+
+export interface TriggerResolvedEvent extends EventBase<
+  'trigger.resolved',
+  SystemEventOrigin
+> {
+  readonly battleId: BattleId
+  readonly checkKind: TriggerCheckKind
+  readonly playerId: PlayerId
+  readonly revealedPieceId: PieceId
+  readonly triggerType: TriggerType
+  readonly sourceCheckEventSequence: EventSequenceNumber
+  readonly outcome: TriggerResolutionOutcome
+  readonly powerAmount?: number
+  readonly powerTargetPieceIds?: readonly PieceId[]
+  readonly criticalAmount?: number
+  readonly criticalTargetPieceId?: PieceId
+  readonly drawnPieceIds?: readonly PieceId[]
+  readonly stoodPieceId?: PieceId
+  readonly healedPieceId?: PieceId
+  readonly healCondition?: TriggerHealConditionState
+  readonly overTriggerApplied?: boolean
+}
+
 export type MatchEvent = MatchStartedEvent | MatchEndedEvent
 
 export type MulliganEvent = MulliganStartedEvent | MulliganCompletedEvent
@@ -407,6 +615,7 @@ export type MulliganEvent = MulliganStartedEvent | MulliganCompletedEvent
 export type TurnEvent =
   | TurnStartedEvent
   | TurnEndedEvent
+  | TurnCleanupAppliedEvent
   | PhaseAdvancedEvent
   | StepAdvancedEvent
 
@@ -429,10 +638,15 @@ export type BattleEvent =
   | AttackDeclaredEvent
   | BoostDeclaredEvent
   | GuardRequestedEvent
+  | InterceptDeclaredEvent
   | GuardDeclaredEvent
   | GuardPassedEvent
   | DriveCheckedEvent
+  | CombatResolvedEvent
+  | AttackHitEvent
+  | AttackMissedEvent
   | DamageCheckedEvent
+  | BattleGuardiansCleanedUpEvent
   | BattleCompletedEvent
 
 export type ChoiceEvent = ChoiceResponseResolvedEvent
@@ -440,8 +654,18 @@ export type ChoiceEvent = ChoiceResponseResolvedEvent
 export type PlayerResourceEvent =
   | PlayerCounterChangedEvent
   | PlayerFlagChangedEvent
+  | PlayerDamageChangedEvent
+  | PlayerDefeatedEvent
+
+export type ResourceEvent =
+  | CounterBlastedEvent
+  | CounterChargedEvent
+  | SoulBlastedEvent
+  | SoulChargedEvent
 
 export type EffectEvent = EffectResolvedEvent
+
+export type TriggerEvent = TriggerRevealedEvent | TriggerResolvedEvent
 
 export type GameEvent =
   | MatchEvent
@@ -453,7 +677,9 @@ export type GameEvent =
   | BattleEvent
   | ChoiceEvent
   | PlayerResourceEvent
+  | ResourceEvent
   | EffectEvent
+  | TriggerEvent
 
 export function isPlayerOriginatedEvent(
   event: GameEvent,

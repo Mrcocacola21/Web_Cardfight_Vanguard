@@ -1,13 +1,26 @@
 import type { DamageCheckAction, DriveCheckAction } from '../actions'
 import type { ActionId, EventId, TransitionId } from '../contracts'
+import {
+  VANGUARD_DAMAGE_DEFEAT_THRESHOLD,
+  resolvePlayerDamageState,
+} from '../damage'
 import { resolveDriveCheckCountEffects } from '../effects/first-effects'
 import type { GameEvent } from '../events'
 import type {
   BattleCheckState,
+  BattleDamageState,
   GamePieceState,
   GameState,
+  GameStateIndex,
   PlayerState,
   ZoneState,
+} from '../state'
+import {
+  buildGameStateIndex,
+  findPieceById,
+  findPieceLocation,
+  findPlayerById,
+  findZoneById,
 } from '../state'
 
 import {
@@ -19,7 +32,6 @@ import {
 } from './transition'
 import {
   drawTopPiecesBetweenZones,
-  findZoneById,
   type PieceZoneMovement,
 } from './ordered-zone-operations'
 import { createPieceMovedEvents } from './zone-transfer'
@@ -27,8 +39,7 @@ import { createPieceMovedEvents } from './zone-transfer'
 const TRIGGER_RESOLUTION_STATE = 'pending_future_engine' as const
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
 
-interface CheckSummaryEventFields {
-  readonly type: 'battle.drive_checked' | 'battle.damage_checked'
+interface BaseCheckSummaryEventFields {
   readonly battleId: NonNullable<GameState['battle']>['battleId']
   readonly playerId: PlayerState['playerId']
   readonly fromZoneId: ZoneState['zoneId']
@@ -36,6 +47,19 @@ interface CheckSummaryEventFields {
   readonly revealedCards: BattleCheckState['revealedCards']
   readonly triggerResolutionState: BattleCheckState['triggerResolutionState']
 }
+
+interface DriveCheckSummaryEventFields extends BaseCheckSummaryEventFields {
+  readonly type: 'battle.drive_checked'
+}
+
+interface DamageCheckSummaryEventFields extends BaseCheckSummaryEventFields {
+  readonly type: 'battle.damage_checked'
+  readonly damage: BattleDamageState
+}
+
+type CheckSummaryEventFields =
+  | DriveCheckSummaryEventFields
+  | DamageCheckSummaryEventFields
 
 export function applyDriveCheckTransition(
   transitionId: TransitionId,
@@ -89,7 +113,8 @@ export function applyDriveCheckTransition(
     )
   }
 
-  const attackerZone = findZoneById(currentState, battle.attackerZoneId)
+  const stateIndex = buildGameStateIndex(currentState)
+  const attackerZone = findZoneById(stateIndex, battle.attackerZoneId)
 
   if (attackerZone?.kind !== 'vanguard_circle') {
     return createInvalidTransitionResult(
@@ -100,7 +125,7 @@ export function applyDriveCheckTransition(
     )
   }
 
-  const actingPlayer = findPlayerById(currentState, action.playerId)
+  const actingPlayer = findPlayerById(stateIndex, action.playerId)
 
   if (actingPlayer === undefined) {
     return createInvalidTransitionResult(
@@ -114,7 +139,7 @@ export function applyDriveCheckTransition(
   const zoneReferenceError = resolveOwnedCheckZones(
     action.type,
     actingPlayer,
-    currentState,
+    stateIndex,
     action.fromZoneId,
     action.toZoneId,
     'deck',
@@ -155,7 +180,7 @@ export function applyDriveCheckTransition(
   }
 
   const checkState = createBattleCheckState(
-    currentState,
+    stateIndex,
     'drive',
     action.playerId,
     action.fromZoneId,
@@ -225,12 +250,21 @@ export function applyDamageCheckTransition(
     )
   }
 
-  if (battle.status !== 'drive_checked') {
+  if (battle.status !== 'combat_resolved') {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
       'invalid_action',
-      `Action ${action.type} is only available after drive check resolution under the current battle flow foundation.`,
+      `Action ${action.type} is only available after combat comparison under the current battle flow foundation.`,
+    )
+  }
+
+  if (battle.combat?.result !== 'hit') {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} requires battle ${battle.battleId} to have an explicit hit result.`,
     )
   }
 
@@ -243,7 +277,9 @@ export function applyDamageCheckTransition(
     )
   }
 
-  if (!supportsBattleDamageCheckTarget(currentState, battle)) {
+  const stateIndex = buildGameStateIndex(currentState)
+
+  if (!supportsBattleDamageCheckTarget(stateIndex, battle)) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
@@ -252,7 +288,7 @@ export function applyDamageCheckTransition(
     )
   }
 
-  const defendingPlayer = findPlayerById(currentState, action.playerId)
+  const defendingPlayer = findPlayerById(stateIndex, action.playerId)
 
   if (defendingPlayer === undefined) {
     return createInvalidTransitionResult(
@@ -266,7 +302,7 @@ export function applyDamageCheckTransition(
   const zoneReferenceError = resolveOwnedCheckZones(
     action.type,
     defendingPlayer,
-    currentState,
+    stateIndex,
     action.fromZoneId,
     action.toZoneId,
     'deck',
@@ -299,8 +335,46 @@ export function applyDamageCheckTransition(
     )
   }
 
+  const damageBefore = resolvePlayerDamageState(currentState, action.playerId)
+
+  if (!damageBefore.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action_reference',
+      damageBefore.issue.message,
+    )
+  }
+
+  const stateAfterDamageMovement: GameState = {
+    ...currentState,
+    zones: drawResult.zones,
+    pieceStates: drawResult.pieceStates,
+  }
+  const damageAfter = resolvePlayerDamageState(
+    stateAfterDamageMovement,
+    action.playerId,
+  )
+
+  if (!damageAfter.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action_reference',
+      damageAfter.issue.message,
+    )
+  }
+
+  const damage: BattleDamageState = {
+    playerId: action.playerId,
+    damageZoneId: damageAfter.damage.damageZoneId,
+    damageBefore: damageBefore.damage.damageCount,
+    damageAfter: damageAfter.damage.damageCount,
+    defeatThreshold: VANGUARD_DAMAGE_DEFEAT_THRESHOLD,
+    outcome: damageAfter.damage.isDefeatedByDamage ? 'lethal' : 'non_lethal',
+  }
   const checkState = createBattleCheckState(
-    currentState,
+    stateIndex,
     'damage',
     action.playerId,
     action.fromZoneId,
@@ -315,9 +389,10 @@ export function applyDamageCheckTransition(
       ...battle,
       status: 'damage_checked',
       lastCheck: checkState,
+      damage,
     },
   })
-  const events = createCheckEvents(
+  const checkEvents = createCheckEvents(
     transitionId,
     action.actionId,
     drawResult.movedPieces,
@@ -329,8 +404,30 @@ export function applyDamageCheckTransition(
       toZoneId: action.toZoneId,
       revealedCards: checkState.revealedCards,
       triggerResolutionState: checkState.triggerResolutionState,
+      damage,
     },
   )
+  const events: readonly GameEvent[] = [
+    ...checkEvents,
+    {
+      eventId: createEventId(transitionId, checkEvents.length),
+      type: 'player.damage_changed',
+      sequence: checkEvents.length,
+      sourceActionId: action.actionId,
+      origin: {
+        kind: 'system',
+        system: AUTOMATIC_FLOW_SYSTEM,
+      },
+      playerId: action.playerId,
+      battleId: battle.battleId,
+      damageZoneId: damage.damageZoneId,
+      previousDamage: damage.damageBefore,
+      nextDamage: damage.damageAfter,
+      defeatThreshold: damage.defeatThreshold,
+      outcome: damage.outcome,
+      movedPieceIds: drawResult.movedPieces.map((movement) => movement.pieceId),
+    },
+  ]
 
   return createTransitionResult(transitionId, nextState, events, {
     timingWindows: createTransitionTimingWindowTriplet('battle.damage_check', {
@@ -340,17 +437,10 @@ export function applyDamageCheckTransition(
   })
 }
 
-function findPlayerById(
-  currentState: GameState,
-  playerId: PlayerState['playerId'],
-): PlayerState | undefined {
-  return currentState.players.find((player) => player.playerId === playerId)
-}
-
 function resolveOwnedCheckZones(
   label: string,
   player: PlayerState,
-  currentState: GameState,
+  stateIndex: GameStateIndex,
   fromZoneId: ZoneState['zoneId'],
   toZoneId: ZoneState['zoneId'],
   expectedSourceKind: ZoneState['kind'],
@@ -361,8 +451,8 @@ function resolveOwnedCheckZones(
       readonly message: string
     }
   | undefined {
-  const sourceZone = findZoneById(currentState, fromZoneId)
-  const destinationZone = findZoneById(currentState, toZoneId)
+  const sourceZone = findZoneById(stateIndex, fromZoneId)
+  const destinationZone = findZoneById(stateIndex, toZoneId)
 
   if (sourceZone === undefined || destinationZone === undefined) {
     return {
@@ -399,7 +489,7 @@ function resolveOwnedCheckZones(
 }
 
 function createBattleCheckState(
-  currentState: GameState,
+  stateIndex: GameStateIndex,
   kind: BattleCheckState['kind'],
   playerId: PlayerState['playerId'],
   fromZoneId: ZoneState['zoneId'],
@@ -412,9 +502,7 @@ function createBattleCheckState(
     fromZoneId,
     toZoneId,
     revealedCards: pieceIds.map((pieceId) => {
-      const piece = currentState.pieces.find(
-        (candidate) => candidate.pieceId === pieceId,
-      )
+      const piece = findPieceById(stateIndex, pieceId)
 
       return {
         pieceId,
@@ -468,7 +556,7 @@ function createCheckEvents(
 }
 
 function supportsBattleDamageCheckTarget(
-  currentState: GameState,
+  stateIndex: GameStateIndex,
   battle: NonNullable<GameState['battle']>,
 ): boolean {
   if (battle.target.kind === 'player') {
@@ -476,10 +564,7 @@ function supportsBattleDamageCheckTarget(
   }
 
   const targetPieceId = battle.target.pieceId
-
-  const targetZone = currentState.zones.find((zone) =>
-    zone.occupants.some((occupant) => occupant.pieceId === targetPieceId),
-  )
+  const targetZone = findPieceLocation(stateIndex, targetPieceId)?.zone
 
   return targetZone?.kind === 'vanguard_circle'
 }

@@ -2,6 +2,7 @@ import type { CardId, FormatId } from '@web-vg/shared'
 import { describe, expect, it } from 'vitest'
 
 import type { ActionId, PieceId, PlayerId, ZoneId } from '../contracts'
+import { buildEngineCardStatsSnapshot } from '../cards'
 import type { GameEvent } from '../events'
 import { PERSONA_RIDE_KEYWORD, TWIN_DRIVE_KEYWORD } from '../keywords'
 import type { BattleState, GameState, ZoneState } from '../state'
@@ -297,9 +298,34 @@ function makePersonaRideState(options: {
         controllerPlayerId: PLAYER_2,
       },
     ],
+    cardStats: buildEngineCardStatsSnapshot([
+      makeUnitStats('card-persona' as CardId, 3),
+      makeUnitStats('card-other' as CardId, 3),
+      makeUnitStats('card-rear-guard' as CardId, 2),
+      makeUnitStats('card-drawn' as CardId, 1),
+      makeUnitStats('card-p2-vg' as CardId, 3),
+    ]),
     pieceStates: [],
     flags: [],
     pendingRequests: [],
+  }
+}
+
+function makeUnitStats(
+  cardDefinitionId: CardId,
+  grade: number,
+): NonNullable<GameState['cardStats']>['cards'][number] {
+  return {
+    cardDefinitionId,
+    cardType: 'normal-unit',
+    grade: grade as NonNullable<
+      GameState['cardStats']
+    >['cards'][number]['grade'],
+    power: 10000,
+    shield: 5000,
+    critical: 1,
+    triggerType: null,
+    keywords: [],
   }
 }
 
@@ -366,7 +392,7 @@ describe('@web-vg/rules-core first working effects', () => {
       type: 'effect.resolved',
       effectDefinitionId: CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id,
       triggerEventSequence: 3,
-      operationKinds: ['typed_handler'],
+      operationKinds: ['trigger_check_none'],
     })
     expect(zonePieceIds(result.nextState, 'p1-hand')).toEqual([
       'piece-drive-top',
@@ -411,7 +437,7 @@ describe('@web-vg/rules-core first working effects', () => {
       type: 'effect.resolved',
       effectDefinitionId: CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id,
       triggerEventSequence: 1,
-      operationKinds: ['typed_handler'],
+      operationKinds: ['trigger_check_none'],
     })
     expect(zonePieceIds(result.nextState, 'p1-hand')).toEqual([
       'piece-drive-top',

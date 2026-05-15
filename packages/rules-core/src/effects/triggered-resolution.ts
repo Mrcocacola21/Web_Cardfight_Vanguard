@@ -1,6 +1,7 @@
-import type { ActionId, EventId, PieceId, TransitionId } from '../contracts'
-import type { EffectResolvedEvent, GameEvent } from '../events'
+import type { PieceId, TransitionId } from '../contracts'
+import type { GameEvent } from '../events'
 import type { GameState } from '../state'
+import { buildGameStateIndex, findPieceById } from '../state'
 import type {
   AppliedTransitionResult,
   TransitionResult,
@@ -18,14 +19,11 @@ import {
   effectDefinitionMatchesTimingWindow,
   type EffectDefinition,
 } from './effect'
-import {
-  CARDS_DRAWN_FINALIZE_EFFECT_IDENTITY,
-  CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY,
-  PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY,
-  coreEffectRegistry,
-} from './samples'
+import { coreEffectHandlerRegistry } from './core-handlers'
+import type { EffectHandlerRegistry } from './handler-registry'
 import { type EffectRegistry } from './registry'
-import { resolvePersonaRideEffect } from './first-effects'
+import { resolveEffectRuntimeQueueItem } from './runtime-dispatch'
+import { coreEffectRegistry } from './samples'
 import {
   compareEffectResolutionQueueItemSeeds,
   createEffectResolutionQueue,
@@ -37,12 +35,11 @@ import {
   type EffectResolutionSourceKind,
 } from './resolution-queue'
 
-const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
-
 export type TriggeredEffectSourceKind = EffectResolutionSourceKind
 
 export interface EventTriggeredResolutionEnvironment {
   readonly effectRegistry: EffectRegistry
+  readonly effectHandlers?: EffectHandlerRegistry
   readonly keywordMechanics: KeywordMechanicsRegistry
 }
 
@@ -70,6 +67,7 @@ type TriggeredEffectExecutionResult =
 const DEFAULT_TRIGGERED_RESOLUTION_ENVIRONMENT: EventTriggeredResolutionEnvironment =
   {
     effectRegistry: coreEffectRegistry,
+    effectHandlers: coreEffectHandlerRegistry,
     keywordMechanics: keywordMechanicsRegistry,
   }
 
@@ -116,6 +114,7 @@ export function resolveEventTriggeredEffects(
       startingSequence: events.length,
       startingTimingWindowSequence:
         resolveNextTimingWindowSequence(timingWindows),
+      effectHandlers: environment.effectHandlers ?? coreEffectHandlerRegistry,
     })
 
     if (!executionResult.ok) {
@@ -254,12 +253,17 @@ function collectDirectEffectCandidates(
           triggerSource.timingWindow,
         ),
     )
-    .map((effectDefinition) => ({
-      sourceKind: 'direct' as const,
-      triggerEvent: triggerSource.event,
-      timingWindow: triggerSource.timingWindow,
-      effectDefinition,
-    }))
+    .map((effectDefinition) => {
+      const sourcePieceId = resolveTriggerSourcePieceIds(triggerSource.event)[0]
+
+      return {
+        sourceKind: 'direct' as const,
+        triggerEvent: triggerSource.event,
+        timingWindow: triggerSource.timingWindow,
+        effectDefinition,
+        ...(sourcePieceId === undefined ? {} : { sourcePieceId }),
+      }
+    })
 }
 
 function collectKeywordEffectCandidates(
@@ -270,11 +274,11 @@ function collectKeywordEffectCandidates(
   },
   environment: EventTriggeredResolutionEnvironment,
 ): readonly TriggeredEffectCandidate[] {
+  const stateIndex = buildGameStateIndex(state)
+
   return resolveTriggerSourcePieceIds(triggerSource.event).flatMap(
     (sourcePieceId) => {
-      const sourcePiece = state.pieces.find(
-        (piece) => piece.pieceId === sourcePieceId,
-      )
+      const sourcePiece = findPieceById(stateIndex, sourcePieceId)
 
       if (sourcePiece?.keywords === undefined) {
         return []
@@ -321,209 +325,17 @@ function resolveTriggeredEffectQueueItem(
     readonly transitionId: TransitionId
     readonly startingSequence: number
     readonly startingTimingWindowSequence: number
+    readonly effectHandlers: EffectHandlerRegistry
   },
 ): TriggeredEffectExecutionResult {
-  const { queueItem } = input
-
-  if (
-    queueItem.effectDefinition.id === PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY.id &&
-    queueItem.triggerEvent.type === 'card.rode' &&
-    queueItem.triggerEvent.sourceActionId !== undefined
-  ) {
-    const result = resolvePersonaRideEffect({
-      currentState: state,
-      transitionId: input.transitionId,
-      sourceActionId: queueItem.triggerEvent.sourceActionId,
-      rideEvent: queueItem.triggerEvent,
-      effectDefinition: queueItem.effectDefinition,
-      startingSequence: input.startingSequence,
-    })
-
-    return result.ok
-      ? {
-          ...result,
-          timingWindows: createNestedTimingWindowsForEffectEvents(
-            result.events,
-            input.startingTimingWindowSequence,
-          ),
-        }
-      : result
-  }
-
-  if (
-    queueItem.effectDefinition.id === CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id &&
-    (queueItem.triggerEvent.type === 'battle.drive_checked' ||
-      queueItem.triggerEvent.type === 'battle.damage_checked')
-  ) {
-    return resolveCheckTriggerRevealEffect(state, {
-      transitionId: input.transitionId,
-      triggerEvent: queueItem.triggerEvent,
-      effectDefinition: queueItem.effectDefinition,
-      startingSequence: input.startingSequence,
-      ...(queueItem.triggerEvent.sourceActionId === undefined
-        ? {}
-        : {
-            sourceActionId: queueItem.triggerEvent.sourceActionId,
-          }),
-    })
-  }
-
-  if (
-    queueItem.effectDefinition.id === CARDS_DRAWN_FINALIZE_EFFECT_IDENTITY.id &&
-    queueItem.triggerEvent.type === 'cards.drawn'
-  ) {
-    return resolveCardsDrawnFinalizeEffect(state, {
-      transitionId: input.transitionId,
-      triggerEvent: queueItem.triggerEvent,
-      effectDefinition: queueItem.effectDefinition,
-      startingSequence: input.startingSequence,
-      ...(queueItem.triggerEvent.sourceActionId === undefined
-        ? {}
-        : {
-            sourceActionId: queueItem.triggerEvent.sourceActionId,
-          }),
-    })
-  }
-
-  return {
-    ok: true,
-    state,
-    events: [],
-    timingWindows: [],
-  }
-}
-
-function resolveCheckTriggerRevealEffect(
-  state: GameState,
-  input: {
-    readonly transitionId: TransitionId
-    readonly sourceActionId?: ActionId
-    readonly triggerEvent: Extract<
-      GameEvent,
-      { readonly type: 'battle.drive_checked' | 'battle.damage_checked' }
-    >
-    readonly effectDefinition: EffectDefinition
-    readonly startingSequence: number
-  },
-): TriggeredEffectExecutionResult {
-  const nextState = markCurrentCheckResolvedNone(state, input.triggerEvent)
-
-  if (nextState === state) {
-    return {
-      ok: true,
-      state,
-      events: [],
-      timingWindows: [],
-    }
-  }
-
-  return {
-    ok: true,
-    state: nextState,
-    events: [
-      createEffectResolvedEvent({
-        transitionId: input.transitionId,
-        sequence: input.startingSequence,
-        effectDefinition: input.effectDefinition,
-        triggerEventSequence: input.triggerEvent.sequence,
-        operationKinds: ['typed_handler'],
-        ...(input.sourceActionId === undefined
-          ? {}
-          : {
-              sourceActionId: input.sourceActionId,
-            }),
-      }),
-    ],
-    timingWindows: [],
-  }
-}
-
-function resolveCardsDrawnFinalizeEffect(
-  state: GameState,
-  input: {
-    readonly transitionId: TransitionId
-    readonly sourceActionId?: ActionId
-    readonly triggerEvent: Extract<GameEvent, { readonly type: 'cards.drawn' }>
-    readonly effectDefinition: EffectDefinition
-    readonly startingSequence: number
-  },
-): TriggeredEffectExecutionResult {
-  return {
-    ok: true,
-    state,
-    events: [
-      createEffectResolvedEvent({
-        transitionId: input.transitionId,
-        sequence: input.startingSequence,
-        effectDefinition: input.effectDefinition,
-        triggerEventSequence: input.triggerEvent.sequence,
-        operationKinds: ['typed_handler'],
-        ...(input.sourceActionId === undefined
-          ? {}
-          : {
-              sourceActionId: input.sourceActionId,
-            }),
-      }),
-    ],
-    timingWindows: [],
-  }
-}
-
-function markCurrentCheckResolvedNone(
-  state: GameState,
-  triggerEvent: Extract<
-    GameEvent,
-    { readonly type: 'battle.drive_checked' | 'battle.damage_checked' }
-  >,
-): GameState {
-  const battle = state.battle
-  const expectedCheckKind =
-    triggerEvent.type === 'battle.drive_checked' ? 'drive' : 'damage'
-
-  if (
-    battle === undefined ||
-    battle.battleId !== triggerEvent.battleId ||
-    battle.lastCheck === undefined ||
-    battle.lastCheck.kind !== expectedCheckKind ||
-    battle.lastCheck.triggerResolutionState !== 'pending_future_engine'
-  ) {
-    return state
-  }
-
-  return {
-    ...state,
-    battle: {
-      ...battle,
-      lastCheck: {
-        ...battle.lastCheck,
-        triggerResolutionState: 'resolved_none',
-      },
-    },
-  }
-}
-
-function createNestedTimingWindowsForEffectEvents(
-  events: readonly GameEvent[],
-  startingSequence: number,
-): readonly TransitionTimingWindow[] {
-  let sequence = startingSequence
-  const timingWindows: TransitionTimingWindow[] = []
-
-  for (const event of events) {
-    if (event.type !== 'cards.drawn') {
-      continue
-    }
-
-    timingWindows.push({
-      sequence,
-      point: 'zone.transfer',
-      window: 'after',
-      relatedEventSequence: event.sequence,
-    })
-    sequence += 1
-  }
-
-  return timingWindows
+  return resolveEffectRuntimeQueueItem({
+    currentState: state,
+    queueItem: input.queueItem,
+    transitionId: input.transitionId,
+    startingSequence: input.startingSequence,
+    startingTimingWindowSequence: input.startingTimingWindowSequence,
+    effectHandlers: input.effectHandlers,
+  })
 }
 
 function resolveNextTimingWindowSequence(
@@ -555,11 +367,7 @@ function resolveTriggerSourcePieceIds(event: GameEvent): readonly PieceId[] {
 function isCurrentlyResolvableTriggeredEffect(
   definition: EffectDefinition,
 ): boolean {
-  return (
-    definition.id === CARDS_DRAWN_FINALIZE_EFFECT_IDENTITY.id ||
-    definition.id === CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id ||
-    definition.id === PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY.id
-  )
+  return definition.resolution.model === 'automatic'
 }
 
 function effectDefinitionAppliesToState(
@@ -591,45 +399,4 @@ function pushUniqueCandidate(
 
   seen.add(key)
   candidates.push(candidate)
-}
-
-function createEffectResolvedEvent(input: {
-  readonly transitionId: TransitionId
-  readonly sequence: number
-  readonly sourceActionId?: ActionId
-  readonly effectDefinition: EffectDefinition
-  readonly sourcePieceId?: PieceId
-  readonly triggerEventSequence?: number
-  readonly operationKinds: readonly string[]
-}): EffectResolvedEvent {
-  return {
-    eventId: createEventId(input.transitionId, input.sequence),
-    type: 'effect.resolved',
-    sequence: input.sequence,
-    ...(input.sourceActionId === undefined
-      ? {}
-      : {
-          sourceActionId: input.sourceActionId,
-        }),
-    origin: {
-      kind: 'system',
-      system: AUTOMATIC_FLOW_SYSTEM,
-    },
-    effectDefinitionId: input.effectDefinition.id,
-    ...(input.sourcePieceId === undefined
-      ? {}
-      : {
-          sourcePieceId: input.sourcePieceId,
-        }),
-    ...(input.triggerEventSequence === undefined
-      ? {}
-      : {
-          triggerEventSequence: input.triggerEventSequence,
-        }),
-    operationKinds: input.operationKinds,
-  }
-}
-
-function createEventId(transitionId: TransitionId, sequence: number): EventId {
-  return `${transitionId}:event:${sequence}` as EventId
 }

@@ -1,4 +1,8 @@
 import { assertRulesInvariant } from '../errors'
+import {
+  assertEngineCardStatsSnapshotInvariant,
+  resolveEngineCardStats,
+} from '../cards'
 import type { GameChoiceRequest, ZoneChoiceOption } from '../requests'
 import { assertGameChoiceRequestInvariant } from '../requests'
 import type { TargetReference } from '../references'
@@ -339,6 +343,22 @@ export function assertGameStateInvariant(state: GameState): void {
     }
   }
 
+  if (state.cardStats !== undefined) {
+    assertEngineCardStatsSnapshotInvariant(state.cardStats)
+    assertCardPiecesHaveStats(state)
+  }
+
+  if (state.status === 'completed') {
+    assertRulesInvariant(
+      state.pendingRequests.length === 0,
+      'Completed game states must not keep pending requests.',
+    )
+    assertRulesInvariant(
+      state.battle === undefined,
+      'Completed game states must not keep an active battle.',
+    )
+  }
+
   for (const pieceState of state.pieceStates) {
     assertGamePieceStatusStateInvariant(pieceState, pieceIdSet)
   }
@@ -376,6 +396,24 @@ export function assertGameStateInvariant(state: GameState): void {
   }
 }
 
+export function assertGameStateCardStatsComplete(state: GameState): void {
+  const hasCardPieces = state.pieces.some((piece) => piece.kind === 'card')
+
+  if (!hasCardPieces) {
+    if (state.cardStats !== undefined) {
+      assertEngineCardStatsSnapshotInvariant(state.cardStats)
+    }
+    return
+  }
+
+  assertRulesInvariant(
+    state.cardStats !== undefined,
+    `Game state ${state.gameId} with card pieces must include an engine card stats snapshot.`,
+  )
+  assertEngineCardStatsSnapshotInvariant(state.cardStats)
+  assertCardPiecesHaveStats(state)
+}
+
 function assertGamePieceStatusStateInvariant(
   pieceState: GamePieceStatusState,
   pieceIdSet: ReadonlySet<string>,
@@ -388,6 +426,41 @@ function assertGamePieceStatusStateInvariant(
     pieceState.flags.map((flag) => flag as string),
     `Runtime piece state ${pieceState.pieceId} must not repeat flag keys.`,
   )
+  if (pieceState.powerModifier !== undefined) {
+    assertSafeInteger(
+      pieceState.powerModifier,
+      `Runtime piece state ${pieceState.pieceId} power modifier must be a safe integer.`,
+    )
+  }
+  if (pieceState.criticalModifier !== undefined) {
+    assertSafeInteger(
+      pieceState.criticalModifier,
+      `Runtime piece state ${pieceState.pieceId} critical modifier must be a safe integer.`,
+    )
+  }
+}
+
+function assertCardPiecesHaveStats(state: GameState): void {
+  assertRulesInvariant(
+    state.cardStats !== undefined,
+    `Game state ${state.gameId} with card pieces must include an engine card stats snapshot.`,
+  )
+
+  for (const piece of state.pieces) {
+    if (piece.kind !== 'card') {
+      continue
+    }
+
+    assertRulesInvariant(
+      piece.cardDefinitionId !== undefined,
+      `Card piece ${piece.pieceId} must reference a canonical card definition id before card stats can be resolved.`,
+    )
+    assertRulesInvariant(
+      resolveEngineCardStats(state.cardStats, piece.cardDefinitionId) !==
+        undefined,
+      `Game state ${state.gameId} is missing engine card stats for card definition ${piece.cardDefinitionId}.`,
+    )
+  }
 }
 
 function assertRequestStateReferences(
@@ -453,6 +526,18 @@ function assertRequestStateReferences(
         assertRulesInvariant(
           pieceIdSet.has(pieceId),
           `Pending request ${request.requestId} references an unknown selectable guard piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.handPieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown hand guard piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.interceptPieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown intercept piece ${pieceId}.`,
         )
       }
       assertRulesInvariant(
@@ -543,12 +628,20 @@ function assertBattleStateInvariant(
       pieceIdSet.has(battle.boostingPieceId),
       `Battle ${battle.battleId} references an unknown boosting piece ${battle.boostingPieceId}.`,
     )
+    assertRulesInvariant(
+      battle.boostingZoneId !== undefined,
+      `Battle ${battle.battleId} must reference a boosting zone when a boosting piece is committed.`,
+    )
   }
 
   if (battle.boostingZoneId !== undefined) {
     assertRulesInvariant(
       zoneIdSet.has(battle.boostingZoneId),
       `Battle ${battle.battleId} references an unknown boosting zone ${battle.boostingZoneId}.`,
+    )
+    assertRulesInvariant(
+      battle.boostingPieceId !== undefined,
+      `Battle ${battle.battleId} must reference a boosting piece when a boosting zone is committed.`,
     )
   }
 
@@ -596,6 +689,22 @@ function assertBattleStateInvariant(
     `Battle ${battle.battleId} attacker piece ${battle.attackerPieceId} must remain in attacker zone ${battle.attackerZoneId}.`,
   )
 
+  if (
+    battle.boostingPieceId !== undefined &&
+    battle.boostingZoneId !== undefined
+  ) {
+    const boostingZone = state.zones.find(
+      (zone) => zone.zoneId === battle.boostingZoneId,
+    )
+
+    assertRulesInvariant(
+      boostingZone?.occupants.some(
+        (occupant) => occupant.pieceId === battle.boostingPieceId,
+      ) === true,
+      `Battle ${battle.battleId} boosting piece ${battle.boostingPieceId} must remain in boosting zone ${battle.boostingZoneId}.`,
+    )
+  }
+
   if (battle.guardZoneId !== undefined && battle.guardPieceIds.length > 0) {
     const guardZone = state.zones.find(
       (zone) => zone.zoneId === battle.guardZoneId,
@@ -634,6 +743,19 @@ function assertBattleStateInvariant(
     )
   }
 
+  if (battle.combat !== undefined) {
+    assertBattleCombatStateInvariant(battle.battleId, battle.combat, pieceIdSet)
+  }
+
+  if (battle.damage !== undefined) {
+    assertBattleDamageStateInvariant(
+      battle.battleId,
+      battle.damage,
+      playerIdSet,
+      zoneIdSet,
+    )
+  }
+
   if (battle.status === 'drive_checked') {
     assertRulesInvariant(
       battle.lastCheck?.kind === 'drive',
@@ -646,6 +768,121 @@ function assertBattleStateInvariant(
       battle.lastCheck?.kind === 'damage',
       `Battle ${battle.battleId} must keep a damage check record while in damage_checked status.`,
     )
+    assertRulesInvariant(
+      battle.combat?.result === 'hit',
+      `Battle ${battle.battleId} must keep a hit combat result while in damage_checked status.`,
+    )
+    assertRulesInvariant(
+      battle.damage !== undefined,
+      `Battle ${battle.battleId} must keep damage outcome while in damage_checked status.`,
+    )
+  }
+
+  if (battle.status === 'combat_resolved') {
+    assertRulesInvariant(
+      battle.combat !== undefined,
+      `Battle ${battle.battleId} must keep combat comparison while in combat_resolved status.`,
+    )
+  }
+}
+
+function assertBattleDamageStateInvariant(
+  battleId: BattleState['battleId'],
+  damage: NonNullable<BattleState['damage']>,
+  playerIdSet: ReadonlySet<string>,
+  zoneIdSet: ReadonlySet<string>,
+): void {
+  assertRulesInvariant(
+    playerIdSet.has(damage.playerId),
+    `Battle ${battleId} damage outcome references unknown player ${damage.playerId}.`,
+  )
+  assertRulesInvariant(
+    zoneIdSet.has(damage.damageZoneId),
+    `Battle ${battleId} damage outcome references unknown damage zone ${damage.damageZoneId}.`,
+  )
+  assertSafeInteger(
+    damage.damageBefore,
+    `Battle ${battleId} damage-before count must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertSafeInteger(
+    damage.damageAfter,
+    `Battle ${battleId} damage-after count must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertSafeInteger(
+    damage.defeatThreshold,
+    `Battle ${battleId} damage defeat threshold must be a positive safe integer.`,
+  )
+  assertRulesInvariant(
+    damage.defeatThreshold > 0,
+    `Battle ${battleId} damage defeat threshold must be positive.`,
+  )
+  assertRulesInvariant(
+    damage.damageAfter >= 0,
+    `Battle ${battleId} damage-after count must be non-negative.`,
+  )
+  assertRulesInvariant(
+    damage.outcome === 'lethal'
+      ? damage.damageAfter >= damage.defeatThreshold
+      : damage.damageAfter < damage.defeatThreshold,
+    `Battle ${battleId} damage outcome must match the damage count and defeat threshold.`,
+  )
+}
+
+function assertBattleCombatStateInvariant(
+  battleId: BattleState['battleId'],
+  combat: NonNullable<BattleState['combat']>,
+  pieceIdSet: ReadonlySet<string>,
+): void {
+  assertSafeInteger(
+    combat.attackPower,
+    `Battle ${battleId} attack power must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertSafeInteger(
+    combat.defensePower,
+    `Battle ${battleId} defense power must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertSafeInteger(
+    combat.shieldPower,
+    `Battle ${battleId} shield power must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertSafeInteger(
+    combat.totalDefensePower,
+    `Battle ${battleId} total defense power must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
+  assertRulesInvariant(
+    combat.totalDefensePower === combat.defensePower + combat.shieldPower,
+    `Battle ${battleId} total defense power must equal defense plus shield.`,
+  )
+  assertRulesInvariant(
+    combat.result === 'hit'
+      ? combat.attackPower >= combat.totalDefensePower
+      : combat.attackPower < combat.totalDefensePower,
+    `Battle ${battleId} combat result must match attack and defense totals.`,
+  )
+
+  for (const component of [
+    ...combat.attackerPowerComponents,
+    ...combat.defensePowerComponents,
+    ...combat.shieldComponents,
+  ]) {
+    assertSafeInteger(
+      component.amount,
+      `Battle ${battleId} combat component amount must be a non-negative safe integer.`,
+      { nonNegative: true },
+    )
+
+    if (component.pieceId !== undefined) {
+      assertRulesInvariant(
+        pieceIdSet.has(component.pieceId),
+        `Battle ${battleId} combat component references unknown piece ${component.pieceId}.`,
+      )
+    }
   }
 }
 

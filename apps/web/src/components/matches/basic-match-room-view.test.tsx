@@ -31,11 +31,13 @@ describe('BasicMatchRoomView', () => {
       screen.getByRole('region', { name: 'Current player side' }),
     ).toBeVisible()
     expect(screen.getByRole('region', { name: 'Opponent side' })).toBeVisible()
-    expect(screen.getByText('p1:card:starter')).toBeVisible()
-    expect(screen.getByText('p1:card:rear-guard-1')).toBeVisible()
-    expect(screen.getByText('p1:card:soul-1')).toBeVisible()
-    expect(screen.getByText('p1:card:ride-deck-0')).toBeVisible()
-    expect(screen.getByText('p1:card:g-deck-1')).toBeVisible()
+    expect(
+      screen.getAllByText('local-catalog:keter:starting-sage').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText('local-catalog:keter:wayward-boost')).toBeVisible()
+    expect(
+      screen.getAllByText('local-catalog:keter:main-g1-a').length,
+    ).toBeGreaterThan(0)
     expect(
       screen.getByRole('region', { name: 'Available actions' }),
     ).toBeVisible()

@@ -1,7 +1,13 @@
 import type { ResolveMandatoryFlowAction } from '../actions'
 import type { EventId, TransitionId } from '../contracts'
 import type { GameEvent } from '../events'
-import type { GameState, PlayerState, ZoneState } from '../state'
+import type { BattleDamageState, GameState, ZoneState } from '../state'
+import {
+  buildGameStateIndex,
+  findOwnedZoneByKind,
+  findPlayerById,
+  findZoneById,
+} from '../state'
 
 import {
   advanceGameStateRevision,
@@ -11,7 +17,6 @@ import {
   type TransitionResult,
 } from './transition'
 import {
-  findZoneById,
   movePiecesByIdBetweenZones,
   type PieceZoneMovement,
 } from './ordered-zone-operations'
@@ -51,12 +56,33 @@ export function applyResolveMandatoryFlowTransition(
     )
   }
 
-  if (battle.status !== 'damage_checked') {
+  if (
+    battle.status !== 'damage_checked' &&
+    battle.status !== 'combat_resolved'
+  ) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
       'invalid_action',
-      `Action ${action.type} can complete battle ${battle.battleId} only after damage check resolution.`,
+      `Action ${action.type} can complete battle ${battle.battleId} only after damage check resolution or a resolved missed attack.`,
+    )
+  }
+
+  if (battle.status === 'combat_resolved' && battle.combat?.result !== 'miss') {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} can skip damage check only after battle ${battle.battleId} has an explicit miss result.`,
+    )
+  }
+
+  if (battle.status === 'damage_checked' && battle.damage === undefined) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} requires battle ${battle.battleId} to keep a damage outcome after damage check.`,
     )
   }
 
@@ -77,7 +103,24 @@ export function applyResolveMandatoryFlowTransition(
     pieceStates: cleanupResult.pieceStates,
   }
   const { battle: _completedBattle, ...stateWithoutBattle } = stateAfterCleanup
-  const nextState = advanceGameStateRevision(stateWithoutBattle)
+  const lethalDamage = resolveLethalDamage(battle)
+  const nextState = advanceGameStateRevision(
+    lethalDamage === undefined
+      ? stateWithoutBattle
+      : {
+          ...stateWithoutBattle,
+          status: 'completed',
+          players: stateWithoutBattle.players.map((player) =>
+            player.playerId === lethalDamage.playerId
+              ? {
+                  ...player,
+                  status: 'defeated',
+                }
+              : player,
+          ),
+          pendingRequests: [],
+        },
+  )
   const cleanupMovedEvents = createPieceMovedEvents(
     transitionId,
     cleanupResult.movedPieces,
@@ -89,63 +132,100 @@ export function applyResolveMandatoryFlowTransition(
       sourceActionId: action.actionId,
     },
   )
-  const battleCompletedSequence = cleanupMovedEvents.length
+  const guardiansCleanedUpEvent =
+    cleanupResult.cleanupFromZoneId === undefined ||
+    cleanupResult.cleanupToZoneId === undefined ||
+    cleanupResult.movedPieces.length === 0
+      ? undefined
+      : createGuardiansCleanedUpEvent(
+          transitionId,
+          action.actionId,
+          action.actor.system,
+          battle,
+          cleanupResult,
+          cleanupResult.cleanupFromZoneId,
+          cleanupResult.cleanupToZoneId,
+          cleanupMovedEvents.length,
+        )
+  const battleCompletedSequence =
+    cleanupMovedEvents.length + (guardiansCleanedUpEvent === undefined ? 0 : 1)
+  const battleCompletedEvent: GameEvent = {
+    eventId: createBattleCompletionEventId(
+      transitionId,
+      battleCompletedSequence,
+    ),
+    type: 'battle.completed',
+    sequence: battleCompletedSequence,
+    sourceActionId: action.actionId,
+    origin: {
+      kind: 'system',
+      system: action.actor.system,
+    },
+    battleId: battle.battleId,
+    reason: resolveBattleCompletionReason(battle),
+    attackingPlayerId: battle.attackingPlayerId,
+    defendingPlayerId: battle.defendingPlayerId,
+    attackerPieceId: battle.attackerPieceId,
+    attackerZoneId: battle.attackerZoneId,
+    target: battle.target,
+    ...(battle.boostingPieceId === undefined
+      ? {}
+      : {
+          boostingPieceId: battle.boostingPieceId,
+        }),
+    ...(battle.boostingZoneId === undefined
+      ? {}
+      : {
+          boostingZoneId: battle.boostingZoneId,
+        }),
+    guardPieceIds: battle.guardPieceIds,
+    ...(battle.guardZoneId === undefined
+      ? {}
+      : {
+          guardZoneId: battle.guardZoneId,
+        }),
+    ...(battle.lastCheck === undefined
+      ? {}
+      : {
+          lastCheck: battle.lastCheck,
+        }),
+    ...(battle.combat === undefined
+      ? {}
+      : {
+          combat: battle.combat,
+        }),
+    ...(battle.damage === undefined
+      ? {}
+      : {
+          damage: battle.damage,
+        }),
+    cleanupMovedPieceIds: cleanupResult.movedPieces.map(
+      (movement) => movement.pieceId,
+    ),
+    ...(cleanupResult.cleanupFromZoneId === undefined
+      ? {}
+      : {
+          cleanupFromZoneId: cleanupResult.cleanupFromZoneId,
+        }),
+    ...(cleanupResult.cleanupToZoneId === undefined
+      ? {}
+      : {
+          cleanupToZoneId: cleanupResult.cleanupToZoneId,
+        }),
+  }
+  const defeatEvents = createDefeatEvents(
+    transitionId,
+    action.actionId,
+    action.actor.system,
+    battle,
+    lethalDamage,
+    battleCompletedSequence + 1,
+  )
   const events: readonly GameEvent[] = [
     ...cleanupMovedEvents,
-    {
-      eventId: createBattleCompletionEventId(
-        transitionId,
-        battleCompletedSequence,
-      ),
-      type: 'battle.completed',
-      sequence: battleCompletedSequence,
-      sourceActionId: action.actionId,
-      origin: {
-        kind: 'system',
-        system: action.actor.system,
-      },
-      battleId: battle.battleId,
-      reason: 'damage_check_completed',
-      attackingPlayerId: battle.attackingPlayerId,
-      defendingPlayerId: battle.defendingPlayerId,
-      attackerPieceId: battle.attackerPieceId,
-      attackerZoneId: battle.attackerZoneId,
-      target: battle.target,
-      ...(battle.boostingPieceId === undefined
-        ? {}
-        : {
-            boostingPieceId: battle.boostingPieceId,
-          }),
-      ...(battle.boostingZoneId === undefined
-        ? {}
-        : {
-            boostingZoneId: battle.boostingZoneId,
-          }),
-      guardPieceIds: battle.guardPieceIds,
-      ...(battle.guardZoneId === undefined
-        ? {}
-        : {
-            guardZoneId: battle.guardZoneId,
-          }),
-      ...(battle.lastCheck === undefined
-        ? {}
-        : {
-            lastCheck: battle.lastCheck,
-          }),
-      cleanupMovedPieceIds: cleanupResult.movedPieces.map(
-        (movement) => movement.pieceId,
-      ),
-      ...(cleanupResult.cleanupFromZoneId === undefined
-        ? {}
-        : {
-            cleanupFromZoneId: cleanupResult.cleanupFromZoneId,
-          }),
-      ...(cleanupResult.cleanupToZoneId === undefined
-        ? {}
-        : {
-            cleanupToZoneId: cleanupResult.cleanupToZoneId,
-          }),
-    },
+    ...(guardiansCleanedUpEvent === undefined ? [] : [guardiansCleanedUpEvent]),
+    battleCompletedEvent,
+    ...defeatEvents,
   ]
 
   return createTransitionResult(transitionId, nextState, events, {
@@ -154,6 +234,102 @@ export function applyResolveMandatoryFlowTransition(
       battleId: battle.battleId,
     }),
   })
+}
+
+function createGuardiansCleanedUpEvent(
+  transitionId: TransitionId,
+  sourceActionId: ResolveMandatoryFlowAction['actionId'],
+  system: ResolveMandatoryFlowAction['actor']['system'],
+  battle: NonNullable<GameState['battle']>,
+  cleanupResult: Extract<ReturnType<typeof resolveBattleCleanup>, { ok: true }>,
+  fromZoneId: ZoneState['zoneId'],
+  toZoneId: ZoneState['zoneId'],
+  sequence: number,
+): Extract<GameEvent, { readonly type: 'battle.guardians_cleaned_up' }> {
+  return {
+    eventId: createBattleCompletionEventId(transitionId, sequence),
+    type: 'battle.guardians_cleaned_up',
+    sequence,
+    sourceActionId,
+    origin: {
+      kind: 'system',
+      system,
+    },
+    battleId: battle.battleId,
+    defendingPlayerId: battle.defendingPlayerId,
+    guardPieceIds: cleanupResult.movedPieces.map(
+      (movement) => movement.pieceId,
+    ),
+    fromZoneId,
+    toZoneId,
+  }
+}
+
+function resolveLethalDamage(
+  battle: NonNullable<GameState['battle']>,
+): BattleDamageState | undefined {
+  return battle.status === 'damage_checked' &&
+    battle.damage?.outcome === 'lethal'
+    ? battle.damage
+    : undefined
+}
+
+function resolveBattleCompletionReason(
+  battle: NonNullable<GameState['battle']>,
+): Extract<GameEvent, { readonly type: 'battle.completed' }>['reason'] {
+  if (battle.status === 'combat_resolved') {
+    return 'attack_missed'
+  }
+
+  return battle.damage?.outcome === 'lethal'
+    ? 'damage_defeat'
+    : 'damage_check_completed'
+}
+
+function createDefeatEvents(
+  transitionId: TransitionId,
+  sourceActionId: ResolveMandatoryFlowAction['actionId'],
+  system: ResolveMandatoryFlowAction['actor']['system'],
+  battle: NonNullable<GameState['battle']>,
+  lethalDamage: BattleDamageState | undefined,
+  startingSequence: number,
+): readonly GameEvent[] {
+  if (lethalDamage === undefined) {
+    return []
+  }
+
+  return [
+    {
+      eventId: createBattleCompletionEventId(transitionId, startingSequence),
+      type: 'player.defeated',
+      sequence: startingSequence,
+      sourceActionId,
+      origin: {
+        kind: 'system',
+        system,
+      },
+      playerId: lethalDamage.playerId,
+      reason: 'damage',
+      damageCount: lethalDamage.damageAfter,
+      defeatThreshold: lethalDamage.defeatThreshold,
+    },
+    {
+      eventId: createBattleCompletionEventId(
+        transitionId,
+        startingSequence + 1,
+      ),
+      type: 'match.ended',
+      sequence: startingSequence + 1,
+      sourceActionId,
+      origin: {
+        kind: 'system',
+        system,
+      },
+      reason: 'damage_defeat',
+      loserPlayerId: lethalDamage.playerId,
+      winnerPlayerId: battle.attackingPlayerId,
+    },
+  ]
 }
 
 function resolveBattleCleanup(
@@ -190,12 +366,13 @@ function resolveBattleCleanup(
     }
   }
 
-  const defendingPlayer = findPlayerById(currentState, battle.defendingPlayerId)
-  const guardZone = findZoneById(currentState, battle.guardZoneId)
+  const stateIndex = buildGameStateIndex(currentState)
+  const defendingPlayer = findPlayerById(stateIndex, battle.defendingPlayerId)
+  const guardZone = findZoneById(stateIndex, battle.guardZoneId)
   const dropZone =
     defendingPlayer === undefined
       ? undefined
-      : findOwnedZoneByKind(currentState, defendingPlayer, 'drop')
+      : findOwnedZoneByKind(stateIndex, defendingPlayer, 'drop')
 
   if (defendingPlayer === undefined || guardZone === undefined) {
     return {
@@ -233,23 +410,6 @@ function resolveBattleCleanup(
     cleanupFromZoneId: guardZone.zoneId,
     cleanupToZoneId: dropZone.zoneId,
   }
-}
-
-function findPlayerById(
-  currentState: GameState,
-  playerId: PlayerState['playerId'],
-): PlayerState | undefined {
-  return currentState.players.find((player) => player.playerId === playerId)
-}
-
-function findOwnedZoneByKind(
-  currentState: GameState,
-  player: PlayerState,
-  kind: ZoneState['kind'],
-): ZoneState | undefined {
-  return currentState.zones.find(
-    (zone) => zone.ownerPlayerId === player.playerId && zone.kind === kind,
-  )
 }
 
 function createBattleCompletionEventId(

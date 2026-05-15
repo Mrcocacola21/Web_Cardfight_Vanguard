@@ -16,6 +16,9 @@ export type ZoneTransferReason =
   | 'retire'
   | 'bind'
   | 'soul'
+  | 'soul_blast'
+  | 'soul_charge'
+  | 'intercept'
   | 'format'
   | (string & {})
 

@@ -11,10 +11,18 @@ import type {
 } from '../index'
 import {
   applyGameAction,
+  buildEngineCardStatsSnapshot,
   isAppliedTransitionResult,
   isBlockedTransitionResult,
   isInvalidTransitionResult,
 } from '../index'
+
+type TestBattleCombatState = NonNullable<
+  NonNullable<GameState['battle']>['combat']
+>
+type TestBattleDamageState = NonNullable<
+  NonNullable<GameState['battle']>['damage']
+>
 
 function makeCheckBattleState(
   options: {
@@ -218,6 +226,78 @@ function makeCheckBattleState(
       },
     ],
     pieceStates: [],
+    cardStats: buildEngineCardStatsSnapshot([
+      {
+        cardDefinitionId: 'card-p1-vanguard' as CardId,
+        cardType: 'normal-unit',
+        grade: 3,
+        power: 13000,
+        shield: 0,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-drive-top' as CardId,
+        cardType: 'normal-unit',
+        grade: 0,
+        power: 5000,
+        shield: 15000,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-drive-next' as CardId,
+        cardType: 'normal-unit',
+        grade: 1,
+        power: 8000,
+        shield: 5000,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-p2-vanguard' as CardId,
+        cardType: 'normal-unit',
+        grade: 3,
+        power: 13000,
+        shield: 0,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-damage-top' as CardId,
+        cardType: 'normal-unit',
+        grade: 0,
+        power: 5000,
+        shield: 15000,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-damage-next' as CardId,
+        cardType: 'normal-unit',
+        grade: 1,
+        power: 8000,
+        shield: 5000,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+      {
+        cardDefinitionId: 'card-p2-guardian' as CardId,
+        cardType: 'normal-unit',
+        grade: 1,
+        power: 8000,
+        shield: 10000,
+        critical: 1,
+        triggerType: null,
+        keywords: [],
+      },
+    ]),
     flags: [],
     ...(options.battle === undefined
       ? {
@@ -250,6 +330,88 @@ function makeCheckBattleState(
         }),
     pendingRequests,
   }
+}
+
+function makeHitCombatSnapshot(
+  options: {
+    readonly attackPower?: number
+    readonly shieldPower?: number
+    readonly shieldComponents?: readonly TestBattleCombatState['shieldComponents'][number][]
+  } = {},
+): TestBattleCombatState {
+  const attackPower = options.attackPower ?? 13000
+  const shieldPower = options.shieldPower ?? 0
+  const totalDefensePower = 13000 + shieldPower
+
+  return {
+    attackPower,
+    attackerPowerComponents: [
+      {
+        source: 'attacker_base',
+        pieceId: 'piece-p1-vanguard' as GameState['pieces'][number]['pieceId'],
+        amount: 13000,
+      },
+      ...(attackPower > 13000
+        ? [
+            {
+              source: 'piece_power_modifier' as const,
+              pieceId:
+                'piece-p1-vanguard' as GameState['pieces'][number]['pieceId'],
+              amount: attackPower - 13000,
+            },
+          ]
+        : []),
+    ],
+    defensePower: 13000,
+    defensePowerComponents: [
+      {
+        source: 'defender_base',
+        pieceId: 'piece-p2-vanguard' as GameState['pieces'][number]['pieceId'],
+        amount: 13000,
+      },
+    ],
+    shieldPower,
+    shieldComponents: options.shieldComponents ?? [],
+    totalDefensePower,
+    result: 'hit',
+  }
+}
+
+function makeDamageSnapshot(
+  options: {
+    readonly damageBefore?: number
+    readonly damageAfter?: number
+    readonly outcome?: TestBattleDamageState['outcome']
+  } = {},
+): TestBattleDamageState {
+  const damageBefore = options.damageBefore ?? 0
+  const damageAfter = options.damageAfter ?? 1
+
+  return {
+    playerId: 'player-2' as GameState['players'][number]['playerId'],
+    damageZoneId: 'zone-p2-damage' as GameState['zones'][number]['zoneId'],
+    damageBefore,
+    damageAfter,
+    defeatThreshold: 6,
+    outcome: options.outcome ?? (damageAfter >= 6 ? 'lethal' : 'non_lethal'),
+  }
+}
+
+function resolveCombat(state: GameState, actionId = 'action-combat-1') {
+  return applyGameAction(state, {
+    action: {
+      actionId: actionId as ActionId,
+      type: 'system.resolve_combat',
+      actor: {
+        kind: 'system',
+        system: 'automatic-flow',
+      },
+      battleId: 'battle-check-1' as NonNullable<
+        GameState['battle']
+      >['battleId'],
+    },
+    expectedRevision: state.revision,
+  })
 }
 
 function makePendingRequest(requestId = 'request-check-1'): GameChoiceRequest {
@@ -462,7 +624,10 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
         expectedRevision: state.revision,
       }),
     )
-    const damageResult = applyGameAction(driveResult.nextState, {
+    const combatResult = expectApplied(
+      resolveCombat(driveResult.nextState, 'action-combat-damage-1'),
+    )
+    const damageResult = applyGameAction(combatResult.nextState, {
       action: {
         actionId: 'action-damage-1' as ActionId,
         type: 'system.damage_check',
@@ -478,7 +643,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
         toZoneId: 'zone-p2-damage' as GameState['zones'][number]['zoneId'],
         count: 1,
       },
-      expectedRevision: driveResult.nextState.revision,
+      expectedRevision: combatResult.nextState.revision,
     })
     const appliedDamageResult = expectApplied(damageResult)
     const deckZone = appliedDamageResult.nextState.zones.find(
@@ -517,6 +682,14 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
           },
         ],
       },
+      damage: {
+        playerId: 'player-2',
+        damageZoneId: 'zone-p2-damage',
+        damageBefore: 0,
+        damageAfter: 1,
+        defeatThreshold: 6,
+        outcome: 'non_lethal',
+      },
     })
     expect(
       countLocatedPieceOccurrences(
@@ -527,6 +700,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
     expect(appliedDamageResult.events.map((event) => event.type)).toEqual([
       'piece.moved',
       'battle.damage_checked',
+      'player.damage_changed',
       'effect.resolved',
     ])
     expect(appliedDamageResult.events[0]).toMatchObject({
@@ -564,8 +738,11 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
         expectedRevision: state.revision,
       }),
     )
+    const combatResult = expectApplied(
+      resolveCombat(driveResult.nextState, 'action-combat-complete-1'),
+    )
     const damageResult = expectApplied(
-      applyGameAction(driveResult.nextState, {
+      applyGameAction(combatResult.nextState, {
         action: {
           actionId: 'action-damage-complete-1' as ActionId,
           type: 'system.damage_check',
@@ -581,7 +758,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
           toZoneId: 'zone-p2-damage' as GameState['zones'][number]['zoneId'],
           count: 1,
         },
-        expectedRevision: driveResult.nextState.revision,
+        expectedRevision: combatResult.nextState.revision,
       }),
     )
     const completionResult = applyGameAction(damageResult.nextState, {
@@ -649,6 +826,19 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
           'piece-p2-guardian' as GameState['pieces'][number]['pieceId'],
         ],
         guardZoneId: 'zone-p2-guardian' as GameState['zones'][number]['zoneId'],
+        combat: makeHitCombatSnapshot({
+          attackPower: 23000,
+          shieldPower: 10000,
+          shieldComponents: [
+            {
+              source: 'guard_shield',
+              pieceId:
+                'piece-p2-guardian' as GameState['pieces'][number]['pieceId'],
+              amount: 10000,
+            },
+          ],
+        }),
+        damage: makeDamageSnapshot(),
         lastCheck: {
           kind: 'damage',
           playerId: 'player-2' as GameState['players'][number]['playerId'],
@@ -767,6 +957,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
     expect(appliedCompletionResult.nextState.pieceStates).toEqual([])
     expect(appliedCompletionResult.events.map((event) => event.type)).toEqual([
       'piece.moved',
+      'battle.guardians_cleaned_up',
       'battle.completed',
     ])
     expect(appliedCompletionResult.events[0]).toMatchObject({
@@ -774,6 +965,12 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
       reason: 'battle_cleanup',
     })
     expect(appliedCompletionResult.events[1]).toMatchObject({
+      type: 'battle.guardians_cleaned_up',
+      guardPieceIds: ['piece-p2-guardian'],
+      fromZoneId: 'zone-p2-guardian',
+      toZoneId: 'zone-p2-drop',
+    })
+    expect(appliedCompletionResult.events[2]).toMatchObject({
       type: 'battle.completed',
       cleanupMovedPieceIds: ['piece-p2-guardian'],
       cleanupFromZoneId: 'zone-p2-guardian',
@@ -826,8 +1023,11 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
         expectedRevision: state.revision,
       }),
     )
+    const combatResult = expectApplied(
+      resolveCombat(driveResult.nextState, 'action-combat-damage-2'),
+    )
     const validDamageResult = expectApplied(
-      applyGameAction(driveResult.nextState, {
+      applyGameAction(combatResult.nextState, {
         action: {
           actionId: 'action-damage-2' as ActionId,
           type: 'system.damage_check',
@@ -843,7 +1043,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
           toZoneId: 'zone-p2-damage' as GameState['zones'][number]['zoneId'],
           count: 1,
         },
-        expectedRevision: driveResult.nextState.revision,
+        expectedRevision: combatResult.nextState.revision,
       }),
     )
     const repeatedInvalidResult = applyGameAction(validDamageResult.nextState, {

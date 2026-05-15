@@ -1,6 +1,11 @@
 export type {
   BattleCheckKind,
   BattleCheckState,
+  BattleCombatPowerComponentState,
+  BattleCombatResult,
+  BattleCombatState,
+  BattleDamageOutcome,
+  BattleDamageState,
   BattleState,
   BattleStatus,
   CheckTriggerResolutionState,
@@ -32,7 +37,22 @@ export type {
   ZoneScope,
   ZoneState,
 } from './state'
+export { buildGameStateIndex } from './state-index'
 export {
+  findCurrentVanguardPiece,
+  findCurrentVanguardZone,
+  findOwnedZoneByKind,
+  findPieceById,
+  findPieceLocation,
+  findPieceStateById,
+  findPlayerById,
+  findZoneById,
+  listOwnedZonesByKind,
+  resolvePrimaryOpponentPlayerId,
+} from './state-queries'
+export type { GamePieceLocation, GameStateIndex } from './state-index'
+export {
+  assertGameStateCardStatsComplete,
   assertGameStateInvariant,
   assertPlayerStateInvariant,
   assertZoneStateInvariant,
