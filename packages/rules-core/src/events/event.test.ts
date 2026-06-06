@@ -65,6 +65,7 @@ type ExpectedEventTypes =
   | 'card.rode'
   | 'card.called'
   | 'cards.drawn'
+  | 'cards.deck_out'
   | 'battle.attack_declared'
   | 'battle.boost_declared'
   | 'battle.intercept_declared'
@@ -138,8 +139,7 @@ const driveCheckedEvent: DriveCheckedEvent = {
       pieceId: 'piece-3' as PieceId,
     },
   ],
-  triggerResolutionState:
-    'pending_future_engine' as CheckTriggerResolutionState,
+  triggerResolutionState: 'pending_resolution' as CheckTriggerResolutionState,
 }
 
 describe('@web-vg/rules-core event model', () => {
@@ -167,7 +167,11 @@ describe('@web-vg/rules-core event model', () => {
       | 'piece.unlocked'
     >()
     expectTypeOf<CardEventType>().toEqualTypeOf<
-      'card.played' | 'card.rode' | 'card.called' | 'cards.drawn'
+      | 'card.played'
+      | 'card.rode'
+      | 'card.called'
+      | 'cards.drawn'
+      | 'cards.deck_out'
     >()
     expectTypeOf<BattleEvent['type']>().toEqualTypeOf<
       | 'battle.attack_declared'

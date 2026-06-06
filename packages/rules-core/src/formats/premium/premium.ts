@@ -57,6 +57,7 @@ export const PREMIUM_FORMAT_ACTION_TYPES = [
   'match.ready',
   'match.start',
   'match.concede',
+  'match.timeout',
   'system.begin_mulligan',
   'system.drive_check',
   'system.resolve_combat',

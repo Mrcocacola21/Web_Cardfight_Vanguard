@@ -17,8 +17,12 @@ import {
   isAppliedTransitionResult,
   isBlockedTransitionResult,
   isInvalidTransitionResult,
+  resolveCombatPieceModifiers,
 } from '../index'
-import { PERSONA_RIDE_POWER_FLAG } from '../effects/first-effects'
+import {
+  PERSONA_RIDE_POWER_AMOUNT,
+  PERSONA_RIDE_POWER_FLAG,
+} from '../effects/first-effects'
 
 function makeCombatState(
   options: {
@@ -489,6 +493,133 @@ describe('@web-vg/rules-core combat math foundation', () => {
       type: 'battle.attack_hit',
       attackPower: 18000,
       totalDefensePower: 13000,
+    })
+  })
+
+  it('resolves power and critical through the combat modifier provider', () => {
+    const state = makeCombatState({
+      battle: makeBattle(),
+    })
+    const stateWithModifiers: GameState = {
+      ...state,
+      pieceStates: [
+        {
+          pieceId:
+            'piece-p1-attacker' as GameState['pieces'][number]['pieceId'],
+          orientation: 'stand',
+          flags: [],
+          powerModifier: 12000,
+          criticalModifier: 1,
+        },
+      ],
+    }
+    const providerResult = resolveCombatPieceModifiers(
+      stateWithModifiers,
+      'piece-p1-attacker' as GameState['pieces'][number]['pieceId'],
+    )
+    const result = expectApplied(resolveCombat(stateWithModifiers))
+
+    expect(providerResult).toMatchObject({
+      ok: true,
+      modifiers: {
+        powerModifier: 12000,
+        criticalModifier: 1,
+        powerComponents: [
+          {
+            source: 'piece_power_modifier',
+            pieceId: 'piece-p1-attacker',
+            amount: 12000,
+          },
+        ],
+        criticalComponents: [
+          {
+            source: 'piece_critical_modifier',
+            pieceId: 'piece-p1-attacker',
+            amount: 1,
+          },
+        ],
+      },
+    })
+    expect(result.nextState.battle?.combat).toMatchObject({
+      attackPower: 22000,
+      attackCritical: 2,
+      damageCheckCount: 2,
+      attackerPowerComponents: [
+        {
+          source: 'attacker_base',
+          amount: 10000,
+        },
+        {
+          source: 'piece_power_modifier',
+          amount: 12000,
+        },
+      ],
+      attackerCriticalComponents: [
+        {
+          source: 'attacker_base_critical',
+          amount: 1,
+        },
+        {
+          source: 'piece_critical_modifier',
+          amount: 1,
+        },
+      ],
+      result: 'hit',
+    })
+  })
+
+  it('does not grant Persona Ride power from the Persona flag inside combat math', () => {
+    const state = makeCombatState({
+      battle: makeBattle(),
+    })
+    const flagOnlyResult = expectApplied(
+      resolveCombat({
+        ...state,
+        pieceStates: [
+          {
+            pieceId:
+              'piece-p1-attacker' as GameState['pieces'][number]['pieceId'],
+            orientation: 'stand',
+            flags: [PERSONA_RIDE_POWER_FLAG],
+          },
+        ],
+      }),
+    )
+    const materializedResult = expectApplied(
+      resolveCombat(
+        {
+          ...state,
+          pieceStates: [
+            {
+              pieceId:
+                'piece-p1-attacker' as GameState['pieces'][number]['pieceId'],
+              orientation: 'stand',
+              flags: [PERSONA_RIDE_POWER_FLAG],
+              powerModifier: PERSONA_RIDE_POWER_AMOUNT,
+            },
+          ],
+        },
+        'action-resolve-persona-materialized-combat',
+      ),
+    )
+
+    expect(flagOnlyResult.nextState.battle?.combat).toMatchObject({
+      attackPower: 10000,
+      result: 'miss',
+    })
+    expect(materializedResult.nextState.battle?.combat).toMatchObject({
+      attackPower: 20000,
+      result: 'hit',
+      attackerPowerComponents: [
+        {
+          source: 'attacker_base',
+          amount: 10000,
+        },
+        {
+          source: 'piece_power_modifier',
+          amount: PERSONA_RIDE_POWER_AMOUNT,
+        },
+      ],
     })
   })
 

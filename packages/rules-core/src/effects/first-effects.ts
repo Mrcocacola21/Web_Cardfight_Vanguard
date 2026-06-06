@@ -15,6 +15,10 @@ import {
   findPlayerById,
   listOwnedZonesByKind,
 } from '../state'
+import {
+  resolveDeckOutLoss,
+  shouldResolveDeckOutLoss,
+} from '../transitions/deck-out'
 import { drawTopPiecesBetweenZones } from '../transitions/ordered-zone-operations'
 import { createPieceMovedEvents } from '../transitions/zone-transfer'
 import {
@@ -37,6 +41,7 @@ import { coreEffectRegistry } from './samples'
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
 export const PERSONA_RIDE_POWER_FLAG =
   'effect.persona_ride.power_plus_10000.until_end_of_turn' as GamePieceFlagKey
+export const PERSONA_RIDE_POWER_AMOUNT = 10000
 
 export interface FirstEffectEnvironment {
   readonly effectRegistry: EffectRegistry
@@ -181,6 +186,10 @@ export function resolvePostRideEffects(
 
     workingState = effectResult.state
     events.push(...effectResult.events)
+
+    if (workingState.status === 'completed') {
+      break
+    }
   }
 
   return {
@@ -339,6 +348,13 @@ function applyDeclarativeOperations(
 
         workingState = result.state
         events.push(...result.events)
+        if (workingState.status === 'completed') {
+          return {
+            ok: true,
+            state: workingState,
+            events,
+          }
+        }
         break
       }
       case 'apply_power_modifier':
@@ -400,6 +416,21 @@ function applyDrawCardsOperation(
       code: 'invalid_action_reference',
       message: `Effect draw operation requires controller ${controllerPlayerId} to own deck and hand zones.`,
     }
+  }
+
+  if (shouldResolveDeckOutLoss(deckZone, operation.count)) {
+    return resolveDeckOutLoss({
+      transitionId: input.transitionId,
+      currentState,
+      playerId: player.playerId,
+      fromZoneId: deckZone.zoneId,
+      requiredCount: operation.count,
+      availableCount: deckZone.occupants.length,
+      reason: 'effect',
+      sourceActionId: input.sourceActionId,
+      system: AUTOMATIC_FLOW_SYSTEM,
+      startingSequence: options.startingSequence,
+    })
   }
 
   const drawResult = drawTopPiecesBetweenZones(
@@ -479,18 +510,16 @@ function applyPowerModifierOperation(
 
   return {
     ...currentState,
-    pieceStates: upsertPieceFlags(
+    pieceStates: upsertPersonaRidePowerModifiers(
       currentState.pieceStates,
       frontRowPieceIds,
-      PERSONA_RIDE_POWER_FLAG,
     ),
   }
 }
 
-function upsertPieceFlags(
+function upsertPersonaRidePowerModifiers(
   pieceStates: readonly GamePieceStatusState[],
   pieceIds: readonly PieceId[],
-  flag: GamePieceFlagKey,
 ): readonly GamePieceStatusState[] {
   const nextPieceStates = [...pieceStates]
 
@@ -503,20 +532,26 @@ function upsertPieceFlags(
       nextPieceStates.push({
         pieceId,
         orientation: 'stand',
-        flags: [flag],
+        flags: [PERSONA_RIDE_POWER_FLAG],
+        powerModifier: PERSONA_RIDE_POWER_AMOUNT,
       })
       continue
     }
 
     const existingState = nextPieceStates[existingIndex]
 
-    if (existingState === undefined || existingState.flags.includes(flag)) {
+    if (
+      existingState === undefined ||
+      existingState.flags.includes(PERSONA_RIDE_POWER_FLAG)
+    ) {
       continue
     }
 
     nextPieceStates[existingIndex] = {
       ...existingState,
-      flags: [...existingState.flags, flag],
+      flags: [...existingState.flags, PERSONA_RIDE_POWER_FLAG],
+      powerModifier:
+        (existingState.powerModifier ?? 0) + PERSONA_RIDE_POWER_AMOUNT,
     }
   }
 

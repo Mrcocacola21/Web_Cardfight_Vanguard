@@ -4,6 +4,7 @@ import type {
   ActionId,
   GameState,
   PlayerId,
+  RequestId,
   TransitionId,
 } from '@web-vg/rules-core'
 import {
@@ -20,6 +21,7 @@ import {
   getMatchRoomEngineRevision,
   hasMatchRoomEngineState,
   initializeMatchRoom,
+  resolveMatchRoomTimeout,
   submitMatchRoomCommand,
 } from './match-room'
 import type {
@@ -192,6 +194,63 @@ function makeInitializedRoom(initialState = makeGameState()) {
       },
     ],
   })
+}
+
+function makeConfirmRequest(
+  requestId = 'request-confirm-1',
+  responderPlayerId = PLAYER_1,
+): GameState['pendingRequests'][number] {
+  return {
+    requestId: requestId as RequestId,
+    type: 'confirm.boolean',
+    responderPlayerId,
+    purpose: 'rule',
+    visibility: 'responder-only',
+  }
+}
+
+function makeAcceptedAdapter(
+  room: MatchRoom & { readonly engineState: GameState },
+  nextState: GameState,
+): MatchRoomEngineAdapter {
+  return {
+    adapterId: room.engineAdapterId,
+    formatId: room.formatId,
+    dispatch() {
+      return {
+        status: 'accepted',
+        transitionId: 'transition-room-clock-accepted' as TransitionId,
+        state: nextState,
+        events: [],
+        timingWindows: [],
+        pendingRequests: nextState.pendingRequests,
+      }
+    },
+  }
+}
+
+function systemAdvanceCommand(expectedRevision: number) {
+  return {
+    source: {
+      kind: 'system',
+      source: 'match-runtime',
+    },
+    command: {
+      kind: 'action',
+      submission: {
+        action: {
+          actionId: 'action-room-clock-advance' as ActionId,
+          type: 'system.advance_phase',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          nextPhase: 'main',
+        },
+        expectedRevision,
+      },
+    },
+  } as const
 }
 
 describe('@web-vg/match-session match room model', () => {
@@ -391,6 +450,405 @@ describe('@web-vg/match-session match room model', () => {
     expect(concedeResult.room.metadata.completedAt).toBe(
       '2026-05-07T09:03:00.000Z',
     )
+  })
+
+  it('assigns session-owned turn and request deadlines from accepted runtime state', () => {
+    const createdRoom = createMatchRoom({
+      roomId: ROOM_ID,
+      formatId: STANDARD_FORMAT_ID,
+      hostParticipantId: PARTICIPANT_1,
+      createdAt: '2026-05-07T09:00:00.000Z',
+      clockSettings: {
+        requestTimeoutMs: 5_000,
+        turnTimeoutMs: 30_000,
+      },
+      participants: [
+        {
+          participantId: PARTICIPANT_1,
+          seat: 0,
+          userId: USER_1,
+        },
+        {
+          participantId: PARTICIPANT_2,
+          seat: 1,
+          userId: USER_2,
+        },
+      ],
+    })
+    const initializedRoom = initializeMatchRoom(createdRoom, {
+      initialState: makeGameState({ status: 'ready' }),
+      initializedAt: '2026-05-07T09:01:00.000Z',
+      playerBindings: [
+        {
+          participantId: PARTICIPANT_1,
+          playerId: PLAYER_1,
+        },
+        {
+          participantId: PARTICIPANT_2,
+          playerId: PLAYER_2,
+        },
+      ],
+    })
+    const startResult = submitMatchRoomCommand(
+      initializedRoom,
+      {
+        source: {
+          kind: 'system',
+          source: 'local-session',
+        },
+        command: {
+          kind: 'action',
+          submission: {
+            action: {
+              actionId: 'action-start-clock-1' as ActionId,
+              type: 'match.start',
+              actor: {
+                kind: 'system',
+                system: 'match-setup',
+              },
+            },
+            expectedRevision: initializedRoom.engineState.revision,
+          },
+        },
+      },
+      {
+        submittedAt: '2026-05-07T09:02:00.000Z',
+      },
+    )
+
+    expect(startResult.status).toBe('accepted')
+
+    if (startResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted start, received ${startResult.status}.`,
+      )
+    }
+
+    expect(startResult.room.clock).toMatchObject({
+      authority: 'match-session',
+      serverNow: '2026-05-07T09:02:00.000Z',
+      settings: {
+        requestTimeoutMs: 5_000,
+        turnTimeoutMs: 30_000,
+      },
+      activeTurn: {
+        turnNumber: 0,
+        turnPlayerId: PLAYER_1,
+        startedAt: '2026-05-07T09:02:00.000Z',
+        deadlineAt: '2026-05-07T09:02:30.000Z',
+      },
+    })
+    expect(startResult.room.clock.activeRequest).toBeUndefined()
+
+    const request = makeConfirmRequest('request-clock-1')
+    const pendingState: GameState = {
+      ...startResult.room.engineState,
+      status: 'awaiting_choice',
+      revision: startResult.room.engineState.revision + 1,
+      pendingRequests: [request],
+    }
+    const pendingResult = submitMatchRoomCommand(
+      startResult.room,
+      systemAdvanceCommand(startResult.room.engineState.revision),
+      {
+        engineAdapters: [makeAcceptedAdapter(startResult.room, pendingState)],
+        submittedAt: '2026-05-07T09:03:00.000Z',
+      },
+    )
+
+    expect(pendingResult.status).toBe('accepted')
+
+    if (pendingResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted pending result, received ${pendingResult.status}.`,
+      )
+    }
+
+    expect(pendingResult.room.clock.activeRequest).toMatchObject({
+      requestId: request.requestId,
+      responderPlayerId: PLAYER_1,
+      startedAt: '2026-05-07T09:03:00.000Z',
+      deadlineAt: '2026-05-07T09:03:05.000Z',
+    })
+    expect(pendingResult.room.clock.activeTurn).toEqual(
+      startResult.room.clock.activeTurn,
+    )
+  })
+
+  it('resolves expired request deadlines through a system-owned timeout path', () => {
+    const request = makeConfirmRequest('request-timeout-1')
+    const initializedRoom = makeInitializedRoom(
+      makeGameState({ status: 'ready' }),
+    )
+    const pendingState: GameState = {
+      ...initializedRoom.engineState,
+      status: 'awaiting_choice',
+      revision: initializedRoom.engineState.revision + 1,
+      pendingRequests: [request],
+    }
+    const pendingResult = submitMatchRoomCommand(
+      initializedRoom,
+      systemAdvanceCommand(initializedRoom.engineState.revision),
+      {
+        engineAdapters: [makeAcceptedAdapter(initializedRoom, pendingState)],
+        submittedAt: '2026-05-07T09:10:00.000Z',
+      },
+    )
+
+    if (pendingResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted pending setup, received ${pendingResult.status}.`,
+      )
+    }
+
+    const timeoutResult = resolveMatchRoomTimeout(pendingResult.room, {
+      checkedAt: '2026-05-07T09:12:01.000Z',
+    })
+
+    expect(timeoutResult.status).toBe('accepted')
+
+    if (timeoutResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted timeout, received ${timeoutResult.status}.`,
+      )
+    }
+
+    expect(timeoutResult.timeout).toMatchObject({
+      kind: 'request',
+      requestId: request.requestId,
+      responderPlayerId: PLAYER_1,
+      timeoutReason: 'request_timeout',
+    })
+    expect(timeoutResult.room.status).toBe('completed')
+    expect(timeoutResult.room.engineState.pendingRequests).toEqual([])
+    expect(timeoutResult.room.clock.activeRequest).toBeUndefined()
+    expect(timeoutResult.room.clock.activeTurn).toBeUndefined()
+    expect(
+      timeoutResult.engineResult.events.map((event) => event.type),
+    ).toEqual(['player.defeated', 'match.ended'])
+    expect(timeoutResult.engineResult.events[0]).toMatchObject({
+      type: 'player.defeated',
+      playerId: PLAYER_1,
+      reason: 'timeout',
+      timeoutReason: 'request_timeout',
+    })
+    expect(timeoutResult.engineResult.events[1]).toMatchObject({
+      type: 'match.ended',
+      reason: 'timeout',
+      timeoutReason: 'request_timeout',
+      loserPlayerId: PLAYER_1,
+      winnerPlayerId: PLAYER_2,
+    })
+  })
+
+  it('rejects stale participant responses after the authoritative request deadline', () => {
+    const request = makeConfirmRequest('request-stale-timeout-1')
+    const initializedRoom = makeInitializedRoom(
+      makeGameState({ status: 'ready' }),
+    )
+    const pendingState: GameState = {
+      ...initializedRoom.engineState,
+      status: 'awaiting_choice',
+      revision: initializedRoom.engineState.revision + 1,
+      pendingRequests: [request],
+    }
+    const pendingResult = submitMatchRoomCommand(
+      initializedRoom,
+      systemAdvanceCommand(initializedRoom.engineState.revision),
+      {
+        engineAdapters: [makeAcceptedAdapter(initializedRoom, pendingState)],
+        submittedAt: '2026-05-07T09:20:00.000Z',
+      },
+    )
+
+    if (pendingResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted pending setup, received ${pendingResult.status}.`,
+      )
+    }
+
+    const staleResponse = submitMatchRoomCommand(
+      pendingResult.room,
+      {
+        source: {
+          kind: 'participant',
+          participantId: PARTICIPANT_1,
+        },
+        command: {
+          kind: 'choice_response',
+          submission: {
+            expectedRevision: pendingResult.room.engineState.revision,
+            response: {
+              requestId: request.requestId,
+              responderPlayerId: PLAYER_1,
+              type: 'answer.boolean',
+              accepted: true,
+            },
+          },
+        },
+      },
+      {
+        submittedAt: '2026-05-07T09:22:01.000Z',
+      },
+    )
+
+    expect(staleResponse.status).toBe('invalid')
+
+    if (staleResponse.status !== 'invalid') {
+      throw new Error(
+        `Expected invalid stale response, received ${staleResponse.status}.`,
+      )
+    }
+
+    expect(staleResponse.code).toBe('deadline_expired')
+    expect('engineResult' in staleResponse).toBe(false)
+    expect(staleResponse.room).toBe(pendingResult.room)
+  })
+
+  it('resolves queued request deadlines deterministically from the FIFO head', () => {
+    const headRequest = makeConfirmRequest('request-timeout-head', PLAYER_2)
+    const queuedRequest = makeConfirmRequest('request-timeout-tail', PLAYER_1)
+    const initializedRoom = makeInitializedRoom(
+      makeGameState({ status: 'ready' }),
+    )
+    const pendingState: GameState = {
+      ...initializedRoom.engineState,
+      status: 'awaiting_choice',
+      revision: initializedRoom.engineState.revision + 1,
+      pendingRequests: [headRequest, queuedRequest],
+    }
+    const pendingResult = submitMatchRoomCommand(
+      initializedRoom,
+      systemAdvanceCommand(initializedRoom.engineState.revision),
+      {
+        engineAdapters: [makeAcceptedAdapter(initializedRoom, pendingState)],
+        submittedAt: '2026-05-07T09:30:00.000Z',
+      },
+    )
+
+    if (pendingResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted pending setup, received ${pendingResult.status}.`,
+      )
+    }
+
+    expect(pendingResult.room.clock.activeRequest?.requestId).toBe(
+      headRequest.requestId,
+    )
+
+    const timeoutResult = resolveMatchRoomTimeout(pendingResult.room, {
+      checkedAt: '2026-05-07T09:32:01.000Z',
+    })
+
+    expect(timeoutResult.status).toBe('accepted')
+
+    if (timeoutResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted timeout, received ${timeoutResult.status}.`,
+      )
+    }
+
+    expect(timeoutResult.timeout).toMatchObject({
+      kind: 'request',
+      requestId: headRequest.requestId,
+      responderPlayerId: PLAYER_2,
+    })
+    expect(timeoutResult.engineResult.events[1]).toMatchObject({
+      type: 'match.ended',
+      loserPlayerId: PLAYER_2,
+      winnerPlayerId: PLAYER_1,
+    })
+  })
+
+  it('resolves turn deadlines when no active request owns the clock first', () => {
+    const createdRoom = createMatchRoom({
+      roomId: ROOM_ID,
+      formatId: STANDARD_FORMAT_ID,
+      createdAt: '2026-05-07T09:39:00.000Z',
+      clockSettings: {
+        requestTimeoutMs: 120_000,
+        turnTimeoutMs: 10_000,
+      },
+      participants: [
+        {
+          participantId: PARTICIPANT_1,
+          seat: 0,
+        },
+        {
+          participantId: PARTICIPANT_2,
+          seat: 1,
+        },
+      ],
+    })
+    const initializedRoom = initializeMatchRoom(createdRoom, {
+      initialState: makeGameState({ status: 'ready' }),
+      initializedAt: '2026-05-07T09:39:30.000Z',
+      playerBindings: [
+        {
+          participantId: PARTICIPANT_1,
+          playerId: PLAYER_1,
+        },
+        {
+          participantId: PARTICIPANT_2,
+          playerId: PLAYER_2,
+        },
+      ],
+    })
+    const startResult = submitMatchRoomCommand(
+      initializedRoom,
+      {
+        source: {
+          kind: 'system',
+          source: 'local-session',
+        },
+        command: {
+          kind: 'action',
+          submission: {
+            action: {
+              actionId: 'action-start-turn-clock-1' as ActionId,
+              type: 'match.start',
+              actor: {
+                kind: 'system',
+                system: 'match-setup',
+              },
+            },
+            expectedRevision: initializedRoom.engineState.revision,
+          },
+        },
+      },
+      {
+        submittedAt: '2026-05-07T09:40:00.000Z',
+      },
+    )
+
+    if (startResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted start, received ${startResult.status}.`,
+      )
+    }
+
+    const timeoutResult = resolveMatchRoomTimeout(startResult.room, {
+      checkedAt: '2026-05-07T09:40:10.000Z',
+    })
+
+    expect(timeoutResult.status).toBe('accepted')
+
+    if (timeoutResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted timeout, received ${timeoutResult.status}.`,
+      )
+    }
+
+    expect(timeoutResult.timeout).toMatchObject({
+      kind: 'turn',
+      turnPlayerId: PLAYER_1,
+      timeoutReason: 'turn_timeout',
+    })
+    expect(timeoutResult.engineResult.events[1]).toMatchObject({
+      type: 'match.ended',
+      timeoutReason: 'turn_timeout',
+      loserPlayerId: PLAYER_1,
+    })
   })
 
   it('routes participant commands through the engine without mutating the room ad hoc', () => {

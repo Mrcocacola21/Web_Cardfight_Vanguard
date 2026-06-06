@@ -123,6 +123,37 @@ function expectEveryPieceLocatedOnce(state: GameState): void {
   expect(locatedPieceIds).toEqual(expectedPieceIds)
 }
 
+function replaceZoneOccupants(
+  state: GameState,
+  zoneId: GameState['zones'][number]['zoneId'],
+  pieceIds: readonly GameState['pieces'][number]['pieceId'][],
+): GameState {
+  const nextZones = state.zones.map((zone) =>
+    zone.zoneId === zoneId
+      ? {
+          ...zone,
+          occupants: pieceIds.map((pieceId) => ({ pieceId })),
+        }
+      : zone,
+  )
+  const locatedPieceIds = new Set(
+    nextZones
+      .flatMap((zone) => zone.occupants)
+      .map((occupant) => occupant.pieceId as string),
+  )
+
+  return {
+    ...state,
+    zones: nextZones,
+    pieces: state.pieces.filter((piece) =>
+      locatedPieceIds.has(piece.pieceId as string),
+    ),
+    pieceStates: state.pieceStates.filter((pieceState) =>
+      locatedPieceIds.has(pieceState.pieceId as string),
+    ),
+  }
+}
+
 function expectApplied(result: ReturnType<typeof applyGameAction>) {
   expect(isAppliedTransitionResult(result)).toBe(true)
 
@@ -248,11 +279,15 @@ describe('@web-vg/rules-core draw / shuffle / mulligan mechanics', () => {
     })
   })
 
-  it('returns a structured invalid draw result when the deck does not contain enough cards', () => {
-    const state = makeOpeningState()
+  it('turns a required deck draw from an empty deck into deck-out loss', () => {
+    const state = replaceZoneOccupants(
+      makeOpeningState(),
+      'zone-deck' as GameState['zones'][number]['zoneId'],
+      [],
+    )
     const result = applyGameAction(state, {
       action: {
-        actionId: 'action-draw-invalid-1' as ActionId,
+        actionId: 'action-draw-deck-out-1' as ActionId,
         type: 'zone.draw',
         actor: {
           kind: 'system',
@@ -261,7 +296,62 @@ describe('@web-vg/rules-core draw / shuffle / mulligan mechanics', () => {
         playerId: 'player-1' as GameState['players'][number]['playerId'],
         fromZoneId: 'zone-deck' as GameState['zones'][number]['zoneId'],
         toZoneId: 'zone-hand' as GameState['zones'][number]['zoneId'],
-        count: 99,
+        count: 1,
+      },
+      expectedRevision: 4,
+    })
+    const appliedResult = expectApplied(result)
+
+    expect(appliedResult.nextState.status).toBe('completed')
+    expect(appliedResult.nextState.pendingRequests).toEqual([])
+    expect(appliedResult.nextState.battle).toBeUndefined()
+    expect(appliedResult.nextState.players).toContainEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        status: 'defeated',
+      }),
+    )
+    expect(appliedResult.events.map((event) => event.type)).toEqual([
+      'cards.deck_out',
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(appliedResult.events[0]).toMatchObject({
+      type: 'cards.deck_out',
+      playerId: 'player-1',
+      fromZoneId: 'zone-deck',
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'draw',
+    })
+    expect(appliedResult.events[1]).toMatchObject({
+      type: 'player.defeated',
+      playerId: 'player-1',
+      reason: 'deck_out',
+    })
+    expect(appliedResult.events[2]).toMatchObject({
+      type: 'match.ended',
+      reason: 'deck_out',
+      loserPlayerId: 'player-1',
+      winnerPlayerId: 'player-2',
+    })
+    expectEveryPieceLocatedOnce(appliedResult.nextState)
+  })
+
+  it('rejects malformed draw counts as invalid instead of deck-out', () => {
+    const state = makeOpeningState()
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-draw-invalid-count-1' as ActionId,
+        type: 'zone.draw',
+        actor: {
+          kind: 'system',
+          system: 'automatic-flow',
+        },
+        playerId: 'player-1' as GameState['players'][number]['playerId'],
+        fromZoneId: 'zone-deck' as GameState['zones'][number]['zoneId'],
+        toZoneId: 'zone-hand' as GameState['zones'][number]['zoneId'],
+        count: 0,
       },
       expectedRevision: 4,
     })
@@ -270,6 +360,53 @@ describe('@web-vg/rules-core draw / shuffle / mulligan mechanics', () => {
     expect(invalidResult.code).toBe('invalid_action')
     expect(invalidResult.currentState).toEqual(state)
     expect(invalidResult.events).toEqual([])
+  })
+
+  it('blocks further draw commands after deck-out completed the match', () => {
+    const deckOutResult = expectApplied(
+      applyGameAction(
+        replaceZoneOccupants(
+          makeOpeningState(),
+          'zone-deck' as GameState['zones'][number]['zoneId'],
+          [],
+        ),
+        {
+          action: {
+            actionId: 'action-draw-deck-out-follow-up-1' as ActionId,
+            type: 'zone.draw',
+            actor: {
+              kind: 'system',
+              system: 'automatic-flow',
+            },
+            playerId: 'player-1' as GameState['players'][number]['playerId'],
+            fromZoneId: 'zone-deck' as GameState['zones'][number]['zoneId'],
+            toZoneId: 'zone-hand' as GameState['zones'][number]['zoneId'],
+            count: 1,
+          },
+          expectedRevision: 4,
+        },
+      ),
+    )
+    const invalidResult = expectInvalid(
+      applyGameAction(deckOutResult.nextState, {
+        action: {
+          actionId: 'action-draw-after-deck-out-1' as ActionId,
+          type: 'zone.draw',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+          fromZoneId: 'zone-deck' as GameState['zones'][number]['zoneId'],
+          toZoneId: 'zone-hand' as GameState['zones'][number]['zoneId'],
+          count: 1,
+        },
+        expectedRevision: deckOutResult.nextState.revision,
+      }),
+    )
+
+    expect(invalidResult.code).toBe('invalid_action')
+    expect(invalidResult.message).toContain('completed match')
   })
 
   it('starts mulligan as an engine-owned request and blocks unrelated actions while it is pending', () => {

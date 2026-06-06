@@ -1,3 +1,5 @@
+import type { TriggerType } from '@web-vg/shared'
+
 import type {
   ActionId,
   BattleId,
@@ -105,6 +107,19 @@ export interface GuardChoiceRequest extends GameChoiceRequestBase<'battle.guard_
   readonly interceptPieceIds?: readonly PieceId[]
 }
 
+export interface TriggerChoiceRequest extends GameChoiceRequestBase<'trigger.resolve'> {
+  readonly battleId: BattleId
+  readonly checkKind: 'drive' | 'damage'
+  readonly revealedPieceId: PieceId
+  readonly triggerType: TriggerType
+  readonly powerAmount?: number
+  readonly criticalAmount?: number
+  readonly powerEligiblePieceIds?: readonly PieceId[]
+  readonly criticalEligiblePieceIds?: readonly PieceId[]
+  readonly standEligiblePieceIds?: readonly PieceId[]
+  readonly healEligiblePieceIds?: readonly PieceId[]
+}
+
 export type SelectionChoiceRequestType =
   | 'choose.pieces'
   | 'choose.target'
@@ -115,6 +130,7 @@ export type GameChoiceRequestType =
   | SelectionChoiceRequestType
   | 'battle.guard_select'
   | 'mulligan.select_cards'
+  | 'trigger.resolve'
   | 'confirm.boolean'
 
 export type ChoiceRequestType = GameChoiceRequestType
@@ -128,6 +144,7 @@ export type SelectionChoiceRequest =
 export type GameChoiceRequest =
   | SelectionChoiceRequest
   | GuardChoiceRequest
+  | TriggerChoiceRequest
   | ConfirmBooleanRequest
   | MulliganChoiceRequest
 
@@ -172,6 +189,13 @@ export interface GuardChoiceResponse extends GameChoiceResponseBase<'answer.guar
   readonly selectedPieceIds: readonly PieceId[]
 }
 
+export interface TriggerChoiceResponse extends GameChoiceResponseBase<'answer.trigger'> {
+  readonly powerTargetPieceIds?: readonly PieceId[]
+  readonly criticalTargetPieceId?: PieceId
+  readonly standTargetPieceId?: PieceId
+  readonly healTargetPieceId?: PieceId
+}
+
 export type SelectionChoiceResponse =
   | PiecesChosenResponse
   | TargetChosenResponse
@@ -184,6 +208,7 @@ export type GameChoiceResponseType =
   | 'answer.zone'
   | 'answer.option'
   | 'answer.guard'
+  | 'answer.trigger'
   | 'answer.mulligan'
   | 'answer.boolean'
   | 'answer.pass'
@@ -193,6 +218,7 @@ export type ChoiceResponseType = GameChoiceResponseType
 export type GameChoiceResponse =
   | SelectionChoiceResponse
   | GuardChoiceResponse
+  | TriggerChoiceResponse
   | MulliganChoiceResponse
   | BooleanChoiceResponse
   | PassChoiceResponse
@@ -348,6 +374,29 @@ export function assertGameChoiceRequestInvariant(
       }
       return
     }
+    case 'trigger.resolve': {
+      assertRulesInvariant(
+        hasTriggerChoiceRequirement(request),
+        `Trigger choice request ${request.requestId} must require at least one trigger selection.`,
+      )
+      assertOptionalUniquePieceIds(
+        request.powerEligiblePieceIds,
+        `Trigger choice request ${request.requestId} must not repeat eligible power target piece ids.`,
+      )
+      assertOptionalUniquePieceIds(
+        request.criticalEligiblePieceIds,
+        `Trigger choice request ${request.requestId} must not repeat eligible critical target piece ids.`,
+      )
+      assertOptionalUniquePieceIds(
+        request.standEligiblePieceIds,
+        `Trigger choice request ${request.requestId} must not repeat eligible stand target piece ids.`,
+      )
+      assertOptionalUniquePieceIds(
+        request.healEligiblePieceIds,
+        `Trigger choice request ${request.requestId} must not repeat eligible heal target piece ids.`,
+      )
+      return
+    }
     case 'confirm.boolean':
       return
   }
@@ -385,6 +434,12 @@ export function assertGameChoiceResponseInvariant(
       assertNonEmptyUniqueStrings(
         response.selectedPieceIds.map((pieceId) => pieceId as string),
         `Choice response ${response.requestId} must contain at least one unique selected guard piece id.`,
+      )
+      return
+    case 'answer.trigger':
+      assertOptionalUniquePieceIds(
+        response.powerTargetPieceIds,
+        `Choice response ${response.requestId} must not repeat selected trigger power target piece ids.`,
       )
       return
     case 'answer.mulligan':
@@ -532,6 +587,13 @@ export function assertChoiceResponseMatchesRequest(
         'guard piece ids',
       )
       return
+    case 'trigger.resolve':
+      assertRulesInvariant(
+        response.type === 'answer.trigger',
+        `Choice request ${request.requestId} expects a trigger resolution response.`,
+      )
+      assertTriggerResponseMatchesRequest(request, response)
+      return
     case 'confirm.boolean':
       assertRulesInvariant(
         response.type === 'answer.boolean',
@@ -539,6 +601,94 @@ export function assertChoiceResponseMatchesRequest(
       )
       return
   }
+}
+
+function hasTriggerChoiceRequirement(request: TriggerChoiceRequest): boolean {
+  return (
+    (request.powerEligiblePieceIds?.length ?? 0) > 0 ||
+    (request.criticalEligiblePieceIds?.length ?? 0) > 0 ||
+    (request.standEligiblePieceIds?.length ?? 0) > 0 ||
+    (request.healEligiblePieceIds?.length ?? 0) > 0
+  )
+}
+
+function assertTriggerResponseMatchesRequest(
+  request: TriggerChoiceRequest,
+  response: TriggerChoiceResponse,
+): void {
+  assertRequiredTriggerPieceSelection(
+    request,
+    response.powerTargetPieceIds ?? [],
+    request.powerEligiblePieceIds,
+    'power target piece ids',
+  )
+
+  assertRequiredTriggerPieceSelection(
+    request,
+    response.criticalTargetPieceId === undefined
+      ? []
+      : [response.criticalTargetPieceId],
+    request.criticalEligiblePieceIds,
+    'critical target piece ids',
+  )
+
+  assertRequiredTriggerPieceSelection(
+    request,
+    response.standTargetPieceId === undefined
+      ? []
+      : [response.standTargetPieceId],
+    request.standEligiblePieceIds,
+    'stand target piece ids',
+  )
+
+  assertRequiredTriggerPieceSelection(
+    request,
+    response.healTargetPieceId === undefined
+      ? []
+      : [response.healTargetPieceId],
+    request.healEligiblePieceIds,
+    'heal target piece ids',
+  )
+}
+
+function assertRequiredTriggerPieceSelection(
+  request: TriggerChoiceRequest,
+  selectedPieceIds: readonly PieceId[],
+  eligiblePieceIds: readonly PieceId[] | undefined,
+  label: string,
+): void {
+  if (eligiblePieceIds === undefined) {
+    assertRulesInvariant(
+      selectedPieceIds.length === 0,
+      `Choice response ${request.requestId} must not select trigger ${label} for this request.`,
+    )
+    return
+  }
+
+  assertRulesInvariant(
+    selectedPieceIds.length === 1,
+    `Choice response ${request.requestId} must select exactly one trigger ${label}.`,
+  )
+  assertAllowedValues(
+    selectedPieceIds.map((pieceId) => pieceId as string),
+    eligiblePieceIds.map((pieceId) => pieceId as string),
+    request.requestId,
+    `trigger ${label}`,
+  )
+}
+
+function assertOptionalUniquePieceIds(
+  pieceIds: readonly PieceId[] | undefined,
+  message: string,
+): void {
+  if (pieceIds === undefined) {
+    return
+  }
+
+  assertUniqueStrings(
+    pieceIds.map((pieceId) => pieceId as string),
+    message,
+  )
 }
 
 function assertContextInvariant(context: RequestContext | undefined): void {

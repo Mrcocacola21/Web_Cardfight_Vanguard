@@ -165,7 +165,7 @@ Remaining risks:
   depend on it;
 - guard pass currently resolves without a domain event; tests document that
   behavior, but event policy should be revisited before replay/effect hooks;
-- drive/damage checks still use `pending_future_engine` for trigger resolution;
+- drive/damage checks now use `pending_resolution` for trigger resolution;
 - battle completion/cleanup is not implemented yet and remains a Phase 18+
   dependency.
 

@@ -4,10 +4,12 @@ import type {
   MatchConcedeAction,
   MatchReadyAction,
   MatchStartAction,
+  MatchTimeoutAction,
   MovePieceAction,
 } from '../actions'
 import type { EventId, TransitionId } from '../contracts'
 import { resolveEventTriggeredEffects } from '../effects/triggered-resolution'
+import { resolveCheckTriggerChoiceResponse } from '../effects/trigger-resolution'
 import { RulesInvariantError } from '../errors'
 import type { EventOrigin, GameEvent } from '../events'
 import {
@@ -121,7 +123,11 @@ function reduceActionTransition(
 
   const blockingRequest = currentState.pendingRequests[0]
 
-  if (blockingRequest !== undefined && action.type !== 'match.concede') {
+  if (
+    blockingRequest !== undefined &&
+    action.type !== 'match.concede' &&
+    action.type !== 'match.timeout'
+  ) {
     return createBlockedTransitionResult(
       transitionId,
       currentState,
@@ -131,7 +137,7 @@ function reduceActionTransition(
   }
 
   const battleSequenceViolation =
-    action.type === 'match.concede'
+    action.type === 'match.concede' || action.type === 'match.timeout'
       ? undefined
       : resolveBattleSequenceViolation(currentState, action.type)
 
@@ -145,7 +151,7 @@ function reduceActionTransition(
   }
 
   const phaseActionViolation =
-    action.type === 'match.concede'
+    action.type === 'match.concede' || action.type === 'match.timeout'
       ? undefined
       : resolvePhaseActionViolation(currentState, action)
 
@@ -164,6 +170,8 @@ function reduceActionTransition(
         return applyMatchReadyTransition(transitionId, currentState, action)
       case 'match.start':
         return applyMatchStartTransition(transitionId, currentState, action)
+      case 'match.timeout':
+        return applyMatchTimeoutTransition(transitionId, currentState, action)
       case 'match.concede':
         return applyMatchConcedeTransition(transitionId, currentState, action)
       case 'system.begin_mulligan':
@@ -334,6 +342,53 @@ function reduceChoiceResponseTransition(
         blockingRequest,
         response,
         choiceResponseEvent,
+      ),
+    })
+  }
+
+  if (
+    blockingRequest.type === 'trigger.resolve' &&
+    response.type === 'answer.trigger'
+  ) {
+    const choiceResponseEvent = createChoiceResponseResolvedEvent(
+      transitionId,
+      blockingRequest,
+      response,
+    )
+    const triggerResolution = resolveCheckTriggerChoiceResponse(currentState, {
+      transitionId,
+      request: blockingRequest,
+      response,
+      startingSequence: 1,
+      startingTimingWindowSequence: 3,
+    })
+
+    if (!triggerResolution.ok) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        triggerResolution.code,
+        triggerResolution.message,
+        { inputKind: 'choice_response' },
+      )
+    }
+
+    return resolveEventTriggeredEffects({
+      currentState,
+      result: createTransitionResult(
+        transitionId,
+        advanceGameStateRevision(triggerResolution.state),
+        [choiceResponseEvent, ...triggerResolution.events],
+        {
+          inputKind: 'choice_response',
+          timingWindows: [
+            ...createTransitionTimingWindowTriplet('choice.response', {
+              relatedEventSequence: choiceResponseEvent.sequence,
+              requestId: blockingRequest.requestId,
+            }),
+            ...triggerResolution.timingWindows,
+          ],
+        },
       ),
     })
   }
@@ -558,6 +613,86 @@ function applyMatchConcedeTransition(
   return createTransitionResult(transitionId, nextState, events)
 }
 
+function applyMatchTimeoutTransition(
+  transitionId: TransitionId,
+  currentState: GameState,
+  action: MatchTimeoutAction,
+): TransitionResult {
+  if (
+    currentState.status !== 'in_progress' &&
+    currentState.status !== 'awaiting_choice'
+  ) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} requires an active match state.`,
+    )
+  }
+
+  const timedOutPlayer = currentState.players.find(
+    (player) => player.playerId === action.playerId,
+  )
+
+  if (timedOutPlayer === undefined) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action_reference',
+      `Action ${action.type} references an unknown player ${action.playerId}.`,
+    )
+  }
+
+  const winningPlayer = currentState.players.find(
+    (player) =>
+      player.playerId !== timedOutPlayer.playerId &&
+      player.status !== 'defeated',
+  )
+  const { battle: _activeBattle, ...stateWithoutBattle } = currentState
+  const nextState = advanceGameStateRevision({
+    ...stateWithoutBattle,
+    status: 'completed',
+    pendingRequests: [],
+    players: currentState.players.map((player) =>
+      player.playerId === timedOutPlayer.playerId
+        ? {
+            ...player,
+            status: 'defeated',
+          }
+        : player,
+    ),
+  })
+  const events: readonly GameEvent[] = [
+    {
+      eventId: createEventId(transitionId, 0),
+      type: 'player.defeated',
+      sequence: 0,
+      sourceActionId: action.actionId,
+      origin: createSystemEventOrigin(action.actor.system),
+      playerId: timedOutPlayer.playerId,
+      reason: 'timeout',
+      timeoutReason: action.reason,
+    },
+    {
+      eventId: createEventId(transitionId, 1),
+      type: 'match.ended',
+      sequence: 1,
+      sourceActionId: action.actionId,
+      origin: createSystemEventOrigin(action.actor.system),
+      reason: 'timeout',
+      timeoutReason: action.reason,
+      loserPlayerId: timedOutPlayer.playerId,
+      ...(winningPlayer === undefined
+        ? {}
+        : {
+            winnerPlayerId: winningPlayer.playerId,
+          }),
+    },
+  ]
+
+  return createTransitionResult(transitionId, nextState, events)
+}
+
 function applyMovePieceTransition(
   transitionId: TransitionId,
   currentState: GameState,
@@ -670,6 +805,30 @@ function createChoiceResponseResolvedEvent(
         ...base,
         returnedPieceIds: response.returnedPieceIds,
       }
+    case 'answer.trigger':
+      return {
+        ...base,
+        ...(response.powerTargetPieceIds === undefined
+          ? {}
+          : {
+              triggerPowerTargetPieceIds: response.powerTargetPieceIds,
+            }),
+        ...(response.criticalTargetPieceId === undefined
+          ? {}
+          : {
+              triggerCriticalTargetPieceId: response.criticalTargetPieceId,
+            }),
+        ...(response.standTargetPieceId === undefined
+          ? {}
+          : {
+              triggerStandTargetPieceId: response.standTargetPieceId,
+            }),
+        ...(response.healTargetPieceId === undefined
+          ? {}
+          : {
+              triggerHealTargetPieceId: response.healTargetPieceId,
+            }),
+      }
     case 'answer.boolean':
       return {
         ...base,
@@ -700,6 +859,7 @@ function resolveChoiceResponseOutcome(
     case 'answer.target':
     case 'answer.zone':
     case 'answer.guard':
+    case 'answer.trigger':
     case 'answer.mulligan':
       return 'selection_made'
   }

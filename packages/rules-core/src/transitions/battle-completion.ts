@@ -332,7 +332,7 @@ function createDefeatEvents(
   ]
 }
 
-function resolveBattleCleanup(
+export function resolveBattleCleanup(
   currentState: GameState,
   battle: NonNullable<GameState['battle']>,
 ):

@@ -13,6 +13,7 @@ import type {
   MatchRoomLifecycleStatus,
 } from './match-room'
 import { hasMatchRoomEngineState } from './match-room'
+import { isMatchRoomClockStateLike } from './clock'
 
 export type MatchRoomHistoryEntryId = Brand<string, 'MatchRoomHistoryEntryId'>
 export type MatchRoomHistoryEventKind = 'engine_event' | 'room_lifecycle'
@@ -415,7 +416,8 @@ function isMatchRoomSnapshotLike(value: unknown): value is MatchRoom {
     typeof value.status === 'string' &&
     Number.isSafeInteger(value.revision) &&
     Array.isArray(value.participants) &&
-    isRecord(value.metadata)
+    isRecord(value.metadata) &&
+    isMatchRoomClockStateLike(value.clock)
   )
 }
 

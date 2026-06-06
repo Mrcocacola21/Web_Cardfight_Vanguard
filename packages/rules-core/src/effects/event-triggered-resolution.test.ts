@@ -30,7 +30,10 @@ import {
   collectEventTriggeredEffectCandidates,
   resolveEventTriggeredEffects,
 } from './triggered-resolution'
-import { PERSONA_RIDE_POWER_FLAG } from './first-effects'
+import {
+  PERSONA_RIDE_POWER_AMOUNT,
+  PERSONA_RIDE_POWER_FLAG,
+} from './first-effects'
 
 const STANDARD_FORMAT_ID = 'standard' as FormatId
 const PLAYER_1 = 'player-1' as PlayerId
@@ -459,8 +462,11 @@ describe('@web-vg/rules-core event-triggered resolution foundation', () => {
     expect(
       result.nextState.pieceStates.find(
         (pieceState) => pieceState.pieceId === ('piece-new-vg' as PieceId),
-      )?.flags,
-    ).toContain(PERSONA_RIDE_POWER_FLAG)
+      ),
+    ).toMatchObject({
+      flags: [PERSONA_RIDE_POWER_FLAG],
+      powerModifier: PERSONA_RIDE_POWER_AMOUNT,
+    })
   })
 
   it('keeps triggered effect output replay-stable for identical reducer input', () => {
@@ -555,7 +561,7 @@ describe('@web-vg/rules-core event-triggered resolution foundation', () => {
       'battle.drive_checked',
     ])
     expect(baseResult.nextState.battle?.lastCheck?.triggerResolutionState).toBe(
-      'pending_future_engine',
+      'pending_resolution',
     )
 
     const result = requireApplied(

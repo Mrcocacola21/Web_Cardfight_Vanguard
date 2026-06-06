@@ -11,6 +11,7 @@ import {
   vPremiumFormatAdapter,
 } from '@web-vg/rules-core'
 import type {
+  ActionId,
   AcceptedEngineDispatchResult,
   BlockedEngineDispatchResult,
   EngineCommand,
@@ -20,6 +21,18 @@ import type {
   PlayerId,
 } from '@web-vg/rules-core'
 import type { Brand, DeckId, FormatId, UserId } from '@web-vg/shared'
+
+import {
+  advanceMatchRoomClockState,
+  closeMatchRoomClockState,
+  createInitialMatchRoomClockState,
+  resolveExpiredMatchRoomDeadline,
+  systemMatchRoomClock,
+  type ExpiredMatchRoomDeadline,
+  type MatchRoomClockSettings,
+  type MatchRoomClockSource,
+  type MatchRoomClockState,
+} from './clock'
 
 export type MatchRoomId = Brand<string, 'MatchRoomId'>
 export type MatchRoomParticipantId = Brand<string, 'MatchRoomParticipantId'>
@@ -76,6 +89,7 @@ interface MatchRoomBase<TStatus extends MatchRoomLifecycleStatus> {
   readonly participants: readonly MatchRoomParticipant[]
   readonly hostParticipantId?: MatchRoomParticipantId
   readonly metadata: MatchRoomMetadata
+  readonly clock: MatchRoomClockState
 }
 
 export interface CreatedMatchRoom extends MatchRoomBase<'created'> {
@@ -118,6 +132,7 @@ export interface CreateMatchRoomInput {
   readonly participants: readonly CreateMatchRoomParticipantInput[]
   readonly hostParticipantId?: MatchRoomParticipantId
   readonly createdAt?: string
+  readonly clockSettings?: Partial<MatchRoomClockSettings>
 }
 
 export interface InitializeMatchRoomInput {
@@ -160,6 +175,7 @@ export interface MatchRoomCommandSubmission<
 export type MatchRoomInvalidCommandCode =
   | 'room_not_initialized'
   | 'room_closed'
+  | 'deadline_expired'
   | 'unknown_participant'
   | 'participant_not_bound_to_player'
   | 'actor_participant_mismatch'
@@ -202,6 +218,34 @@ export interface BlockedMatchRoomCommandResult {
   readonly blockingRequests: BlockedEngineDispatchResult['blockingRequests']
   readonly engineResult: BlockedEngineDispatchResult
 }
+
+export interface NotDueMatchRoomTimeoutResult {
+  readonly status: 'not_due'
+  readonly room: OpenMatchRoom
+  readonly checkedAt: string
+}
+
+export interface AcceptedMatchRoomTimeoutResult {
+  readonly status: 'accepted'
+  readonly room: InitializedMatchRoom | InProgressMatchRoom | CompletedMatchRoom
+  readonly checkedAt: string
+  readonly timeout: ExpiredMatchRoomDeadline
+  readonly engineResult: AcceptedEngineDispatchResult
+}
+
+export interface InvalidMatchRoomTimeoutResult {
+  readonly status: 'invalid'
+  readonly room: MatchRoom
+  readonly checkedAt: string
+  readonly code: MatchRoomInvalidCommandCode
+  readonly message: string
+  readonly roomResult?: InvalidMatchRoomCommandResult
+}
+
+export type MatchRoomTimeoutResult =
+  | NotDueMatchRoomTimeoutResult
+  | AcceptedMatchRoomTimeoutResult
+  | InvalidMatchRoomTimeoutResult
 
 export type MatchRoomCommandResult =
   | AcceptedMatchRoomCommandResult
@@ -286,6 +330,12 @@ export function createMatchRoom(input: CreateMatchRoomInput): CreatedMatchRoom {
       createdAt,
       updatedAt: createdAt,
     },
+    clock: createInitialMatchRoomClockState({
+      serverNow: createdAt,
+      ...(input.clockSettings === undefined
+        ? {}
+        : { settings: input.clockSettings }),
+    }),
   }
 }
 
@@ -323,6 +373,11 @@ export function initializeMatchRoom(
     revision: room.revision + 1,
     participants,
     engineState: input.initialState,
+    clock: advanceMatchRoomClockState({
+      clock: room.clock,
+      nextState: input.initialState,
+      serverNow: initializedAt,
+    }),
     metadata: {
       ...room.metadata,
       initializedAt,
@@ -355,6 +410,7 @@ export function abortMatchRoom(
       abortedAt,
       updatedAt: abortedAt,
     },
+    clock: closeMatchRoomClockState(room.clock, abortedAt),
     ...(input.reason === undefined
       ? {}
       : {
@@ -369,6 +425,7 @@ export function submitMatchRoomCommand(
   options: {
     readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
     readonly submittedAt?: string
+    readonly clock?: MatchRoomClockSource
   } = {},
 ): MatchRoomCommandResult {
   if (room.status === 'completed' || room.status === 'aborted') {
@@ -394,6 +451,24 @@ export function submitMatchRoomCommand(
       room,
       sourceValidation.code,
       sourceValidation.message,
+    )
+  }
+
+  const submittedAt =
+    options.submittedAt ?? options.clock?.now() ?? systemMatchRoomClock.now()
+  const expiredDeadline =
+    submission.source.kind === 'participant'
+      ? resolveExpiredMatchRoomDeadline({
+          clock: room.clock,
+          serverNow: submittedAt,
+        })
+      : undefined
+
+  if (expiredDeadline !== undefined) {
+    return createRoomLevelInvalidResult(
+      room,
+      'deadline_expired',
+      `Match room ${room.roomId} cannot accept participant command after ${expiredDeadline.kind} deadline ${expiredDeadline.deadlineAt}.`,
     )
   }
 
@@ -427,7 +502,7 @@ export function submitMatchRoomCommand(
         room: advanceRoomAfterAcceptedEngineResult(
           room,
           engineResult,
-          options.submittedAt ?? new Date().toISOString(),
+          submittedAt,
         ),
         engineResult,
       }
@@ -448,6 +523,116 @@ export function submitMatchRoomCommand(
         blockingRequests: engineResult.blockingRequests,
         engineResult,
       }
+  }
+}
+
+export function resolveMatchRoomTimeout(
+  room: MatchRoom,
+  options: {
+    readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
+    readonly checkedAt?: string
+    readonly clock?: MatchRoomClockSource
+  } = {},
+): MatchRoomTimeoutResult {
+  const checkedAt =
+    options.checkedAt ?? options.clock?.now() ?? systemMatchRoomClock.now()
+
+  if (room.status === 'completed' || room.status === 'aborted') {
+    return {
+      status: 'invalid',
+      room,
+      checkedAt,
+      code: 'room_closed',
+      message: `Match room ${room.roomId} is ${room.status} and cannot resolve timeouts.`,
+    }
+  }
+
+  if (!isOpenMatchRoom(room)) {
+    return {
+      status: 'invalid',
+      room,
+      checkedAt,
+      code: 'room_not_initialized',
+      message: `Match room ${room.roomId} must be initialized before timeout resolution.`,
+    }
+  }
+
+  const timeout = resolveExpiredMatchRoomDeadline({
+    clock: room.clock,
+    serverNow: checkedAt,
+  })
+
+  if (timeout === undefined) {
+    return {
+      status: 'not_due',
+      room,
+      checkedAt,
+    }
+  }
+
+  const timedOutPlayerId =
+    timeout.kind === 'request'
+      ? timeout.responderPlayerId
+      : timeout.turnPlayerId
+  const roomResult = submitMatchRoomCommand(
+    room,
+    {
+      source: {
+        kind: 'system',
+        source: 'match-runtime',
+      },
+      command: {
+        kind: 'action',
+        submission: {
+          expectedRevision: room.engineState.revision,
+          action: {
+            actionId: createTimeoutActionId(room, timeout) as ActionId,
+            type: 'match.timeout',
+            actor: {
+              kind: 'system',
+              system: 'match-runtime',
+            },
+            playerId: timedOutPlayerId,
+            reason: timeout.timeoutReason,
+          },
+        },
+      },
+    },
+    {
+      ...(options.engineAdapters === undefined
+        ? {}
+        : { engineAdapters: options.engineAdapters }),
+      submittedAt: checkedAt,
+    },
+  )
+
+  if (roomResult.status !== 'accepted') {
+    if (roomResult.status === 'blocked') {
+      return {
+        status: 'invalid',
+        room: roomResult.room,
+        checkedAt,
+        code: 'deadline_expired',
+        message: roomResult.message,
+      }
+    }
+
+    return {
+      status: 'invalid',
+      room: roomResult.room,
+      checkedAt,
+      code: roomResult.code,
+      message: roomResult.message,
+      roomResult,
+    }
+  }
+
+  return {
+    status: 'accepted',
+    room: roomResult.room,
+    checkedAt,
+    timeout,
+    engineResult: roomResult.engineResult,
   }
 }
 
@@ -737,6 +922,14 @@ function advanceRoomAfterAcceptedEngineResult(
     status,
     revision: room.revision + 1,
     engineState: engineResult.state,
+    clock:
+      status === 'completed'
+        ? closeMatchRoomClockState(room.clock, submittedAt)
+        : advanceMatchRoomClockState({
+            clock: room.clock,
+            nextState: engineResult.state,
+            serverNow: submittedAt,
+          }),
     metadata,
   } as InitializedMatchRoom | InProgressMatchRoom | CompletedMatchRoom
 }
@@ -810,6 +1003,19 @@ function createRoomLevelInvalidResult(
     code,
     message,
   }
+}
+
+function createTimeoutActionId(
+  room: OpenMatchRoom,
+  timeout: ExpiredMatchRoomDeadline,
+): string {
+  return [
+    'action-timeout',
+    room.roomId,
+    `r${room.revision}`,
+    timeout.kind,
+    timeout.kind === 'request' ? timeout.requestId : timeout.turnNumber,
+  ].join(':')
 }
 
 function assertMatchRoomInvariant(

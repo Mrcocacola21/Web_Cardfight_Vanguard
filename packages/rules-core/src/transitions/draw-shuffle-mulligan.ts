@@ -32,6 +32,7 @@ import {
   type PieceZoneMovement,
   reorderOrderedMultiZoneOccupants,
 } from './ordered-zone-operations'
+import { resolveDeckOutLoss, shouldResolveDeckOutLoss } from './deck-out'
 import { createPieceMovedEvents } from './zone-transfer'
 
 const MULLIGAN_COMPLETED_FLAG_KEY = 'mulligan_completed' as PlayerFlagKey
@@ -133,6 +134,35 @@ export function applyDrawCardsTransition(
 
   if (sourceZone === undefined || destinationZone === undefined) {
     throw new Error(`Expected owned draw zones for action ${action.type}.`)
+  }
+
+  if (shouldResolveDeckOutLoss(sourceZone, action.count)) {
+    const deckOutResult = resolveDeckOutLoss({
+      transitionId,
+      currentState,
+      playerId: action.playerId,
+      fromZoneId: sourceZone.zoneId,
+      requiredCount: action.count,
+      availableCount: sourceZone.occupants.length,
+      reason: 'draw',
+      sourceActionId: action.actionId,
+      system: action.actor.system,
+    })
+
+    if (!deckOutResult.ok) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        deckOutResult.code,
+        deckOutResult.message,
+      )
+    }
+
+    return createTransitionResult(
+      transitionId,
+      advanceGameStateRevision(deckOutResult.state),
+      deckOutResult.events,
+    )
   }
 
   const drawResult = drawTopPiecesBetweenZones(
@@ -427,6 +457,47 @@ export function applyMulliganChoiceResponseTransition(
     ...stateAfterReturns,
     zones: shuffleResult.zones,
   }
+  const shuffledDeckZone = shuffleResult.zone
+
+  if (
+    response.returnedPieceIds.length > 0 &&
+    shouldResolveDeckOutLoss(shuffledDeckZone, response.returnedPieceIds.length)
+  ) {
+    const deckOutResult = resolveDeckOutLoss({
+      transitionId,
+      currentState: stateAfterShuffle,
+      playerId: player.playerId,
+      fromZoneId: shuffledDeckZone.zoneId,
+      requiredCount: response.returnedPieceIds.length,
+      availableCount: shuffledDeckZone.occupants.length,
+      reason: 'mulligan_draw',
+      ...(choiceResponseEvent.sourceActionId === undefined
+        ? {}
+        : {
+            sourceActionId: choiceResponseEvent.sourceActionId,
+          }),
+      system: 'automatic-flow',
+      startingSequence: 1,
+    })
+
+    if (!deckOutResult.ok) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        deckOutResult.code,
+        deckOutResult.message,
+        { inputKind: 'choice_response' },
+      )
+    }
+
+    return createTransitionResult(
+      transitionId,
+      advanceGameStateRevision(deckOutResult.state),
+      [choiceResponseEvent, ...deckOutResult.events],
+      { inputKind: 'choice_response' },
+    )
+  }
+
   const drawResult =
     response.returnedPieceIds.length === 0
       ? {

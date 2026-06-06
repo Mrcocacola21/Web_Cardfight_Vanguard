@@ -139,6 +139,14 @@ describe('@web-vg/match-session serialization and event history', () => {
       requestId: 'request-session-mulligan',
       type: 'mulligan.select_cards',
     })
+    expect(restored.session.room.clock.activeRequest).toMatchObject({
+      requestId: 'request-session-mulligan',
+      responderPlayerId: PLAYER_1,
+      startedAt: '2026-05-10T00:00:01.000Z',
+      deadlineAt: '2026-05-10T00:02:01.000Z',
+    })
+    expect(serialized.json).toContain('"activeRequest"')
+    expect(serialized.json).toContain('"deadlineAt":"2026-05-10T00:02:01.000Z"')
 
     const projection = projectMatchRoomForParticipant(
       restored.session.room,

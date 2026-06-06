@@ -14,7 +14,10 @@ import {
   PERSONA_RIDE_KEYWORD_EFFECT_IDENTITY,
   TWIN_DRIVE_KEYWORD_EFFECT_IDENTITY,
 } from './samples'
-import { PERSONA_RIDE_POWER_FLAG } from './first-effects'
+import {
+  PERSONA_RIDE_POWER_AMOUNT,
+  PERSONA_RIDE_POWER_FLAG,
+} from './first-effects'
 
 const STANDARD_FORMAT_ID = 'standard' as FormatId
 const PREMIUM_FORMAT_ID = 'premium' as FormatId
@@ -355,6 +358,37 @@ function zonePieceIds(state: GameState, zoneId: string): readonly PieceId[] {
   return zone.occupants.map((occupant) => occupant.pieceId)
 }
 
+function replaceZoneOccupants(
+  state: GameState,
+  zoneId: ZoneId,
+  pieceIds: readonly PieceId[],
+): GameState {
+  const nextZones = state.zones.map((zone) =>
+    zone.zoneId === zoneId
+      ? {
+          ...zone,
+          occupants: pieceIds.map((pieceId) => ({ pieceId })),
+        }
+      : zone,
+  )
+  const locatedPieceIds = new Set(
+    nextZones
+      .flatMap((zone) => zone.occupants)
+      .map((occupant) => occupant.pieceId as string),
+  )
+
+  return {
+    ...state,
+    zones: nextZones,
+    pieces: state.pieces.filter((piece) =>
+      locatedPieceIds.has(piece.pieceId as string),
+    ),
+    pieceStates: state.pieceStates.filter((pieceState) =>
+      locatedPieceIds.has(pieceState.pieceId as string),
+    ),
+  }
+}
+
 describe('@web-vg/rules-core first working effects', () => {
   it('applies twin-drive through keyword, registry, and declarative effect resolution', () => {
     const result = requireApplied(
@@ -505,18 +539,87 @@ describe('@web-vg/rules-core first working effects', () => {
     expect(
       result.nextState.pieceStates.find(
         (pieceState) => pieceState.pieceId === 'piece-new-vg',
-      )?.flags,
-    ).toContain(PERSONA_RIDE_POWER_FLAG)
+      ),
+    ).toMatchObject({
+      flags: [PERSONA_RIDE_POWER_FLAG],
+      powerModifier: PERSONA_RIDE_POWER_AMOUNT,
+    })
     expect(
       result.nextState.pieceStates.find(
         (pieceState) => pieceState.pieceId === 'piece-rg',
-      )?.flags,
-    ).toContain(PERSONA_RIDE_POWER_FLAG)
+      ),
+    ).toMatchObject({
+      flags: [PERSONA_RIDE_POWER_FLAG],
+      powerModifier: PERSONA_RIDE_POWER_AMOUNT,
+    })
     expect(result.timingWindows.map((window) => window.point)).toEqual([
       'card.ride',
       'card.ride',
       'card.ride',
       'zone.transfer',
+    ])
+  })
+
+  it('turns persona ride effect draw from an empty deck into deck-out loss', () => {
+    const result = requireApplied(
+      applyGameAction(
+        replaceZoneOccupants(
+          makePersonaRideState({
+            formatId: STANDARD_FORMAT_ID,
+            sameCardDefinition: true,
+          }),
+          'p1-deck' as ZoneId,
+          [],
+        ),
+        {
+          action: {
+            actionId: 'action-persona-empty-deck' as ActionId,
+            type: 'card.ride',
+            actor: {
+              kind: 'player',
+              playerId: PLAYER_1,
+            },
+            pieceId: 'piece-new-vg' as PieceId,
+            ridingOverPieceId: 'piece-old-vg' as PieceId,
+            from: {
+              zoneId: 'p1-hand' as ZoneId,
+            },
+            to: {
+              zoneId: 'p1-vg' as ZoneId,
+            },
+          },
+        },
+      ),
+    )
+
+    expect(result.nextState.status).toBe('completed')
+    expect(eventTypes(result.events)).toEqual([
+      'piece.moved',
+      'piece.moved',
+      'card.rode',
+      'effect.resolved',
+      'cards.deck_out',
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(result.events[4]).toMatchObject({
+      type: 'cards.deck_out',
+      playerId: PLAYER_1,
+      fromZoneId: 'p1-deck',
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'effect',
+    })
+    expect(result.events[6]).toMatchObject({
+      type: 'match.ended',
+      reason: 'deck_out',
+      loserPlayerId: PLAYER_1,
+      winnerPlayerId: PLAYER_2,
+    })
+    expect(result.timingWindows.map((window) => window.point)).toEqual([
+      'card.ride',
+      'card.ride',
+      'card.ride',
     ])
   })
 

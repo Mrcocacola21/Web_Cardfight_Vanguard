@@ -133,6 +133,13 @@ export function resolveEventTriggeredEffects(
     events.push(...executionResult.events)
     timingWindows.push(...executionResult.timingWindows)
 
+    if (
+      workingState.status === 'completed' ||
+      workingState.status === 'awaiting_choice'
+    ) {
+      break
+    }
+
     const nestedCandidates = collectEventTriggeredEffectCandidatesFromSources(
       workingState,
       collectTriggerSourcesFromEventsAndTimingWindows(

@@ -1,4 +1,4 @@
-import type { CardId } from '@web-vg/shared'
+import type { CardId, TriggerType } from '@web-vg/shared'
 
 import type { GameEvent } from '../events'
 import type {
@@ -168,6 +168,15 @@ export interface VisibleFullGameChoiceRequest extends VisibleGameChoiceRequestBa
   readonly guardZoneId?: ZoneId
   readonly battleId?: BattleState['battleId']
   readonly attackerPiece?: VisiblePieceReference
+  readonly checkKind?: 'drive' | 'damage'
+  readonly revealedPiece?: VisiblePieceReference
+  readonly triggerType?: TriggerType
+  readonly powerAmount?: number
+  readonly criticalAmount?: number
+  readonly powerEligiblePieces?: readonly VisiblePieceReference[]
+  readonly criticalEligiblePieces?: readonly VisiblePieceReference[]
+  readonly standEligiblePieces?: readonly VisiblePieceReference[]
+  readonly healEligiblePieces?: readonly VisiblePieceReference[]
   readonly currentDeckCount?: number
   readonly handPieces?: readonly VisiblePieceReference[]
   readonly interceptPieces?: readonly VisiblePieceReference[]
@@ -652,6 +661,65 @@ function projectFullChoiceRequestDetails(
               ),
             }),
       }
+    case 'trigger.resolve':
+      return {
+        battleId: request.battleId,
+        checkKind: request.checkKind,
+        revealedPiece: resolveProjectedPieceReference(
+          request.revealedPieceId,
+          pieceProjectionByCanonicalId,
+        ),
+        triggerType: request.triggerType,
+        ...(request.powerAmount === undefined
+          ? {}
+          : { powerAmount: request.powerAmount }),
+        ...(request.criticalAmount === undefined
+          ? {}
+          : { criticalAmount: request.criticalAmount }),
+        ...(request.powerEligiblePieceIds === undefined
+          ? {}
+          : {
+              powerEligiblePieces: request.powerEligiblePieceIds.map(
+                (pieceId) =>
+                  resolveProjectedPieceReference(
+                    pieceId,
+                    pieceProjectionByCanonicalId,
+                  ),
+              ),
+            }),
+        ...(request.criticalEligiblePieceIds === undefined
+          ? {}
+          : {
+              criticalEligiblePieces: request.criticalEligiblePieceIds.map(
+                (pieceId) =>
+                  resolveProjectedPieceReference(
+                    pieceId,
+                    pieceProjectionByCanonicalId,
+                  ),
+              ),
+            }),
+        ...(request.standEligiblePieceIds === undefined
+          ? {}
+          : {
+              standEligiblePieces: request.standEligiblePieceIds.map(
+                (pieceId) =>
+                  resolveProjectedPieceReference(
+                    pieceId,
+                    pieceProjectionByCanonicalId,
+                  ),
+              ),
+            }),
+        ...(request.healEligiblePieceIds === undefined
+          ? {}
+          : {
+              healEligiblePieces: request.healEligiblePieceIds.map((pieceId) =>
+                resolveProjectedPieceReference(
+                  pieceId,
+                  pieceProjectionByCanonicalId,
+                ),
+              ),
+            }),
+      }
     case 'confirm.boolean':
       return {
         ...(request.defaultAnswer === undefined
@@ -705,6 +773,18 @@ function projectGameEvent(
         redactedFields: viewerIsDrawingPlayer ? [] : ['pieceIds'],
       })
     }
+    case 'cards.deck_out':
+      return createVisibleEvent(event, {
+        visibility: 'public',
+        details: [
+          { label: 'Player', value: event.playerId },
+          { label: 'From', value: event.fromZoneId },
+          { label: 'Required', value: event.requiredCount.toString() },
+          { label: 'Available', value: event.availableCount.toString() },
+          { label: 'Reason', value: event.reason },
+        ],
+        redactedFields: [],
+      })
     case 'mulligan.completed': {
       const viewerIsPlayer = event.playerId === viewerPlayerId
 

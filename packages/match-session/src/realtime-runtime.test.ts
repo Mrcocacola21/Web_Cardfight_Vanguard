@@ -8,6 +8,7 @@ import type {
   GameState,
   PieceId,
   PlayerId,
+  RequestId,
   TransitionId,
   ZoneId,
 } from '@web-vg/rules-core'
@@ -28,11 +29,13 @@ import {
 } from './match-room'
 import {
   createRealtimeParticipantSnapshot,
+  resolveRealtimeMatchRoomTimeout,
   submitRealtimeClientCommand,
   MATCH_REALTIME_TRANSPORT_BASELINE,
   type RealtimeClientCommand,
   type RealtimeClientCommandId,
 } from './realtime-runtime'
+import { createFixedMatchRoomClock } from './clock'
 import {
   createSerializableMatchSessionDocument,
   type SerializableMatchSessionDocument,
@@ -310,6 +313,116 @@ describe('@web-vg/match-session realtime runtime contract', () => {
     expect(result.pushes).toEqual([])
   })
 
+  it('resolves expired request deadlines as authoritative realtime timeout pushes', () => {
+    const document = makeSessionDocument()
+    const request = makeConfirmRequest('request-realtime-timeout')
+    const pendingState: GameState = {
+      ...document.room.engineState,
+      status: 'awaiting_choice',
+      revision: document.room.engineState.revision + 1,
+      pendingRequests: [request],
+    }
+    const pendingResult = submitRealtimeClientCommand({
+      document,
+      command: makeReadyCommand({
+        participantId: PARTICIPANT_1,
+        playerId: PLAYER_1,
+        expectedRoomRevision: document.room.revision,
+        expectedEngineRevision: document.room.engineState.revision,
+      }),
+      engineAdapters: [makeAcceptedAdapter(pendingState, [])],
+      receivedAt: '2026-05-15T09:00:00.000Z',
+    })
+
+    expect(pendingResult.status).toBe('accepted')
+
+    if (pendingResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted pending result, received ${pendingResult.status}.`,
+      )
+    }
+
+    expect(pendingResult.document.room.clock.activeRequest).toMatchObject({
+      requestId: request.requestId,
+      deadlineAt: '2026-05-15T09:02:00.000Z',
+    })
+
+    const timeoutResult = resolveRealtimeMatchRoomTimeout({
+      document: pendingResult.document,
+      clock: createFixedMatchRoomClock('2026-05-15T09:02:01.000Z'),
+    })
+
+    expect(timeoutResult.status).toBe('accepted')
+
+    if (timeoutResult.status !== 'accepted') {
+      throw new Error(
+        `Expected accepted timeout, received ${timeoutResult.status}.`,
+      )
+    }
+
+    expect(timeoutResult.timeoutResult.timeout).toMatchObject({
+      kind: 'request',
+      requestId: request.requestId,
+      responderPlayerId: PLAYER_1,
+      timeoutReason: 'request_timeout',
+    })
+    expect(timeoutResult.document.room.status).toBe('completed')
+    expect(timeoutResult.document.room.clock.serverNow).toBe(
+      '2026-05-15T09:02:01.000Z',
+    )
+    expect(timeoutResult.document.room.clock.activeRequest).toBeUndefined()
+    expect(timeoutResult.acceptedHistory).toHaveLength(2)
+    expect(timeoutResult.acceptedHistory[1]?.event).toMatchObject({
+      kind: 'engine_event',
+      event: {
+        type: 'match.ended',
+        reason: 'timeout',
+        timeoutReason: 'request_timeout',
+      },
+    })
+    expect(
+      timeoutResult.pushes.every((push) => push.reason === 'timeout_resolved'),
+    ).toBe(true)
+    expect(
+      timeoutResult.pushes.every(
+        (push) =>
+          push.projection.clock.serverNow === '2026-05-15T09:02:01.000Z',
+      ),
+    ).toBe(true)
+    expect(
+      timeoutResult.pushes.every(
+        (push) => push.projection.clock.activeRequest === undefined,
+      ),
+    ).toBe(true)
+
+    if (!('engineState' in timeoutResult.document.room)) {
+      throw new Error('Expected timeout document room to include engine state.')
+    }
+
+    const staleResponse = submitRealtimeClientCommand({
+      document: timeoutResult.document,
+      command: makeConfirmResponseCommand({
+        requestId: request.requestId,
+        expectedRoomRevision: timeoutResult.document.room.revision,
+        expectedEngineRevision:
+          timeoutResult.document.room.engineState.revision,
+      }),
+      receivedAt: '2026-05-15T09:02:02.000Z',
+    })
+
+    expect(staleResponse.status).toBe('invalid')
+
+    if (staleResponse.status !== 'invalid') {
+      throw new Error(
+        `Expected invalid stale response, received ${staleResponse.status}.`,
+      )
+    }
+
+    expect(staleResponse.code).toBe('room_closed')
+    expect(staleResponse.document).toBe(timeoutResult.document)
+    expect(staleResponse.pushes).toEqual([])
+  })
+
   it('can produce a reconnect snapshot from the canonical session document without network transport', () => {
     const document = makeSessionDocument()
     const snapshot = createRealtimeParticipantSnapshot({
@@ -410,6 +523,31 @@ function makeReadyCommand(input: {
   }
 }
 
+function makeConfirmResponseCommand(input: {
+  readonly requestId: RequestId
+  readonly expectedRoomRevision: number
+  readonly expectedEngineRevision: number
+}): RealtimeClientCommand {
+  return {
+    commandId: 'realtime-command-timeout-response' as RealtimeClientCommandId,
+    roomId: ROOM_ID,
+    participantId: PARTICIPANT_1,
+    expectedRoomRevision: input.expectedRoomRevision,
+    payload: {
+      kind: 'choice_response',
+      submission: {
+        expectedRevision: input.expectedEngineRevision,
+        response: {
+          requestId: input.requestId,
+          responderPlayerId: PLAYER_1,
+          type: 'answer.boolean',
+          accepted: true,
+        },
+      },
+    },
+  }
+}
+
 function makeAcceptedAdapter(
   state: GameState,
   events: readonly GameEvent[],
@@ -460,6 +598,18 @@ function makeMatchStartedEvent(): GameEvent {
       system: 'match-setup',
     },
     startingPlayerId: PLAYER_1,
+  }
+}
+
+function makeConfirmRequest(
+  requestId: string,
+): GameState['pendingRequests'][number] {
+  return {
+    requestId: requestId as RequestId,
+    type: 'confirm.boolean',
+    responderPlayerId: PLAYER_1,
+    purpose: 'rule',
+    visibility: 'responder-only',
   }
 }
 

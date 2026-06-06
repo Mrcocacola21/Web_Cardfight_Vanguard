@@ -1,4 +1,29 @@
 export { createDeckBackedGameState } from './deck-bootstrap'
+export {
+  DEFAULT_MATCH_ROOM_CLOCK_SETTINGS,
+  advanceMatchRoomClockState,
+  closeMatchRoomClockState,
+  createFixedMatchRoomClock,
+  createInitialMatchRoomClockState,
+  projectMatchRoomClock,
+  resolveExpiredMatchRoomDeadline,
+  systemMatchRoomClock,
+} from './clock'
+export type {
+  ExpiredMatchRoomDeadline,
+  MatchRoomClockAuthority,
+  MatchRoomClockSettings,
+  MatchRoomClockSource,
+  MatchRoomClockState,
+  MatchRoomDeadlineKind,
+  MatchRoomRequestDeadlineState,
+  MatchRoomTimeoutReason,
+  MatchRoomTurnDeadlineState,
+  ProjectedMatchRoomClock,
+  ProjectedMatchRoomDeadline,
+  ProjectedMatchRoomRequestDeadline,
+  ProjectedMatchRoomTurnDeadline,
+} from './clock'
 export type {
   CreateDeckBackedGameStateInput,
   DeckBackedGameStateBootstrapIssueCode,
@@ -50,6 +75,7 @@ export {
   MATCH_REALTIME_TRANSPORT_BASELINE,
   createRealtimeParticipantSnapshot,
   createRealtimeProjectedStatePushes,
+  resolveRealtimeMatchRoomTimeout,
   submitRealtimeClientCommand,
 } from './realtime-runtime'
 export type {
@@ -64,6 +90,10 @@ export type {
   RealtimeProjectedStatePushReason,
   RealtimeProjectedStatePushesResult,
   RealtimeRuntimeInvalidCode,
+  RealtimeTimeoutAcceptedResult,
+  RealtimeTimeoutInvalidResult,
+  RealtimeTimeoutNotDueResult,
+  RealtimeTimeoutResolutionResult,
   RealtimeTransportBaseline,
 } from './realtime-runtime'
 export {
@@ -79,6 +109,7 @@ export {
   getMatchRoomEngineRevision,
   hasMatchRoomEngineState,
   initializeMatchRoom,
+  resolveMatchRoomTimeout,
   resolveDefaultMatchRoomEngineAdapterId,
   submitMatchRoomCommand,
 } from './match-room'
@@ -110,8 +141,12 @@ export type {
   MatchRoomPlayerBinding,
   MatchRoomWithEngineState,
   OpenMatchRoom,
+  AcceptedMatchRoomTimeoutResult,
   BlockedMatchRoomCommandResult,
   EngineInvalidMatchRoomCommandResult,
   InvalidMatchRoomCommandResult,
+  InvalidMatchRoomTimeoutResult,
   RoomLevelInvalidMatchRoomCommandResult,
+  MatchRoomTimeoutResult,
+  NotDueMatchRoomTimeoutResult,
 } from './match-room'

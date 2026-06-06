@@ -55,15 +55,20 @@ export interface SystemEventOrigin {
 export type EventOrigin = PlayerEventOrigin | SystemEventOrigin
 export type EventSequenceNumber = number
 
+export type TimeoutReason = 'request_timeout' | 'turn_timeout' | (string & {})
+
 export type MatchEndReason =
   | 'concede'
   | 'rules'
   | 'draw'
   | 'damage_defeat'
+  | 'deck_out'
+  | 'timeout'
   | (string & {})
 export type BattleCompletionReason =
   | 'damage_check_completed'
   | 'damage_defeat'
+  | 'deck_out'
   | 'attack_missed'
   | (string & {})
 export type ChoiceResponseOutcome =
@@ -99,6 +104,7 @@ export type CardEventType =
   | 'card.rode'
   | 'card.called'
   | 'cards.drawn'
+  | 'cards.deck_out'
 
 export type BattleEventType =
   | 'battle.attack_declared'
@@ -168,6 +174,7 @@ export interface MatchEndedEvent extends EventBase<'match.ended', EventOrigin> {
   readonly reason: MatchEndReason
   readonly winnerPlayerId?: PlayerId
   readonly loserPlayerId?: PlayerId
+  readonly timeoutReason?: TimeoutReason
 }
 
 export interface MulliganStartedEvent extends EventBase<
@@ -287,6 +294,18 @@ export interface CardsDrawnEvent extends EventBase<
   readonly pieceIds: readonly PieceId[]
 }
 
+export interface CardsDeckOutEvent extends EventBase<
+  'cards.deck_out',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly fromZoneId: ZoneId
+  readonly requiredCount: number
+  readonly availableCount: number
+  readonly reason: ZoneTransferReason
+  readonly battleId?: BattleId
+}
+
 export interface CardPlayedEvent
   extends
     EventBase<'card.played', PlayerEventOrigin>,
@@ -401,7 +420,9 @@ interface AttackResultEventFields {
   readonly attackerPieceId: PieceId
   readonly target: AttackTarget
   readonly attackPower: number
+  readonly attackCritical: number
   readonly totalDefensePower: number
+  readonly damageCheckCount: number
 }
 
 export interface AttackHitEvent
@@ -463,6 +484,10 @@ export interface ChoiceResponseResolvedEvent extends EventBase<
   readonly selectedTargets?: readonly TargetReference[]
   readonly selectedLocations?: readonly ZoneLocationReference[]
   readonly selectedOptionIds?: readonly RequestOptionId[]
+  readonly triggerPowerTargetPieceIds?: readonly PieceId[]
+  readonly triggerCriticalTargetPieceId?: PieceId
+  readonly triggerStandTargetPieceId?: PieceId
+  readonly triggerHealTargetPieceId?: PieceId
   readonly accepted?: boolean
   readonly skipReason?: ChoiceResponseSkipReason
   readonly returnedPieceIds?: readonly PieceId[]
@@ -507,7 +532,8 @@ export interface PlayerDefeatedEvent extends EventBase<
   SystemEventOrigin
 > {
   readonly playerId: PlayerId
-  readonly reason: 'damage' | (string & {})
+  readonly reason: 'damage' | 'deck_out' | 'timeout' | (string & {})
+  readonly timeoutReason?: TimeoutReason
   readonly damageCount?: number
   readonly defeatThreshold?: number
 }
@@ -633,6 +659,7 @@ export type CardEvent =
   | CardRodeEvent
   | CardCalledEvent
   | CardsDrawnEvent
+  | CardsDeckOutEvent
 
 export type BattleEvent =
   | AttackDeclaredEvent

@@ -27,6 +27,7 @@ type ExpectedActionTypes =
   | 'match.ready'
   | 'match.start'
   | 'match.concede'
+  | 'match.timeout'
   | 'system.begin_mulligan'
   | 'system.drive_check'
   | 'system.resolve_combat'
@@ -96,7 +97,11 @@ describe('@web-vg/rules-core action model', () => {
     expectTypeOf<ActionType>().toEqualTypeOf<ExpectedActionTypes>()
     expectTypeOf<GameAction['type']>().toEqualTypeOf<ExpectedActionTypes>()
     expectTypeOf<MatchAction['type']>().toEqualTypeOf<
-      'match.ready' | 'match.start' | 'match.concede' | 'system.begin_mulligan'
+      | 'match.ready'
+      | 'match.start'
+      | 'match.concede'
+      | 'match.timeout'
+      | 'system.begin_mulligan'
     >()
     expectTypeOf<TurnFlowAction['type']>().toEqualTypeOf<
       | 'system.drive_check'

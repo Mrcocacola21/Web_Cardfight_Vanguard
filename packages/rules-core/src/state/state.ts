@@ -1,7 +1,9 @@
-import type { CardId, FormatId, Keyword } from '@web-vg/shared'
+import type { CardId, FormatId, Keyword, TriggerType } from '@web-vg/shared'
 
 import type {
+  ActionId,
   BattleId,
+  EffectDefinitionId,
   GameId,
   PieceId,
   PlayerId,
@@ -57,7 +59,8 @@ export type BattleCheckKind = 'drive' | 'damage'
 export type BattleCombatResult = 'hit' | 'miss'
 export type BattleDamageOutcome = 'non_lethal' | 'lethal'
 export type CheckTriggerResolutionState =
-  | 'pending_future_engine'
+  | 'pending_resolution'
+  | 'awaiting_choice'
   | 'resolved_none'
   | 'resolved_triggers'
   | (string & {})
@@ -147,6 +150,33 @@ export interface BattleCheckState {
   readonly toZoneId: ZoneId
   readonly revealedCards: readonly RevealedCheckCardState[]
   readonly triggerResolutionState: CheckTriggerResolutionState
+  readonly triggerContinuation?: TriggerResolutionContinuationState
+}
+
+export interface TriggerResolutionContinuationState {
+  readonly requestId: RequestId
+  readonly effectDefinitionId: EffectDefinitionId
+  readonly sourceActionId?: ActionId
+  readonly sourceCheckEventSequence: number
+  readonly revealedCardIndex: number
+  readonly nextRevealedCardIndex: number
+  readonly resolvedTriggers: number
+  readonly operationKinds: readonly string[]
+  readonly triggerType: TriggerType
+  readonly revealedPieceId: PieceId
+  readonly powerAmount?: number
+  readonly criticalAmount?: number
+  readonly powerEligiblePieceIds?: readonly PieceId[]
+  readonly criticalEligiblePieceIds?: readonly PieceId[]
+  readonly standEligiblePieceIds?: readonly PieceId[]
+  readonly healEligiblePieceIds?: readonly PieceId[]
+  readonly healCondition?: TriggerHealContinuationState
+}
+
+export interface TriggerHealContinuationState {
+  readonly met: boolean
+  readonly playerDamage: number
+  readonly opponentDamage: number
 }
 
 export interface BattleCombatPowerComponentState {
@@ -161,14 +191,26 @@ export interface BattleCombatPowerComponentState {
   readonly amount: number
 }
 
+export interface BattleCombatCriticalComponentState {
+  readonly source:
+    | 'attacker_base_critical'
+    | 'piece_critical_modifier'
+    | (string & {})
+  readonly pieceId?: PieceId
+  readonly amount: number
+}
+
 export interface BattleCombatState {
   readonly attackPower: number
   readonly attackerPowerComponents: readonly BattleCombatPowerComponentState[]
+  readonly attackCritical: number
+  readonly attackerCriticalComponents: readonly BattleCombatCriticalComponentState[]
   readonly defensePower: number
   readonly defensePowerComponents: readonly BattleCombatPowerComponentState[]
   readonly shieldPower: number
   readonly shieldComponents: readonly BattleCombatPowerComponentState[]
   readonly totalDefensePower: number
+  readonly damageCheckCount: number
   readonly result: BattleCombatResult
 }
 
@@ -220,8 +262,9 @@ export interface GameState {
    *   a response for. When `status === 'awaiting_choice'`, exactly one request
    *   at index 0 must be present and must be the target of the next choice response.
    * - When a choice response is resolved, the head request is consumed
-   *   (`pendingRequests.slice(1)`). If the response produces new follow-up
-   *   requests (e.g. chained effects), they are appended to the tail.
+   *   (`pendingRequests.slice(1)`). If the same suspended resolution flow creates
+   *   an immediate continuation request, that request becomes the new head before
+   *   older queued requests; unrelated follow-up requests are appended to the tail.
    * - Transitions that set `status = 'awaiting_choice'` must ensure
    *   `pendingRequests.length >= 1`.
    * - When `pendingRequests.length === 0`, `status` must not be `'awaiting_choice'`.

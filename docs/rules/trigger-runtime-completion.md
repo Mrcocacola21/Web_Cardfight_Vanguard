@@ -12,23 +12,23 @@ That would make one of Vanguard's most common runtime paths a side channel next 
 
 ## 3. How Trigger Consequences Flow Through The Effect System
 
-Drive and damage check transitions only move the checked card, emit `battle.drive_checked` or `battle.damage_checked`, and leave the check as `pending_future_engine`.
+Drive and damage check transitions only move the checked card, emit `battle.drive_checked` or `battle.damage_checked`, and leave the check as `pending_resolution`.
 
 Event-triggered resolution then collects `CHECK_TRIGGER_REVEAL_EFFECT`, enqueues it, and dispatches it through `EffectHandlerRegistry` using `core.check.resolve-revealed-triggers`.
 
-The trigger handler owns consequence execution. It emits `trigger.revealed`, applies state changes, emits `trigger.resolved`, and finishes with `effect.resolved`. Any nested `cards.drawn` events re-enter the existing event-triggered queue and are finalized by the draw finalizer effect.
+The trigger handler owns consequence execution. It emits `trigger.revealed`, either applies automatic consequences or creates a canonical `trigger.resolve` request, then resumes from serialized continuation state after `answer.trigger`. Completed trigger resolution emits `trigger.resolved` and finishes with `effect.resolved`. Any nested `cards.drawn` events re-enter the existing event-triggered queue and are finalized by the draw finalizer effect.
 
 ## 4. Supported Trigger Types And Runtime Status
 
-Critical: applies +10000 power and +1 critical to the primary trigger target.
+Critical: creates a trigger request for +10000 power target and +1 critical target.
 
-Draw: applies +10000 power and draws one card when a deck card is available.
+Draw: creates a trigger request for +10000 power target, then draws one card when a deck card is available.
 
 Front: applies +10000 power to all controlled battle units.
 
-Heal: applies +10000 power, evaluates damage condition after damage placement, and heals one deterministic damage card when eligible.
+Heal: creates a trigger request for +10000 power target. When the damage condition is met, the request also carries eligible heal targets.
 
-Stand: applies +10000 power and stands the first eligible rested rear-guard; with no stand target, the stand portion is a structured no-op.
+Stand: creates a trigger request for +10000 power target and any eligible rested rear-guard stand targets; with no stand target, the stand portion is a structured no-op after the power choice.
 
 Over: applies the current bounded +100000000 broadcast power baseline and draws one card.
 
@@ -36,14 +36,11 @@ No-trigger checks resolve through the same check effect and emit `effect.resolve
 
 ## 5. Targeting / Choice Handling
 
-The current baseline is deterministic auto-targeting inside the trigger effect handler:
+Critical, Draw, Heal, and Stand no longer silently auto-target when a real player choice is available. They create canonical `trigger.resolve` pending requests and resume through `answer.trigger`.
 
-- drive checks prefer the attacking unit;
-- damage checks prefer the checked player's vanguard;
-- otherwise the first controlled battle unit is used;
-- Stand chooses the first eligible rested rear-guard.
+Front and the current bounded Over Trigger remain automatic because their supported baseline applies to all controlled battle units and does not expose a distribution choice.
 
-There is no player choice request for trigger targeting yet. That is intentional for this bounded runtime completion step; no UI/session rescue path is involved.
+The detailed interrupt/resume model is documented in `docs/rules/trigger-choice-interrupt-resume.md`.
 
 ## 6. Heal And Over Trigger Special Considerations
 
@@ -58,8 +55,6 @@ The queue remains responsible for ordering. The check effect resolves before nes
 Raw check transitions do not apply trigger consequences. Reducer-level action application runs event-triggered resolution after the base transition, preserving the same battle/check/damage sequencing.
 
 ## 8. What Is Intentionally NOT Implemented Yet
-
-This step does not implement player-directed trigger target choices.
 
 It does not model obscure format-era trigger exceptions or full Over Trigger text variance.
 

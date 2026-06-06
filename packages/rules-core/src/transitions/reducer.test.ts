@@ -434,6 +434,48 @@ describe('@web-vg/rules-core reducer / transition model', () => {
     expect(blockedResult.pendingRequests).toEqual([request])
   })
 
+  it('applies system-owned timeout while a pending request is active', () => {
+    const request = makeConfirmRequest()
+    const state = makeInProgressState([request])
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-timeout-request-1' as ActionId,
+        type: 'match.timeout',
+        actor: {
+          kind: 'system',
+          system: 'match-runtime',
+        },
+        playerId: 'player-1' as GameState['players'][number]['playerId'],
+        reason: 'request_timeout',
+      },
+      expectedRevision: state.revision,
+    })
+    const appliedResult = expectApplied(result)
+
+    expect(appliedResult.nextState.status).toBe('completed')
+    expect(appliedResult.nextState.pendingRequests).toEqual([])
+    expect(appliedResult.nextState.players[0]).toMatchObject({
+      playerId: 'player-1',
+      status: 'defeated',
+    })
+    expect(appliedResult.events.map((event) => event.type)).toEqual([
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(appliedResult.events[0]).toMatchObject({
+      type: 'player.defeated',
+      reason: 'timeout',
+      timeoutReason: 'request_timeout',
+    })
+    expect(appliedResult.events[1]).toMatchObject({
+      type: 'match.ended',
+      reason: 'timeout',
+      timeoutReason: 'request_timeout',
+      loserPlayerId: 'player-1',
+      winnerPlayerId: 'player-2',
+    })
+  })
+
   it('resolves the head pending choice response and returns a new state', () => {
     const request = makeConfirmRequest()
     const state = makeInProgressState([request])

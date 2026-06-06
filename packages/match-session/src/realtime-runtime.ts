@@ -8,6 +8,7 @@ import type { Brand } from '@web-vg/shared'
 
 import type {
   AcceptedMatchRoomCommandResult,
+  AcceptedMatchRoomTimeoutResult,
   BlockedMatchRoomCommandResult,
   InvalidMatchRoomCommandResult,
   MatchRoomEngineAdapter,
@@ -15,12 +16,17 @@ import type {
   MatchRoomInvalidCommandCode,
   MatchRoomParticipantId,
 } from './match-room'
-import { hasMatchRoomEngineState, submitMatchRoomCommand } from './match-room'
+import {
+  hasMatchRoomEngineState,
+  resolveMatchRoomTimeout,
+  submitMatchRoomCommand,
+} from './match-room'
 import {
   projectMatchRoomForParticipant,
   type MatchRoomProjectionIssueCode,
   type ProjectedMatchRoomForParticipant,
 } from './projection'
+import { systemMatchRoomClock, type MatchRoomClockSource } from './clock'
 import {
   recordMatchRoomCommandResult,
   type MatchRoomHistoryEntry,
@@ -47,6 +53,7 @@ export interface RealtimeClientCommand {
 
 export type RealtimeProjectedStatePushReason =
   | 'command_accepted'
+  | 'timeout_resolved'
   | 'reconnect_snapshot'
 
 export interface RealtimeProjectedStatePush {
@@ -110,6 +117,35 @@ export type RealtimeClientCommandResult =
   | RealtimeClientCommandInvalidResult
   | RealtimeClientCommandBlockedResult
 
+export interface RealtimeTimeoutAcceptedResult {
+  readonly status: 'accepted'
+  readonly document: SerializableMatchSessionDocument
+  readonly timeoutResult: AcceptedMatchRoomTimeoutResult
+  readonly acceptedHistory: readonly MatchRoomHistoryEntry[]
+  readonly pushes: readonly RealtimeProjectedStatePush[]
+}
+
+export interface RealtimeTimeoutNotDueResult {
+  readonly status: 'not_due'
+  readonly document: SerializableMatchSessionDocument
+  readonly checkedAt: string
+  readonly pushes: readonly RealtimeProjectedStatePush[]
+}
+
+export interface RealtimeTimeoutInvalidResult {
+  readonly status: 'invalid'
+  readonly document: SerializableMatchSessionDocument
+  readonly checkedAt: string
+  readonly code: RealtimeRuntimeInvalidCode
+  readonly message: string
+  readonly pushes: readonly RealtimeProjectedStatePush[]
+}
+
+export type RealtimeTimeoutResolutionResult =
+  | RealtimeTimeoutAcceptedResult
+  | RealtimeTimeoutNotDueResult
+  | RealtimeTimeoutInvalidResult
+
 export type RealtimeProjectedStatePushesResult =
   | {
       readonly ok: true
@@ -137,6 +173,7 @@ export function submitRealtimeClientCommand(input: {
   readonly command: RealtimeClientCommand
   readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
   readonly receivedAt?: string
+  readonly clock?: MatchRoomClockSource
 }): RealtimeClientCommandResult {
   const transportValidation = validateRealtimeClientCommand(input)
 
@@ -149,7 +186,8 @@ export function submitRealtimeClientCommand(input: {
     })
   }
 
-  const receivedAt = input.receivedAt ?? new Date().toISOString()
+  const receivedAt =
+    input.receivedAt ?? input.clock?.now() ?? systemMatchRoomClock.now()
   const roomResult = submitMatchRoomCommand(
     input.document.room,
     {
@@ -164,6 +202,7 @@ export function submitRealtimeClientCommand(input: {
         ? {}
         : { engineAdapters: input.engineAdapters }),
       submittedAt: receivedAt,
+      ...(input.clock === undefined ? {} : { clock: input.clock }),
     },
   )
 
@@ -204,6 +243,7 @@ export function createRealtimeProjectedStatePushes(input: {
   readonly reason: RealtimeProjectedStatePushReason
   readonly events?: readonly GameEvent[]
   readonly acceptedHistory?: readonly MatchRoomHistoryEntry[]
+  readonly serverNow?: string
 }): RealtimeProjectedStatePushesResult {
   const room = input.document.room
 
@@ -238,6 +278,9 @@ export function createRealtimeProjectedStatePushes(input: {
       participant.participantId,
       {
         events: input.events ?? [],
+        ...(input.serverNow === undefined
+          ? {}
+          : { serverNow: input.serverNow }),
       },
     )
 
@@ -270,6 +313,7 @@ export function createRealtimeProjectedStatePushes(input: {
 export function createRealtimeParticipantSnapshot(input: {
   readonly document: SerializableMatchSessionDocument
   readonly participantId: MatchRoomParticipantId
+  readonly serverNow?: string
 }): RealtimeParticipantSnapshotResult {
   const room = input.document.room
 
@@ -281,7 +325,11 @@ export function createRealtimeParticipantSnapshot(input: {
     }
   }
 
-  const projection = projectMatchRoomForParticipant(room, input.participantId)
+  const projection = projectMatchRoomForParticipant(
+    room,
+    input.participantId,
+    input.serverNow === undefined ? {} : { serverNow: input.serverNow },
+  )
 
   if (!projection.ok) {
     return {
@@ -303,6 +351,90 @@ export function createRealtimeParticipantSnapshot(input: {
       acceptedHistoryEntryIds: [],
       projection: projection.projection,
     },
+  }
+}
+
+export function resolveRealtimeMatchRoomTimeout(input: {
+  readonly document: SerializableMatchSessionDocument
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
+  readonly checkedAt?: string
+  readonly clock?: MatchRoomClockSource
+}): RealtimeTimeoutResolutionResult {
+  const checkedAt =
+    input.checkedAt ?? input.clock?.now() ?? systemMatchRoomClock.now()
+  const timeoutResult = resolveMatchRoomTimeout(input.document.room, {
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
+    checkedAt,
+    ...(input.clock === undefined ? {} : { clock: input.clock }),
+  })
+
+  if (timeoutResult.status === 'not_due') {
+    return {
+      status: 'not_due',
+      document: input.document,
+      checkedAt,
+      pushes: [],
+    }
+  }
+
+  if (timeoutResult.status === 'invalid') {
+    return {
+      status: 'invalid',
+      document: input.document,
+      checkedAt,
+      code: timeoutResult.code,
+      message: timeoutResult.message,
+      pushes: [],
+    }
+  }
+
+  const recorded = recordMatchRoomCommandResult({
+    document: input.document,
+    result: timeoutResult,
+    recordedAt: checkedAt,
+  })
+
+  if (!recorded.ok) {
+    return {
+      status: 'invalid',
+      document: input.document,
+      checkedAt,
+      code: recorded.code,
+      message: recorded.message,
+      pushes: [],
+    }
+  }
+
+  const acceptedHistory = recorded.document.history.slice(
+    input.document.history.length,
+  )
+  const pushResult = createRealtimeProjectedStatePushes({
+    document: recorded.document,
+    reason: 'timeout_resolved',
+    events: timeoutResult.engineResult.events,
+    acceptedHistory,
+    serverNow: checkedAt,
+  })
+
+  if (!pushResult.ok) {
+    return {
+      status: 'invalid',
+      document: recorded.document,
+      checkedAt,
+      code: pushResult.code,
+      message: pushResult.message,
+      pushes: [],
+    }
+  }
+
+  return {
+    status: 'accepted',
+    document: recorded.document,
+    timeoutResult,
+    acceptedHistory,
+    pushes: pushResult.pushes,
   }
 }
 
@@ -335,6 +467,7 @@ function createRealtimeAcceptedCommandResult(input: {
     reason: 'command_accepted',
     events: input.roomResult.engineResult.events,
     acceptedHistory,
+    serverNow: input.receivedAt,
   })
 
   if (!pushResult.ok) {

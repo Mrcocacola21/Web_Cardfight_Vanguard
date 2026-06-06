@@ -49,6 +49,7 @@ type ExpectedRequestTypes =
   | 'choose.option'
   | 'battle.guard_select'
   | 'mulligan.select_cards'
+  | 'trigger.resolve'
   | 'confirm.boolean'
 
 type ExpectedResponseTypes =
@@ -58,6 +59,7 @@ type ExpectedResponseTypes =
   | 'answer.option'
   | 'answer.guard'
   | 'answer.mulligan'
+  | 'answer.trigger'
   | 'answer.boolean'
   | 'answer.pass'
 

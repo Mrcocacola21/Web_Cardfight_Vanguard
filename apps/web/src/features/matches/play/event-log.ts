@@ -172,6 +172,8 @@ function formatEventSummary(
       return `${event.zoneId} shuffled ${event.orderedPieceIds.length} cards.`
     case 'cards.drawn':
       return `${formatPlayer(event.playerId, options)} drew ${event.pieceIds.length} cards.`
+    case 'cards.deck_out':
+      return `${formatPlayer(event.playerId, options)} decked out while resolving ${event.reason}.`
     case 'card.played':
       return `${event.pieceId} was played.`
     case 'card.rode':
@@ -285,6 +287,15 @@ function buildEventDetails(
         { label: 'From', value: event.fromZoneId },
         { label: 'To', value: event.toZoneId },
         { label: 'Cards', value: event.pieceIds.length.toString() },
+      ]
+    case 'cards.deck_out':
+      return [
+        ...baseDetails,
+        { label: 'Player', value: event.playerId },
+        { label: 'From', value: event.fromZoneId },
+        { label: 'Required', value: event.requiredCount.toString() },
+        { label: 'Available', value: event.availableCount.toString() },
+        { label: 'Reason', value: event.reason },
       ]
     case 'battle.attack_declared':
       return [

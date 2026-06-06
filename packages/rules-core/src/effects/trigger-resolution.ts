@@ -3,9 +3,11 @@ import type { TriggerType } from '@web-vg/shared'
 import { resolveGamePieceCardStats } from '../cards'
 import type {
   ActionId,
+  EffectDefinitionId,
   EventId,
   PieceId,
   PlayerId,
+  RequestId,
   TransitionId,
 } from '../contracts'
 import {
@@ -23,6 +25,7 @@ import type {
   GamePieceState,
   GamePieceStatusState,
   GameState,
+  TriggerResolutionContinuationState,
   ZoneState,
 } from '../state'
 import {
@@ -38,13 +41,20 @@ import {
   drawTopPiecesBetweenZones,
   movePiecesByIdBetweenZones,
 } from '../transitions/ordered-zone-operations'
+import {
+  resolveDeckOutLoss,
+  shouldResolveDeckOutLoss,
+} from '../transitions/deck-out'
 import { applyStandPieceStateChange } from '../transitions/piece-state-flags'
 import type { TransitionTimingWindow } from '../transitions/transition'
 import { createPieceMovedEvents } from '../transitions/zone-transfer'
+import type { TriggerChoiceRequest, TriggerChoiceResponse } from '../requests'
 
 import type { EffectDefinition } from './effect'
 
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
+const PENDING_TRIGGER_RESOLUTION_STATE = 'pending_resolution' as const
+const AWAITING_TRIGGER_CHOICE_STATE = 'awaiting_choice' as const
 
 export const TRIGGER_POWER_BONUS = 10000
 export const TRIGGER_CRITICAL_BONUS = 1
@@ -69,6 +79,22 @@ export type CheckTriggerRevealEffectResolutionResult =
   | {
       readonly ok: false
       readonly code: 'invalid_action' | 'invalid_action_reference'
+      readonly message: string
+    }
+
+export type CheckTriggerChoiceResponseResolutionResult =
+  | {
+      readonly ok: true
+      readonly state: GameState
+      readonly events: readonly GameEvent[]
+      readonly timingWindows: readonly TransitionTimingWindow[]
+    }
+  | {
+      readonly ok: false
+      readonly code:
+        | 'invalid_action'
+        | 'invalid_action_reference'
+        | 'request_response_mismatch'
       readonly message: string
     }
 
@@ -120,6 +146,19 @@ interface HealConsequenceResult {
   }
 }
 
+interface TriggerChoicePlan {
+  readonly request: TriggerChoiceRequest
+  readonly continuation: TriggerResolutionContinuationState
+}
+
+interface TriggerResumeInput {
+  readonly transitionId: TransitionId
+  readonly request: TriggerChoiceRequest
+  readonly response: TriggerChoiceResponse
+  readonly startingSequence: number
+  readonly startingTimingWindowSequence: number
+}
+
 export function resolveCheckTriggerRevealEffect(
   state: GameState,
   input: CheckTriggerRevealEffectInput,
@@ -141,7 +180,17 @@ export function resolveCheckTriggerRevealEffect(
   const operationKinds: string[] = []
   let resolvedTriggers = 0
 
-  for (const revealedCard of input.triggerEvent.revealedCards) {
+  for (
+    let revealedCardIndex = 0;
+    revealedCardIndex < input.triggerEvent.revealedCards.length;
+    revealedCardIndex += 1
+  ) {
+    const revealedCard = input.triggerEvent.revealedCards[revealedCardIndex]
+
+    if (revealedCard === undefined) {
+      continue
+    }
+
     const stateIndex = buildGameStateIndex(workingState)
     const revealedPiece = findPieceById(stateIndex, revealedCard.pieceId)
 
@@ -180,6 +229,38 @@ export function resolveCheckTriggerRevealEffect(
       }),
     )
 
+    const choicePlan = createTriggerChoicePlan(workingState, triggerContext, {
+      requestId: createTriggerChoiceRequestId(
+        input.transitionId,
+        input.triggerEvent.sequence,
+        revealedCardIndex,
+      ),
+      effectDefinitionId: input.effectDefinition.id,
+      sourceCheckEventSequence: input.triggerEvent.sequence,
+      revealedCardIndex,
+      nextRevealedCardIndex: revealedCardIndex + 1,
+      resolvedTriggers,
+      operationKinds,
+    })
+
+    if (choicePlan !== undefined) {
+      return {
+        ok: true,
+        state: applyTriggerChoiceInterruption(
+          workingState,
+          input.triggerEvent,
+          checkKind,
+          choicePlan,
+          workingState.pendingRequests,
+        ),
+        events,
+        timingWindows: createNestedTimingWindowsForTriggerEvents(
+          events,
+          input.startingTimingWindowSequence,
+        ),
+      }
+    }
+
     const triggerResolution = resolveSingleTrigger(
       workingState,
       triggerContext,
@@ -192,6 +273,18 @@ export function resolveCheckTriggerRevealEffect(
     events.push(...triggerResolution.events)
     operationKinds.push(...triggerResolution.operationKinds)
     resolvedTriggers += 1
+
+    if (workingState.status === 'completed') {
+      return {
+        ok: true,
+        state: workingState,
+        events,
+        timingWindows: createNestedTimingWindowsForTriggerEvents(
+          events,
+          input.startingTimingWindowSequence,
+        ),
+      }
+    }
   }
 
   const nextTriggerResolutionState =
@@ -221,7 +314,305 @@ export function resolveCheckTriggerRevealEffect(
         : {
             sourceActionId: input.sourceActionId,
           }),
-      effectDefinition: input.effectDefinition,
+      effectDefinitionId: input.effectDefinition.id,
+      triggerEventSequence: input.triggerEvent.sequence,
+      operationKinds:
+        operationKinds.length === 0
+          ? ['trigger_check_none']
+          : Array.from(new Set(operationKinds)),
+    }),
+  )
+
+  return {
+    ok: true,
+    state: workingState,
+    events,
+    timingWindows: createNestedTimingWindowsForTriggerEvents(
+      events,
+      input.startingTimingWindowSequence,
+    ),
+  }
+}
+
+export function resolveCheckTriggerChoiceResponse(
+  state: GameState,
+  input: TriggerResumeInput,
+): CheckTriggerChoiceResponseResolutionResult {
+  const battle = state.battle
+  const lastCheck = battle?.lastCheck
+  const continuation = lastCheck?.triggerContinuation
+
+  if (
+    battle === undefined ||
+    lastCheck === undefined ||
+    continuation === undefined ||
+    lastCheck.triggerResolutionState !== AWAITING_TRIGGER_CHOICE_STATE ||
+    continuation.requestId !== input.request.requestId ||
+    input.request.battleId !== battle.battleId ||
+    input.request.checkKind !== lastCheck.kind ||
+    input.request.revealedPieceId !== continuation.revealedPieceId ||
+    input.request.triggerType !== continuation.triggerType
+  ) {
+    return {
+      ok: false,
+      code: 'request_response_mismatch',
+      message: `Pending trigger request ${input.request.requestId} no longer matches the current trigger continuation.`,
+    }
+  }
+
+  const triggerEvent = createSyntheticCheckEventForContinuation(
+    input.transitionId,
+    battle,
+    lastCheck,
+    continuation,
+  )
+
+  if (triggerEvent === undefined) {
+    return {
+      ok: false,
+      code: 'request_response_mismatch',
+      message: `Pending trigger request ${input.request.requestId} cannot reconstruct its source check event.`,
+    }
+  }
+
+  const stateIndex = buildGameStateIndex(state)
+  const revealedPiece = findPieceById(stateIndex, continuation.revealedPieceId)
+
+  if (revealedPiece === undefined) {
+    return {
+      ok: false,
+      code: 'invalid_action_reference',
+      message: `Pending trigger request ${input.request.requestId} references missing revealed piece ${continuation.revealedPieceId}.`,
+    }
+  }
+
+  const remainingRequests = state.pendingRequests.slice(1)
+  const {
+    triggerContinuation: _triggerContinuation,
+    ...lastCheckWithoutContinuation
+  } = lastCheck
+  let workingState: GameState = {
+    ...state,
+    status: remainingRequests.length > 0 ? 'awaiting_choice' : 'in_progress',
+    pendingRequests: remainingRequests,
+    battle: {
+      ...battle,
+      lastCheck: {
+        ...lastCheckWithoutContinuation,
+        triggerResolutionState: PENDING_TRIGGER_RESOLUTION_STATE,
+      },
+    },
+  }
+  const events: GameEvent[] = []
+  const operationKinds = [...continuation.operationKinds]
+  let resolvedTriggers = continuation.resolvedTriggers
+  const triggerContext: TriggerResolutionContext = {
+    transitionId: input.transitionId,
+    ...(continuation.sourceActionId === undefined
+      ? {}
+      : {
+          sourceActionId: continuation.sourceActionId,
+        }),
+    triggerEvent,
+    checkKind: lastCheck.kind,
+    playerId: lastCheck.playerId,
+    revealedPiece,
+    triggerType: continuation.triggerType,
+  }
+  const currentResolution = resolveSingleTriggerFromChoice(
+    workingState,
+    triggerContext,
+    continuation,
+    input.response,
+    {
+      startingSequence: input.startingSequence,
+    },
+  )
+
+  workingState = currentResolution.state
+  events.push(...currentResolution.events)
+  operationKinds.push(...currentResolution.operationKinds)
+  resolvedTriggers += 1
+
+  if (workingState.status === 'completed') {
+    return {
+      ok: true,
+      state: workingState,
+      events,
+      timingWindows: createNestedTimingWindowsForTriggerEvents(
+        events,
+        input.startingTimingWindowSequence,
+      ),
+    }
+  }
+
+  return continueTriggerResolutionAfterChoice(workingState, {
+    transitionId: input.transitionId,
+    ...(continuation.sourceActionId === undefined
+      ? {}
+      : { sourceActionId: continuation.sourceActionId }),
+    triggerEvent,
+    checkKind: lastCheck.kind,
+    effectDefinitionId: continuation.effectDefinitionId,
+    startingSequence: input.startingSequence + events.length,
+    startingTimingWindowSequence: input.startingTimingWindowSequence,
+    startRevealedCardIndex: continuation.nextRevealedCardIndex,
+    resolvedTriggers,
+    operationKinds,
+    events,
+  })
+}
+
+function continueTriggerResolutionAfterChoice(
+  state: GameState,
+  input: {
+    readonly transitionId: TransitionId
+    readonly sourceActionId?: ActionId
+    readonly triggerEvent: Extract<
+      GameEvent,
+      { readonly type: 'battle.drive_checked' | 'battle.damage_checked' }
+    >
+    readonly checkKind: BattleCheckKind
+    readonly effectDefinitionId: EffectDefinitionId
+    readonly startingSequence: number
+    readonly startingTimingWindowSequence: number
+    readonly startRevealedCardIndex: number
+    readonly resolvedTriggers: number
+    readonly operationKinds: readonly string[]
+    readonly events: readonly GameEvent[]
+  },
+): CheckTriggerRevealEffectResolutionResult {
+  let workingState = state
+  const events: GameEvent[] = [...input.events]
+  const operationKinds: string[] = [...input.operationKinds]
+  let resolvedTriggers = input.resolvedTriggers
+
+  for (
+    let revealedCardIndex = input.startRevealedCardIndex;
+    revealedCardIndex < input.triggerEvent.revealedCards.length;
+    revealedCardIndex += 1
+  ) {
+    const revealedCard = input.triggerEvent.revealedCards[revealedCardIndex]
+
+    if (revealedCard === undefined) {
+      continue
+    }
+
+    const stateIndex = buildGameStateIndex(workingState)
+    const revealedPiece = findPieceById(stateIndex, revealedCard.pieceId)
+
+    if (revealedPiece === undefined) {
+      continue
+    }
+
+    const statsResolution = resolveGamePieceCardStats(
+      workingState,
+      revealedPiece,
+    )
+
+    if (!statsResolution.ok || statsResolution.stats.triggerType === null) {
+      continue
+    }
+
+    const triggerType = statsResolution.stats.triggerType
+    const triggerContext: TriggerResolutionContext = {
+      transitionId: input.transitionId,
+      ...(input.sourceActionId === undefined
+        ? {}
+        : {
+            sourceActionId: input.sourceActionId,
+          }),
+      triggerEvent: input.triggerEvent,
+      checkKind: input.checkKind,
+      playerId: input.triggerEvent.playerId,
+      revealedPiece,
+      triggerType,
+    }
+
+    events.push(
+      createTriggerRevealedEvent(triggerContext, {
+        sequence: input.startingSequence + events.length - input.events.length,
+        sourceCheckEventSequence: input.triggerEvent.sequence,
+      }),
+    )
+
+    const choicePlan = createTriggerChoicePlan(workingState, triggerContext, {
+      requestId: createTriggerChoiceRequestId(
+        input.transitionId,
+        input.triggerEvent.sequence,
+        revealedCardIndex,
+      ),
+      effectDefinitionId: input.effectDefinitionId,
+      sourceCheckEventSequence: input.triggerEvent.sequence,
+      revealedCardIndex,
+      nextRevealedCardIndex: revealedCardIndex + 1,
+      resolvedTriggers,
+      operationKinds,
+    })
+
+    if (choicePlan !== undefined) {
+      return {
+        ok: true,
+        state: applyTriggerChoiceInterruption(
+          workingState,
+          input.triggerEvent,
+          input.checkKind,
+          choicePlan,
+          workingState.pendingRequests,
+        ),
+        events,
+        timingWindows: createNestedTimingWindowsForTriggerEvents(
+          events,
+          input.startingTimingWindowSequence,
+        ),
+      }
+    }
+
+    const triggerResolution = resolveSingleTrigger(
+      workingState,
+      triggerContext,
+      {
+        startingSequence:
+          input.startingSequence + events.length - input.events.length,
+      },
+    )
+
+    workingState = triggerResolution.state
+    events.push(...triggerResolution.events)
+    operationKinds.push(...triggerResolution.operationKinds)
+    resolvedTriggers += 1
+
+    if (workingState.status === 'completed') {
+      return {
+        ok: true,
+        state: workingState,
+        events,
+        timingWindows: createNestedTimingWindowsForTriggerEvents(
+          events,
+          input.startingTimingWindowSequence,
+        ),
+      }
+    }
+  }
+
+  const nextTriggerResolutionState =
+    resolvedTriggers > 0 ? 'resolved_triggers' : 'resolved_none'
+  workingState = markCurrentCheckResolved(
+    workingState,
+    input.triggerEvent,
+    input.checkKind,
+    nextTriggerResolutionState,
+  )
+  events.push(
+    createEffectResolvedEvent({
+      transitionId: input.transitionId,
+      sequence: input.startingSequence + events.length - input.events.length,
+      ...(input.sourceActionId === undefined
+        ? {}
+        : {
+            sourceActionId: input.sourceActionId,
+          }),
+      effectDefinitionId: input.effectDefinitionId,
       triggerEventSequence: input.triggerEvent.sequence,
       operationKinds:
         operationKinds.length === 0
@@ -261,6 +652,239 @@ function resolveSingleTrigger(
       return resolveStandTrigger(state, context, options)
     case 'over':
       return resolveOverTrigger(state, context, options)
+  }
+}
+
+function resolveSingleTriggerFromChoice(
+  state: GameState,
+  context: TriggerResolutionContext,
+  continuation: TriggerResolutionContinuationState,
+  response: TriggerChoiceResponse,
+  options: { readonly startingSequence: number },
+): SingleTriggerResolution {
+  switch (context.triggerType) {
+    case 'critical':
+      return resolveCriticalTriggerFromChoice(state, context, response, options)
+    case 'draw':
+      return resolveDrawTriggerFromChoice(state, context, response, options)
+    case 'heal':
+      return resolveHealTriggerFromChoice(
+        state,
+        context,
+        continuation,
+        response,
+        options,
+      )
+    case 'stand':
+      return resolveStandTriggerFromChoice(state, context, response, options)
+    case 'front':
+    case 'over':
+      return resolveSingleTrigger(state, context, options)
+  }
+}
+
+function resolveCriticalTriggerFromChoice(
+  state: GameState,
+  context: TriggerResolutionContext,
+  response: TriggerChoiceResponse,
+  options: { readonly startingSequence: number },
+): SingleTriggerResolution {
+  const powerTargetPieceId = response.powerTargetPieceIds?.[0]
+  const criticalTargetPieceId = response.criticalTargetPieceId
+  let nextState = state
+
+  if (powerTargetPieceId !== undefined) {
+    nextState = applyRuntimePieceModifiers(nextState, [powerTargetPieceId], {
+      powerModifier: TRIGGER_POWER_BONUS,
+    })
+  }
+
+  if (criticalTargetPieceId !== undefined) {
+    nextState = applyRuntimePieceModifiers(nextState, [criticalTargetPieceId], {
+      criticalModifier: TRIGGER_CRITICAL_BONUS,
+    })
+  }
+
+  return {
+    state: nextState,
+    events: [
+      createTriggerResolvedEvent(context, {
+        sequence: options.startingSequence,
+        outcome:
+          powerTargetPieceId === undefined &&
+          criticalTargetPieceId === undefined
+            ? 'not_applicable'
+            : 'applied',
+        powerAmount: TRIGGER_POWER_BONUS,
+        powerTargetPieceIds:
+          powerTargetPieceId === undefined ? [] : [powerTargetPieceId],
+        criticalAmount: TRIGGER_CRITICAL_BONUS,
+        ...(criticalTargetPieceId === undefined
+          ? {}
+          : {
+              criticalTargetPieceId,
+            }),
+      }),
+    ],
+    operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.critical,
+  }
+}
+
+function resolveDrawTriggerFromChoice(
+  state: GameState,
+  context: TriggerResolutionContext,
+  response: TriggerChoiceResponse,
+  options: { readonly startingSequence: number },
+): SingleTriggerResolution {
+  const targetPieceId = response.powerTargetPieceIds?.[0]
+  let workingState =
+    targetPieceId === undefined
+      ? state
+      : applyRuntimePieceModifiers(state, [targetPieceId], {
+          powerModifier: TRIGGER_POWER_BONUS,
+        })
+  const drawResult = applyDrawConsequence(workingState, context, {
+    startingSequence: options.startingSequence,
+  })
+  workingState = drawResult.state
+
+  if (workingState.status === 'completed') {
+    return {
+      state: workingState,
+      events: drawResult.events,
+      operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.draw,
+    }
+  }
+
+  return {
+    state: workingState,
+    events: [
+      ...drawResult.events,
+      createTriggerResolvedEvent(context, {
+        sequence: options.startingSequence + drawResult.events.length,
+        outcome:
+          targetPieceId === undefined && drawResult.drawnPieceIds.length === 0
+            ? 'not_applicable'
+            : 'applied',
+        powerAmount: TRIGGER_POWER_BONUS,
+        powerTargetPieceIds: targetPieceId === undefined ? [] : [targetPieceId],
+        drawnPieceIds: drawResult.drawnPieceIds,
+      }),
+    ],
+    operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.draw,
+  }
+}
+
+function resolveHealTriggerFromChoice(
+  state: GameState,
+  context: TriggerResolutionContext,
+  continuation: TriggerResolutionContinuationState,
+  response: TriggerChoiceResponse,
+  options: { readonly startingSequence: number },
+): SingleTriggerResolution {
+  const targetPieceId = response.powerTargetPieceIds?.[0]
+  let workingState =
+    targetPieceId === undefined
+      ? state
+      : applyRuntimePieceModifiers(state, [targetPieceId], {
+          powerModifier: TRIGGER_POWER_BONUS,
+        })
+  const healResult = applyHealConsequence(workingState, context, {
+    startingSequence: options.startingSequence,
+    ...(response.healTargetPieceId === undefined
+      ? {}
+      : { healPieceId: response.healTargetPieceId }),
+  })
+  workingState = healResult.state
+
+  return {
+    state: workingState,
+    events: [
+      ...healResult.events,
+      createTriggerResolvedEvent(context, {
+        sequence: options.startingSequence + healResult.events.length,
+        outcome:
+          targetPieceId === undefined &&
+          healResult.healedPieceId === undefined &&
+          continuation.healCondition?.met !== true
+            ? 'not_applicable'
+            : 'applied',
+        powerAmount: TRIGGER_POWER_BONUS,
+        powerTargetPieceIds: targetPieceId === undefined ? [] : [targetPieceId],
+        ...(healResult.healedPieceId === undefined
+          ? {}
+          : {
+              healedPieceId: healResult.healedPieceId,
+            }),
+        healCondition: healResult.condition,
+      }),
+    ],
+    operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.heal,
+  }
+}
+
+function resolveStandTriggerFromChoice(
+  state: GameState,
+  context: TriggerResolutionContext,
+  response: TriggerChoiceResponse,
+  options: { readonly startingSequence: number },
+): SingleTriggerResolution {
+  const targetPieceId = response.powerTargetPieceIds?.[0]
+  let workingState =
+    targetPieceId === undefined
+      ? state
+      : applyRuntimePieceModifiers(state, [targetPieceId], {
+          powerModifier: TRIGGER_POWER_BONUS,
+        })
+  const standTargetPieceId = response.standTargetPieceId
+  const standEvents: readonly GameEvent[] =
+    standTargetPieceId === undefined
+      ? []
+      : resolveStandConsequence(workingState, context, standTargetPieceId, {
+          sequence: options.startingSequence,
+        })
+
+  if (standTargetPieceId !== undefined) {
+    const standChange = applyStandPieceStateChange(
+      workingState,
+      standTargetPieceId,
+      context.transitionId,
+      options.startingSequence,
+      {
+        kind: 'system',
+        system: AUTOMATIC_FLOW_SYSTEM,
+      },
+      context.sourceActionId,
+    )
+
+    if (standChange.ok) {
+      workingState = {
+        ...workingState,
+        pieceStates: standChange.pieceStates,
+      }
+    }
+  }
+
+  return {
+    state: workingState,
+    events: [
+      ...standEvents,
+      createTriggerResolvedEvent(context, {
+        sequence: options.startingSequence + standEvents.length,
+        outcome:
+          targetPieceId === undefined && standTargetPieceId === undefined
+            ? 'not_applicable'
+            : 'applied',
+        powerAmount: TRIGGER_POWER_BONUS,
+        powerTargetPieceIds: targetPieceId === undefined ? [] : [targetPieceId],
+        ...(standTargetPieceId === undefined
+          ? {}
+          : {
+              stoodPieceId: standTargetPieceId,
+            }),
+      }),
+    ],
+    operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.stand,
   }
 }
 
@@ -314,6 +938,14 @@ function resolveDrawTrigger(
     startingSequence: options.startingSequence,
   })
   workingState = drawResult.state
+
+  if (workingState.status === 'completed') {
+    return {
+      state: workingState,
+      events: drawResult.events,
+      operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.draw,
+    }
+  }
 
   return {
     state: workingState,
@@ -488,6 +1120,14 @@ function resolveOverTrigger(
   })
   workingState = drawResult.state
 
+  if (workingState.status === 'completed') {
+    return {
+      state: workingState,
+      events: drawResult.events,
+      operationKinds: TRIGGER_EFFECT_OPERATION_KINDS.over,
+    }
+  }
+
   return {
     state: workingState,
     events: [
@@ -548,14 +1188,44 @@ function applyDrawConsequence(
   if (
     player === undefined ||
     deckZone === undefined ||
-    handZone === undefined ||
-    deckZone.occupants.length === 0
+    handZone === undefined
   ) {
     return {
       state,
       events: [],
       drawnPieceIds: [],
     }
+  }
+
+  if (shouldResolveDeckOutLoss(deckZone, 1)) {
+    const deckOutResult = resolveDeckOutLoss({
+      transitionId: context.transitionId,
+      currentState: state,
+      playerId: context.playerId,
+      fromZoneId: deckZone.zoneId,
+      requiredCount: 1,
+      availableCount: deckZone.occupants.length,
+      reason: 'trigger_effect',
+      ...(context.sourceActionId === undefined
+        ? {}
+        : {
+            sourceActionId: context.sourceActionId,
+          }),
+      system: AUTOMATIC_FLOW_SYSTEM,
+      startingSequence: options.startingSequence,
+    })
+
+    return deckOutResult.ok
+      ? {
+          state: deckOutResult.state,
+          events: deckOutResult.events,
+          drawnPieceIds: [],
+        }
+      : {
+          state,
+          events: [],
+          drawnPieceIds: [],
+        }
   }
 
   const drawResult = drawTopPiecesBetweenZones(
@@ -627,7 +1297,10 @@ function applyDrawConsequence(
 function applyHealConsequence(
   state: GameState,
   context: TriggerResolutionContext,
-  options: { readonly startingSequence: number },
+  options: {
+    readonly startingSequence: number
+    readonly healPieceId?: PieceId
+  },
 ): HealConsequenceResult {
   const condition = resolveHealCondition(state, context.playerId)
 
@@ -650,9 +1323,10 @@ function applyHealConsequence(
       ? undefined
       : findOwnedZoneByKind(stateIndex, player, 'drop')
   const healPieceId =
-    damageZone === undefined
+    options.healPieceId ??
+    (damageZone === undefined
       ? undefined
-      : resolveHealPieceId(damageZone, context.triggerEvent)
+      : resolveHealPieceId(damageZone, context.triggerEvent))
 
   if (
     damageZone === undefined ||
@@ -838,6 +1512,33 @@ function resolveHealPieceId(
   )
 }
 
+function resolveHealEligiblePieceIds(
+  state: GameState,
+  context: TriggerResolutionContext,
+): readonly PieceId[] {
+  const stateIndex = buildGameStateIndex(state)
+  const player = findPlayerById(stateIndex, context.playerId)
+  const damageZone =
+    player === undefined
+      ? undefined
+      : findOwnedZoneByKind(stateIndex, player, 'damage')
+
+  if (damageZone === undefined) {
+    return []
+  }
+
+  const revealedPieceIds = new Set(
+    context.triggerEvent.revealedCards.map((card) => card.pieceId),
+  )
+  const nonRevealedDamagePieceIds = damageZone.occupants
+    .map((occupant) => occupant.pieceId)
+    .filter((pieceId) => !revealedPieceIds.has(pieceId))
+
+  return nonRevealedDamagePieceIds.length > 0
+    ? nonRevealedDamagePieceIds
+    : damageZone.occupants.map((occupant) => occupant.pieceId)
+}
+
 function resolvePrimaryTriggerTargetPieceId(
   state: GameState,
   context: TriggerResolutionContext,
@@ -876,16 +1577,204 @@ function resolvePrimaryTriggerTargetPieceId(
   return resolveControlledBattleUnitPieceIds(state, context.playerId)[0]
 }
 
+function createTriggerChoicePlan(
+  state: GameState,
+  context: TriggerResolutionContext,
+  input: {
+    readonly requestId: RequestId
+    readonly effectDefinitionId: EffectDefinitionId
+    readonly sourceCheckEventSequence: number
+    readonly revealedCardIndex: number
+    readonly nextRevealedCardIndex: number
+    readonly resolvedTriggers: number
+    readonly operationKinds: readonly string[]
+  },
+): TriggerChoicePlan | undefined {
+  const battle = state.battle
+
+  if (battle === undefined) {
+    return undefined
+  }
+
+  const controlledBattleUnitPieceIds = resolveControlledBattleUnitPieceIds(
+    state,
+    context.playerId,
+  )
+  const powerEligiblePieceIds =
+    requiresTriggerPowerChoice(context.triggerType) &&
+    controlledBattleUnitPieceIds.length > 0
+      ? controlledBattleUnitPieceIds
+      : undefined
+  const criticalEligiblePieceIds =
+    context.triggerType === 'critical' &&
+    controlledBattleUnitPieceIds.length > 0
+      ? controlledBattleUnitPieceIds
+      : undefined
+  const standEligiblePieceIds =
+    context.triggerType === 'stand'
+      ? resolveStandTriggerTargetPieceIds(state, context.playerId)
+      : undefined
+  const healCondition =
+    context.triggerType === 'heal'
+      ? resolveHealCondition(state, context.playerId)
+      : undefined
+  const healEligiblePieceIds =
+    context.triggerType === 'heal' && healCondition?.met === true
+      ? resolveHealEligiblePieceIds(state, context)
+      : undefined
+
+  if (
+    powerEligiblePieceIds === undefined &&
+    criticalEligiblePieceIds === undefined &&
+    (standEligiblePieceIds === undefined ||
+      standEligiblePieceIds.length === 0) &&
+    (healEligiblePieceIds === undefined || healEligiblePieceIds.length === 0)
+  ) {
+    return undefined
+  }
+
+  const request: TriggerChoiceRequest = {
+    requestId: input.requestId,
+    type: 'trigger.resolve',
+    responderPlayerId: context.playerId,
+    purpose: 'effect',
+    visibility: 'responder-only',
+    battleId: battle.battleId,
+    checkKind: context.checkKind,
+    revealedPieceId: context.revealedPiece.pieceId,
+    triggerType: context.triggerType,
+    ...(powerEligiblePieceIds === undefined
+      ? {}
+      : {
+          powerAmount:
+            context.triggerType === 'over'
+              ? OVER_TRIGGER_POWER_BONUS
+              : TRIGGER_POWER_BONUS,
+          powerEligiblePieceIds,
+        }),
+    ...(criticalEligiblePieceIds === undefined
+      ? {}
+      : {
+          criticalAmount: TRIGGER_CRITICAL_BONUS,
+          criticalEligiblePieceIds,
+        }),
+    ...(standEligiblePieceIds === undefined ||
+    standEligiblePieceIds.length === 0
+      ? {}
+      : {
+          standEligiblePieceIds,
+        }),
+    ...(healEligiblePieceIds === undefined || healEligiblePieceIds.length === 0
+      ? {}
+      : {
+          healEligiblePieceIds,
+        }),
+    context: {
+      ...(context.sourceActionId === undefined
+        ? {}
+        : {
+            sourceActionId: context.sourceActionId,
+          }),
+      sourceEventId: context.triggerEvent.eventId,
+      relatedPieceIds: Array.from(
+        new Set([
+          context.revealedPiece.pieceId,
+          ...(powerEligiblePieceIds ?? []),
+          ...(criticalEligiblePieceIds ?? []),
+          ...(standEligiblePieceIds ?? []),
+          ...(healEligiblePieceIds ?? []),
+        ]),
+      ),
+      relatedZoneIds: Array.from(
+        new Set([
+          context.triggerEvent.fromZoneId,
+          context.triggerEvent.toZoneId,
+        ]),
+      ),
+    },
+  }
+  const continuation: TriggerResolutionContinuationState = {
+    requestId: input.requestId,
+    effectDefinitionId: input.effectDefinitionId,
+    ...(context.sourceActionId === undefined
+      ? {}
+      : {
+          sourceActionId: context.sourceActionId,
+        }),
+    sourceCheckEventSequence: input.sourceCheckEventSequence,
+    revealedCardIndex: input.revealedCardIndex,
+    nextRevealedCardIndex: input.nextRevealedCardIndex,
+    resolvedTriggers: input.resolvedTriggers,
+    operationKinds: input.operationKinds,
+    triggerType: context.triggerType,
+    revealedPieceId: context.revealedPiece.pieceId,
+    ...(powerEligiblePieceIds === undefined
+      ? {}
+      : {
+          powerAmount:
+            context.triggerType === 'over'
+              ? OVER_TRIGGER_POWER_BONUS
+              : TRIGGER_POWER_BONUS,
+          powerEligiblePieceIds,
+        }),
+    ...(criticalEligiblePieceIds === undefined
+      ? {}
+      : {
+          criticalAmount: TRIGGER_CRITICAL_BONUS,
+          criticalEligiblePieceIds,
+        }),
+    ...(standEligiblePieceIds === undefined ||
+    standEligiblePieceIds.length === 0
+      ? {}
+      : {
+          standEligiblePieceIds,
+        }),
+    ...(healEligiblePieceIds === undefined || healEligiblePieceIds.length === 0
+      ? {}
+      : {
+          healEligiblePieceIds,
+        }),
+    ...(healCondition === undefined ? {} : { healCondition }),
+  }
+
+  return { request, continuation }
+}
+
+function requiresTriggerPowerChoice(triggerType: TriggerType): boolean {
+  return (
+    triggerType === 'critical' ||
+    triggerType === 'draw' ||
+    triggerType === 'heal' ||
+    triggerType === 'stand'
+  )
+}
+
+function createTriggerChoiceRequestId(
+  transitionId: TransitionId,
+  sourceCheckEventSequence: number,
+  revealedCardIndex: number,
+): RequestId {
+  return `${transitionId}:trigger:${sourceCheckEventSequence}:${revealedCardIndex}` as RequestId
+}
+
 function resolveStandTriggerTargetPieceId(
   state: GameState,
   playerId: PlayerId,
 ): PieceId | undefined {
+  return resolveStandTriggerTargetPieceIds(state, playerId)[0]
+}
+
+function resolveStandTriggerTargetPieceIds(
+  state: GameState,
+  playerId: PlayerId,
+): readonly PieceId[] {
   const stateIndex = buildGameStateIndex(state)
   const player = findPlayerById(stateIndex, playerId)
   const rearGuardZones =
     player === undefined
       ? []
       : listOwnedZonesByKind(stateIndex, player, 'rear_guard_circle')
+  const targetPieceIds: PieceId[] = []
 
   for (const zone of rearGuardZones) {
     for (const occupant of zone.occupants) {
@@ -904,12 +1793,12 @@ function resolveStandTriggerTargetPieceId(
         pieceState.orientation === 'rest' &&
         !pieceState.flags.includes('locked')
       ) {
-        return occupant.pieceId
+        targetPieceIds.push(occupant.pieceId)
       }
     }
   }
 
-  return undefined
+  return targetPieceIds
 }
 
 function resolveControlledBattleUnitPieceIds(
@@ -1060,7 +1949,7 @@ function canResolveCurrentCheck(
     battle.battleId === triggerEvent.battleId &&
     battle.lastCheck !== undefined &&
     battle.lastCheck.kind === checkKind &&
-    battle.lastCheck.triggerResolutionState === 'pending_future_engine'
+    battle.lastCheck.triggerResolutionState === PENDING_TRIGGER_RESOLUTION_STATE
   )
 }
 
@@ -1080,20 +1969,111 @@ function markCurrentCheckResolved(
     battle.battleId !== triggerEvent.battleId ||
     battle.lastCheck === undefined ||
     battle.lastCheck.kind !== checkKind ||
-    battle.lastCheck.triggerResolutionState !== 'pending_future_engine'
+    battle.lastCheck.triggerResolutionState !== PENDING_TRIGGER_RESOLUTION_STATE
   ) {
     return state
   }
+
+  const {
+    triggerContinuation: _triggerContinuation,
+    ...lastCheckWithoutContinuation
+  } = battle.lastCheck
 
   return {
     ...state,
     battle: {
       ...battle,
       lastCheck: {
-        ...battle.lastCheck,
+        ...lastCheckWithoutContinuation,
         triggerResolutionState,
       },
     },
+  }
+}
+
+function applyTriggerChoiceInterruption(
+  state: GameState,
+  triggerEvent: Extract<
+    GameEvent,
+    { readonly type: 'battle.drive_checked' | 'battle.damage_checked' }
+  >,
+  checkKind: BattleCheckKind,
+  choicePlan: TriggerChoicePlan,
+  queuedRequests: GameState['pendingRequests'],
+): GameState {
+  const battle = state.battle
+
+  if (
+    battle === undefined ||
+    battle.battleId !== triggerEvent.battleId ||
+    battle.lastCheck === undefined ||
+    battle.lastCheck.kind !== checkKind ||
+    battle.lastCheck.triggerResolutionState !== PENDING_TRIGGER_RESOLUTION_STATE
+  ) {
+    return state
+  }
+
+  return {
+    ...state,
+    status: 'awaiting_choice',
+    pendingRequests: [choicePlan.request, ...queuedRequests],
+    battle: {
+      ...battle,
+      lastCheck: {
+        ...battle.lastCheck,
+        triggerResolutionState: AWAITING_TRIGGER_CHOICE_STATE,
+        triggerContinuation: choicePlan.continuation,
+      },
+    },
+  }
+}
+
+function createSyntheticCheckEventForContinuation(
+  transitionId: TransitionId,
+  battle: NonNullable<GameState['battle']>,
+  lastCheck: NonNullable<NonNullable<GameState['battle']>['lastCheck']>,
+  continuation: TriggerResolutionContinuationState,
+):
+  | Extract<
+      GameEvent,
+      { readonly type: 'battle.drive_checked' | 'battle.damage_checked' }
+    >
+  | undefined {
+  const common = {
+    eventId: createEventId(transitionId, continuation.sourceCheckEventSequence),
+    sequence: continuation.sourceCheckEventSequence,
+    ...(continuation.sourceActionId === undefined
+      ? {}
+      : {
+          sourceActionId: continuation.sourceActionId,
+        }),
+    origin: {
+      kind: 'system' as const,
+      system: AUTOMATIC_FLOW_SYSTEM,
+    },
+    battleId: battle.battleId,
+    playerId: lastCheck.playerId,
+    fromZoneId: lastCheck.fromZoneId,
+    toZoneId: lastCheck.toZoneId,
+    revealedCards: lastCheck.revealedCards,
+    triggerResolutionState: PENDING_TRIGGER_RESOLUTION_STATE,
+  }
+
+  if (lastCheck.kind === 'drive') {
+    return {
+      ...common,
+      type: 'battle.drive_checked',
+    }
+  }
+
+  if (battle.damage === undefined) {
+    return undefined
+  }
+
+  return {
+    ...common,
+    type: 'battle.damage_checked',
+    damage: battle.damage,
   }
 }
 
@@ -1222,7 +2202,7 @@ function createEffectResolvedEvent(input: {
   readonly transitionId: TransitionId
   readonly sequence: number
   readonly sourceActionId?: ActionId
-  readonly effectDefinition: EffectDefinition
+  readonly effectDefinitionId: EffectDefinitionId
   readonly triggerEventSequence?: number
   readonly operationKinds: readonly string[]
 }): EffectResolvedEvent {
@@ -1239,7 +2219,7 @@ function createEffectResolvedEvent(input: {
       kind: 'system',
       system: AUTOMATIC_FLOW_SYSTEM,
     },
-    effectDefinitionId: input.effectDefinition.id,
+    effectDefinitionId: input.effectDefinitionId,
     ...(input.triggerEventSequence === undefined
       ? {}
       : {

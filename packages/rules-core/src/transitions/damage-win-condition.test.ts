@@ -235,6 +235,15 @@ function makeDamageBattleState(
             amount: combatResult === 'hit' ? 13000 : 10000,
           },
         ],
+        attackCritical: 1,
+        attackerCriticalComponents: [
+          {
+            source: 'attacker_base_critical',
+            pieceId:
+              'piece-p1-attacker' as GameState['pieces'][number]['pieceId'],
+            amount: 1,
+          },
+        ],
         defensePower: 13000,
         defensePowerComponents: [
           {
@@ -247,6 +256,7 @@ function makeDamageBattleState(
         shieldPower: 0,
         shieldComponents: [],
         totalDefensePower: 13000,
+        damageCheckCount: combatResult === 'hit' ? 1 : 0,
         result: combatResult,
       },
     },

@@ -27,6 +27,7 @@ import {
   createTransitionResult,
   type TransitionResult,
 } from './transition'
+import { resolveDeckOutLoss, shouldResolveDeckOutLoss } from './deck-out'
 import { drawTopPiecesBetweenZones } from './ordered-zone-operations'
 import {
   applyStandPieceStateChange,
@@ -506,14 +507,31 @@ function applyAutomaticDrawConsequences(
   if (
     turnPlayer === undefined ||
     deckZone === undefined ||
-    handZone === undefined ||
-    deckZone.occupants.length === 0
+    handZone === undefined
   ) {
     return {
       ok: true,
       state: currentState,
       events: [],
     }
+  }
+
+  if (shouldResolveDeckOutLoss(deckZone, 1)) {
+    return resolveDeckOutLoss({
+      transitionId,
+      currentState,
+      playerId: turnPlayer.playerId,
+      fromZoneId: deckZone.zoneId,
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'draw',
+      sourceActionId: action.actionId,
+      system:
+        action.actor.kind === 'system'
+          ? action.actor.system
+          : AUTOMATIC_FLOW_SYSTEM,
+      startingSequence,
+    })
   }
 
   const drawResult = drawTopPiecesBetweenZones(

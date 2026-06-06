@@ -38,11 +38,12 @@ clear future extension point for stricter board coordinates.
 
 The current formula is:
 
-`attacker base power + committed booster base power + supported piece power modifiers`
+`attacker base power + committed booster base power + provider-read piece power modifiers`
 
 Base power comes from the match-scoped card stats snapshot introduced by the
-card stats bridge. The only currently supported power modifier is the existing
-persona ride power flag.
+card stats bridge. Runtime power modifiers come from materialized
+`GamePieceStatusState.powerModifier` values exposed by the combat modifier
+provider. Combat math does not inspect Persona Ride flags directly.
 
 ## 5. Booster contribution
 
@@ -78,12 +79,14 @@ attacks can compare after guard resolution.
 Hit battles may proceed to damage check. Missed battles can complete through
 battle-scoped mandatory flow with reason `attack_missed`.
 
+Combat also stores effective attacker critical and the derived
+`damageCheckCount`. Damage check actions must match that derived count.
+
 ## 8. What is intentionally NOT implemented yet
 
 This step does not implement:
 
-- trigger power or trigger critical application;
-- damage and win condition resolution;
+- a final universal continuous-effect engine;
 - full continuous/replacement effect machinery;
 - gifts or premium-specific modifier rules;
 - intercept legality beyond current guard commitment;
@@ -91,6 +94,7 @@ This step does not implement:
 
 ## 9. Summary
 
-Combat comparison is now engine truth. Attack power, committed boost, shield,
-total defense, and hit/miss are resolved by the reducer and serialized on battle
-state, with events that expose the resolved combat facts.
+Combat comparison is now engine truth. Attack power, critical, committed boost,
+shield, total defense, hit/miss, and derived damage-check count are resolved by
+the reducer and serialized on battle state, with events that expose the resolved
+combat facts.

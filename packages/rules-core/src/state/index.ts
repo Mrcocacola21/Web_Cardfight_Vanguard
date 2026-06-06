@@ -1,6 +1,7 @@
 export type {
   BattleCheckKind,
   BattleCheckState,
+  BattleCombatCriticalComponentState,
   BattleCombatPowerComponentState,
   BattleCombatResult,
   BattleCombatState,
@@ -27,6 +28,8 @@ export type {
   PlayerStatus,
   RevealedCheckCardState,
   StepId,
+  TriggerHealContinuationState,
+  TriggerResolutionContinuationState,
   TurnState,
   VisibilityPolicy,
   ZoneLayoutState,

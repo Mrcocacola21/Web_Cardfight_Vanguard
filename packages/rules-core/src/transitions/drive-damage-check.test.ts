@@ -335,11 +335,13 @@ function makeCheckBattleState(
 function makeHitCombatSnapshot(
   options: {
     readonly attackPower?: number
+    readonly attackCritical?: number
     readonly shieldPower?: number
     readonly shieldComponents?: readonly TestBattleCombatState['shieldComponents'][number][]
   } = {},
 ): TestBattleCombatState {
   const attackPower = options.attackPower ?? 13000
+  const attackCritical = options.attackCritical ?? 1
   const shieldPower = options.shieldPower ?? 0
   const totalDefensePower = 13000 + shieldPower
 
@@ -362,6 +364,24 @@ function makeHitCombatSnapshot(
           ]
         : []),
     ],
+    attackCritical,
+    attackerCriticalComponents: [
+      {
+        source: 'attacker_base_critical',
+        pieceId: 'piece-p1-vanguard' as GameState['pieces'][number]['pieceId'],
+        amount: 1,
+      },
+      ...(attackCritical > 1
+        ? [
+            {
+              source: 'piece_critical_modifier' as const,
+              pieceId:
+                'piece-p1-vanguard' as GameState['pieces'][number]['pieceId'],
+              amount: attackCritical - 1,
+            },
+          ]
+        : []),
+    ],
     defensePower: 13000,
     defensePowerComponents: [
       {
@@ -373,6 +393,7 @@ function makeHitCombatSnapshot(
     shieldPower,
     shieldComponents: options.shieldComponents ?? [],
     totalDefensePower,
+    damageCheckCount: attackCritical,
     result: 'hit',
   }
 }
@@ -431,6 +452,37 @@ function countLocatedPieceOccurrences(
   return state.zones
     .flatMap((zone) => zone.occupants)
     .filter((occupant) => occupant.pieceId === pieceId).length
+}
+
+function replaceZoneOccupants(
+  state: GameState,
+  zoneId: GameState['zones'][number]['zoneId'],
+  pieceIds: readonly GameState['pieces'][number]['pieceId'][],
+): GameState {
+  const nextZones = state.zones.map((zone) =>
+    zone.zoneId === zoneId
+      ? {
+          ...zone,
+          occupants: pieceIds.map((pieceId) => ({ pieceId })),
+        }
+      : zone,
+  )
+  const locatedPieceIds = new Set(
+    nextZones
+      .flatMap((zone) => zone.occupants)
+      .map((occupant) => occupant.pieceId as string),
+  )
+
+  return {
+    ...state,
+    zones: nextZones,
+    pieces: state.pieces.filter((piece) =>
+      locatedPieceIds.has(piece.pieceId as string),
+    ),
+    pieceStates: state.pieceStates.filter((pieceState) =>
+      locatedPieceIds.has(pieceState.pieceId as string),
+    ),
+  }
 }
 
 function expectApplied(result: TransitionResult) {
@@ -602,6 +654,76 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
     expect(blockedTransition.code).toBe('pending_request')
   })
 
+  it('turns empty deck during drive check into deck-out loss and clears battle state', () => {
+    const state = replaceZoneOccupants(
+      makeCheckBattleState(),
+      'zone-p1-deck' as GameState['zones'][number]['zoneId'],
+      [],
+    )
+    const result = applyGameAction(state, {
+      action: {
+        actionId: 'action-drive-deck-out-1' as ActionId,
+        type: 'system.drive_check',
+        actor: {
+          kind: 'system',
+          system: 'automatic-flow',
+        },
+        battleId: 'battle-check-1' as NonNullable<
+          GameState['battle']
+        >['battleId'],
+        playerId: 'player-1' as GameState['players'][number]['playerId'],
+        fromZoneId: 'zone-p1-deck' as GameState['zones'][number]['zoneId'],
+        toZoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+        count: 1,
+      },
+      expectedRevision: state.revision,
+    })
+    const appliedResult = expectApplied(result)
+
+    expect(appliedResult.nextState.status).toBe('completed')
+    expect(appliedResult.nextState.battle).toBeUndefined()
+    expect(appliedResult.nextState.pendingRequests).toEqual([])
+    expect(appliedResult.nextState.players).toContainEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        status: 'defeated',
+      }),
+    )
+    expect(appliedResult.events.map((event) => event.type)).toEqual([
+      'cards.deck_out',
+      'battle.completed',
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(appliedResult.events[0]).toMatchObject({
+      type: 'cards.deck_out',
+      playerId: 'player-1',
+      fromZoneId: 'zone-p1-deck',
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'drive_check',
+      battleId: 'battle-check-1',
+    })
+    expect(appliedResult.events[1]).toMatchObject({
+      type: 'battle.completed',
+      battleId: 'battle-check-1',
+      reason: 'deck_out',
+      cleanupMovedPieceIds: [],
+    })
+    expect(appliedResult.events[2]).toMatchObject({
+      type: 'player.defeated',
+      playerId: 'player-1',
+      reason: 'deck_out',
+    })
+    expect(appliedResult.events[3]).toMatchObject({
+      type: 'match.ended',
+      reason: 'deck_out',
+      loserPlayerId: 'player-1',
+      winnerPlayerId: 'player-2',
+    })
+    expect(appliedResult.timingWindows).toEqual([])
+  })
+
   it('applies a deterministic damage check after drive check and moves the revealed top card into damage', () => {
     const state = makeCheckBattleState()
     const driveResult = expectApplied(
@@ -714,6 +836,113 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
       'battle.damage_check',
       'battle.damage_check',
     ])
+  })
+
+  it('turns empty deck during damage check into deck-out loss and clears check aftermath', () => {
+    const state = makeCheckBattleState()
+    const driveResult = expectApplied(
+      applyGameAction(state, {
+        action: {
+          actionId: 'action-drive-before-damage-deck-out-1' as ActionId,
+          type: 'system.drive_check',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          battleId: 'battle-check-1' as NonNullable<
+            GameState['battle']
+          >['battleId'],
+          playerId: 'player-1' as GameState['players'][number]['playerId'],
+          fromZoneId: 'zone-p1-deck' as GameState['zones'][number]['zoneId'],
+          toZoneId: 'zone-p1-hand' as GameState['zones'][number]['zoneId'],
+          count: 1,
+        },
+        expectedRevision: state.revision,
+      }),
+    )
+    const combatResult = expectApplied(
+      resolveCombat(
+        driveResult.nextState,
+        'action-combat-before-damage-deck-out-1',
+      ),
+    )
+    const damageDeckOutState = replaceZoneOccupants(
+      combatResult.nextState,
+      'zone-p2-deck' as GameState['zones'][number]['zoneId'],
+      [],
+    )
+    const result = applyGameAction(damageDeckOutState, {
+      action: {
+        actionId: 'action-damage-deck-out-1' as ActionId,
+        type: 'system.damage_check',
+        actor: {
+          kind: 'system',
+          system: 'automatic-flow',
+        },
+        battleId: 'battle-check-1' as NonNullable<
+          GameState['battle']
+        >['battleId'],
+        playerId: 'player-2' as GameState['players'][number]['playerId'],
+        fromZoneId: 'zone-p2-deck' as GameState['zones'][number]['zoneId'],
+        toZoneId: 'zone-p2-damage' as GameState['zones'][number]['zoneId'],
+        count: 1,
+      },
+      expectedRevision: damageDeckOutState.revision,
+    })
+    const appliedResult = expectApplied(result)
+
+    expect(appliedResult.nextState.status).toBe('completed')
+    expect(appliedResult.nextState.battle).toBeUndefined()
+    expect(appliedResult.nextState.pendingRequests).toEqual([])
+    expect(appliedResult.nextState.players).toContainEqual(
+      expect.objectContaining({
+        playerId: 'player-2',
+        status: 'defeated',
+      }),
+    )
+    expect(appliedResult.events.map((event) => event.type)).toEqual([
+      'cards.deck_out',
+      'battle.completed',
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(appliedResult.events[0]).toMatchObject({
+      type: 'cards.deck_out',
+      playerId: 'player-2',
+      fromZoneId: 'zone-p2-deck',
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'damage_check',
+      battleId: 'battle-check-1',
+    })
+    expect(appliedResult.events[1]).toMatchObject({
+      type: 'battle.completed',
+      battleId: 'battle-check-1',
+      reason: 'deck_out',
+      cleanupMovedPieceIds: [],
+      combat: {
+        result: 'hit',
+      },
+    })
+    expect(appliedResult.events[2]).toMatchObject({
+      type: 'player.defeated',
+      playerId: 'player-2',
+      reason: 'deck_out',
+    })
+    expect(appliedResult.events[3]).toMatchObject({
+      type: 'match.ended',
+      reason: 'deck_out',
+      loserPlayerId: 'player-2',
+      winnerPlayerId: 'player-1',
+    })
+    expect(
+      appliedResult.events.some(
+        (event) =>
+          event.type === 'battle.damage_checked' ||
+          event.type === 'player.damage_changed',
+      ),
+    ).toBe(false)
+    expect(appliedResult.timingWindows).toEqual([])
   })
 
   it('completes and clears battle state through battle-scoped mandatory flow', () => {
@@ -851,7 +1080,7 @@ describe('@web-vg/rules-core drive / damage check foundation', () => {
               cardDefinitionId: 'card-damage-top' as CardId,
             },
           ],
-          triggerResolutionState: 'pending_future_engine',
+          triggerResolutionState: 'pending_resolution',
         },
       },
     })

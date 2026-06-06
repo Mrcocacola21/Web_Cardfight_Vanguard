@@ -22,6 +22,8 @@ export type {
   MatchConcedeAction,
   MatchReadyAction,
   MatchStartAction,
+  MatchTimeoutAction,
+  MatchTimeoutReason,
   LockPieceAction,
   MovePieceAction,
   PlayCardAction,

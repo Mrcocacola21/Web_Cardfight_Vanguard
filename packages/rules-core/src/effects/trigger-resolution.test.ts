@@ -11,6 +11,7 @@ import type {
 } from '../contracts'
 import type { GameEvent } from '../events'
 import { createKeywordMechanicsRegistry } from '../keywords'
+import type { TriggerChoiceRequest, TriggerChoiceResponse } from '../requests'
 import type {
   BattleState,
   GamePieceStatusState,
@@ -19,10 +20,13 @@ import type {
 } from '../state'
 import {
   applyGameAction,
+  applyGameChoiceResponse,
   isAppliedTransitionResult,
+  isBlockedTransitionResult,
   isInvalidTransitionResult,
 } from '../transitions'
 import { applyDriveCheckTransition } from '../transitions/drive-damage-check'
+import { projectGameStateForPlayer } from '../visibility'
 
 import {
   CARDS_DRAWN_FINALIZE_EFFECT_IDENTITY,
@@ -45,10 +49,12 @@ const PLAYER_2 = 'player-trigger-2' as PlayerId
 interface TriggerFixtureOptions {
   readonly checkKind: 'drive' | 'damage'
   readonly triggerType: TriggerType | null
+  readonly secondTriggerType?: TriggerType | null
   readonly p1DamageCount?: number
   readonly p2DamageCount?: number
   readonly p1RearGuards?: readonly PieceId[]
   readonly p2RearGuards?: readonly PieceId[]
+  readonly p2DeckPieceIds?: readonly PieceId[]
   readonly restedPieceIds?: readonly PieceId[]
 }
 
@@ -69,6 +75,10 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
     options.p1RearGuards ?? (['piece-p1-rg' as PieceId] as const)
   const p2RearGuardPieceIds =
     options.p2RearGuards ?? (['piece-p2-rg' as PieceId] as const)
+  const p2DeckPieceIds =
+    options.checkKind === 'damage'
+      ? ([triggerPieceId, drawPieceId] as const)
+      : (options.p2DeckPieceIds ?? [])
   const zones = [
     ...makePlayerZones(PLAYER_1, 'p1', {
       deck: options.checkKind === 'drive' ? [triggerPieceId, drawPieceId] : [],
@@ -77,7 +87,7 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
       damage: p1DamagePieces.map((piece) => piece.pieceId),
     }),
     ...makePlayerZones(PLAYER_2, 'p2', {
-      deck: options.checkKind === 'damage' ? [triggerPieceId, drawPieceId] : [],
+      deck: p2DeckPieceIds,
       vanguard: ['piece-p2-vg' as PieceId],
       rearGuard: p2RearGuardPieceIds,
       damage: p2DamagePieces.map((piece) => piece.pieceId),
@@ -102,6 +112,13 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
       options.checkKind === 'drive' ? PLAYER_1 : PLAYER_2,
       'card-trigger-draw' as CardId,
     ),
+    ...p2DeckPieceIds
+      .filter(
+        (pieceId) => pieceId !== triggerPieceId && pieceId !== drawPieceId,
+      )
+      .map((pieceId, index) =>
+        makePiece(pieceId, PLAYER_2, `card-p2-deck-${index + 1}` as CardId),
+      ),
     ...p1DamagePieces,
     ...p2DamagePieces,
   ]
@@ -145,11 +162,9 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
     cardStats: buildEngineCardStatsSnapshot(
       pieces.map((piece) => ({
         cardDefinitionId: piece.cardDefinitionId as CardId,
-        cardType:
-          piece.cardDefinitionId === ('card-trigger-top' as CardId) &&
-          options.triggerType !== null
-            ? 'trigger-unit'
-            : 'normal-unit',
+        cardType: resolveFixtureTriggerType(piece.cardDefinitionId, options)
+          ? 'trigger-unit'
+          : 'normal-unit',
         grade:
           piece.cardDefinitionId === ('card-p1-vg' as CardId) ||
           piece.cardDefinitionId === ('card-p2-vg' as CardId)
@@ -162,10 +177,7 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
             : 5000,
         shield: 15000,
         critical: 1,
-        triggerType:
-          piece.cardDefinitionId === ('card-trigger-top' as CardId)
-            ? options.triggerType
-            : null,
+        triggerType: resolveFixtureTriggerType(piece.cardDefinitionId, options),
         keywords: [],
       })),
     ),
@@ -211,6 +223,14 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
                   amount: 13000,
                 },
               ],
+              attackCritical: 1,
+              attackerCriticalComponents: [
+                {
+                  source: 'attacker_base_critical',
+                  pieceId: 'piece-p1-vg' as PieceId,
+                  amount: 1,
+                },
+              ],
               defensePower: 13000,
               defensePowerComponents: [
                 {
@@ -222,11 +242,27 @@ function makeTriggerState(options: TriggerFixtureOptions): GameState {
               shieldPower: 0,
               shieldComponents: [],
               totalDefensePower: 13000,
+              damageCheckCount: 1,
               result: 'hit',
             },
           },
     pendingRequests: [],
   }
+}
+
+function resolveFixtureTriggerType(
+  cardDefinitionId: CardId | undefined,
+  options: TriggerFixtureOptions,
+): TriggerType | null {
+  if (cardDefinitionId === ('card-trigger-top' as CardId)) {
+    return options.triggerType
+  }
+
+  if (cardDefinitionId === ('card-trigger-draw' as CardId)) {
+    return options.secondTriggerType ?? null
+  }
+
+  return null
 }
 
 function makePlayerZones(
@@ -343,7 +379,7 @@ function makePiece(
   }
 }
 
-function applyCheck(state: GameState) {
+function applyCheck(state: GameState, count = 1) {
   const checkKind =
     state.battle?.status === 'guard_resolved' ? 'drive' : 'damage'
 
@@ -361,7 +397,7 @@ function applyCheck(state: GameState) {
             playerId: PLAYER_1,
             fromZoneId: 'p1-deck' as ZoneId,
             toZoneId: 'p1-hand' as ZoneId,
-            count: 1,
+            count,
           }
         : {
             actionId: 'action-trigger-damage' as ActionId,
@@ -374,7 +410,7 @@ function applyCheck(state: GameState) {
             playerId: PLAYER_2,
             fromZoneId: 'p2-deck' as ZoneId,
             toZoneId: 'p2-damage' as ZoneId,
-            count: 1,
+            count,
           },
     expectedRevision: state.revision,
   })
@@ -399,6 +435,50 @@ function requireInvalid(result: ReturnType<typeof applyGameAction>) {
 
   return result
 }
+
+function requireBlocked(result: ReturnType<typeof applyGameAction>) {
+  expect(isBlockedTransitionResult(result)).toBe(true)
+
+  if (!isBlockedTransitionResult(result)) {
+    throw new Error(`Expected blocked result, received ${result.status}.`)
+  }
+
+  return result
+}
+
+function requireTriggerRequest(state: GameState): TriggerChoiceRequest {
+  const request = state.pendingRequests[0]
+
+  expect(request).toMatchObject({ type: 'trigger.resolve' })
+
+  if (request?.type !== 'trigger.resolve') {
+    throw new Error('Expected active trigger request.')
+  }
+
+  return request
+}
+
+function answerTrigger(
+  state: GameState,
+  answer: Omit<
+    TriggerChoiceRequestAnswer,
+    'requestId' | 'responderPlayerId' | 'type'
+  >,
+) {
+  const request = requireTriggerRequest(state)
+
+  return applyGameChoiceResponse(state, {
+    response: {
+      requestId: request.requestId,
+      responderPlayerId: request.responderPlayerId,
+      type: 'answer.trigger',
+      ...answer,
+    },
+    expectedRevision: state.revision,
+  })
+}
+
+type TriggerChoiceRequestAnswer = TriggerChoiceResponse
 
 function eventTypes(
   events: readonly GameEvent[],
@@ -471,7 +551,7 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
       undefined,
     )
     expect(baseResult.nextState.battle?.lastCheck?.triggerResolutionState).toBe(
-      'pending_future_engine',
+      'pending_resolution',
     )
   })
 
@@ -518,8 +598,8 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     expect(result.message).toContain(CHECK_TRIGGER_REVEAL_EFFECT_IDENTITY.id)
   })
 
-  it('routes Critical trigger through the check effect and applies power plus critical', () => {
-    const result = requireApplied(
+  it('creates a Critical trigger request and resumes with chosen power plus critical targets', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'drive',
@@ -527,20 +607,55 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
         }),
       ),
     )
+    const request = requireTriggerRequest(checkResult.nextState)
 
-    expect(eventTypes(result.events)).toEqual([
+    expect(eventTypes(checkResult.events)).toEqual([
       'piece.moved',
       'battle.drive_checked',
       'trigger.revealed',
+    ])
+    expect(checkResult.nextState.status).toBe('awaiting_choice')
+    expect(checkResult.nextState.battle?.lastCheck).toMatchObject({
+      triggerResolutionState: 'awaiting_choice',
+      triggerContinuation: {
+        requestId: request.requestId,
+        triggerType: 'critical',
+        resolvedTriggers: 0,
+      },
+    })
+    expect(request).toMatchObject({
+      responderPlayerId: PLAYER_1,
+      triggerType: 'critical',
+      powerAmount: TRIGGER_POWER_BONUS,
+      criticalAmount: TRIGGER_CRITICAL_BONUS,
+      powerEligiblePieceIds: ['piece-p1-vg', 'piece-p1-rg'],
+      criticalEligiblePieceIds: ['piece-p1-vg', 'piece-p1-rg'],
+    })
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-rg' as PieceId],
+        criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+      }),
+    )
+
+    expect(eventTypes(result.events)).toEqual([
+      'choice.response_resolved',
       'trigger.resolved',
       'effect.resolved',
     ])
     expect(
       pieceState(result.nextState, 'piece-p1-vg' as PieceId),
     ).toMatchObject({
-      powerModifier: TRIGGER_POWER_BONUS,
       criticalModifier: TRIGGER_CRITICAL_BONUS,
     })
+    expect(
+      pieceState(result.nextState, 'piece-p1-rg' as PieceId),
+    ).toMatchObject({
+      powerModifier: TRIGGER_POWER_BONUS,
+    })
+    expect(result.nextState.pendingRequests).toEqual([])
+    expect(result.nextState.status).toBe('in_progress')
     expect(result.nextState.battle?.lastCheck?.triggerResolutionState).toBe(
       'resolved_triggers',
     )
@@ -551,8 +666,332 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
   })
 
-  it('resolves Draw trigger with power and a real draw event', () => {
+  it('projects trigger requests only to the responder', () => {
+    const checkResult = requireApplied(
+      applyCheck(
+        makeTriggerState({
+          checkKind: 'drive',
+          triggerType: 'critical',
+        }),
+      ),
+    )
+    const playerProjection = projectGameStateForPlayer(
+      checkResult.nextState,
+      PLAYER_1,
+    )
+    const opponentProjection = projectGameStateForPlayer(
+      checkResult.nextState,
+      PLAYER_2,
+    )
+
+    expect(playerProjection.ok).toBe(true)
+    expect(opponentProjection.ok).toBe(true)
+
+    if (!playerProjection.ok || !opponentProjection.ok) {
+      throw new Error('Expected player projections.')
+    }
+
+    expect(playerProjection.state.pendingRequests[0]).toMatchObject({
+      type: 'trigger.resolve',
+      visibilityToViewer: 'full',
+      responderPlayerId: PLAYER_1,
+      triggerType: 'critical',
+      powerEligiblePieces: [
+        { pieceId: 'piece-p1-vg' },
+        { pieceId: 'piece-p1-rg' },
+      ],
+      criticalEligiblePieces: [
+        { pieceId: 'piece-p1-vg' },
+        { pieceId: 'piece-p1-rg' },
+      ],
+    })
+    const opponentRequest = opponentProjection.state.pendingRequests[0]
+
+    expect(opponentRequest).toMatchObject({
+      type: 'trigger.resolve',
+      visibilityToViewer: 'redacted',
+      responderPlayerId: PLAYER_1,
+    })
+    expect(
+      opponentRequest !== undefined && 'powerEligiblePieces' in opponentRequest,
+    ).toBe(false)
+  })
+
+  it('blocks unrelated actions while a trigger choice request is active', () => {
+    const checkResult = requireApplied(
+      applyCheck(
+        makeTriggerState({
+          checkKind: 'drive',
+          triggerType: 'critical',
+        }),
+      ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+    const blocked = requireBlocked(
+      applyGameAction(checkResult.nextState, {
+        action: {
+          actionId: 'action-trigger-blocked-rest' as ActionId,
+          type: 'piece.rest',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          pieceId: 'piece-p1-rg' as PieceId,
+        },
+        expectedRevision: checkResult.nextState.revision,
+      }),
+    )
+
+    expect(blocked.code).toBe('pending_request')
+    expect(blocked.blockingRequests).toEqual([request])
+    expect(blocked.currentState).toEqual(checkResult.nextState)
+  })
+
+  it('rejects wrong, illegal, and stale trigger responses structurally', () => {
+    const checkResult = requireApplied(
+      applyCheck(
+        makeTriggerState({
+          checkKind: 'drive',
+          triggerType: 'critical',
+        }),
+      ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+    const wrongPlayer = requireInvalid(
+      applyGameChoiceResponse(checkResult.nextState, {
+        response: {
+          requestId: request.requestId,
+          responderPlayerId: PLAYER_2,
+          type: 'answer.trigger',
+          powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+          criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+        },
+        expectedRevision: checkResult.nextState.revision,
+      }),
+    )
+    const wrongTarget = requireInvalid(
+      applyGameChoiceResponse(checkResult.nextState, {
+        response: {
+          requestId: request.requestId,
+          responderPlayerId: PLAYER_1,
+          type: 'answer.trigger',
+          powerTargetPieceIds: ['piece-p2-vg' as PieceId],
+          criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+        },
+        expectedRevision: checkResult.nextState.revision,
+      }),
+    )
+    const resolved = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+        criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+      }),
+    )
+    const stale = requireInvalid(
+      applyGameChoiceResponse(resolved.nextState, {
+        response: {
+          requestId: request.requestId,
+          responderPlayerId: PLAYER_1,
+          type: 'answer.trigger',
+          powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+          criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+        },
+        expectedRevision: resolved.nextState.revision,
+      }),
+    )
+
+    expect(wrongPlayer.code).toBe('request_response_mismatch')
+    expect(wrongTarget.code).toBe('request_response_mismatch')
+    expect(stale.code).toBe('request_not_pending')
+    expect(checkResult.nextState.pendingRequests).toEqual([request])
+  })
+
+  it('resumes the same revealed-card trigger queue after a choice response', () => {
+    const checkResult = requireApplied(
+      applyCheck(
+        makeTriggerState({
+          checkKind: 'drive',
+          triggerType: 'critical',
+          secondTriggerType: 'front',
+          p1RearGuards: [
+            'piece-p1-rg-a' as PieceId,
+            'piece-p1-rg-b' as PieceId,
+          ],
+        }),
+        2,
+      ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(
+      checkResult.events.filter((event) => event.type === 'trigger.revealed'),
+    ).toHaveLength(1)
+    expect(request).toMatchObject({
+      triggerType: 'critical',
+      powerEligiblePieceIds: ['piece-p1-vg', 'piece-p1-rg-a', 'piece-p1-rg-b'],
+    })
+
     const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+        criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+      }),
+    )
+    const responseTriggerEvents = result.events.filter(
+      (event) => event.type === 'trigger.revealed',
+    )
+    const resolvedEvents = triggerResolvedEvents(result.events)
+
+    expect(responseTriggerEvents).toHaveLength(1)
+    expect(responseTriggerEvents[0]).toMatchObject({
+      triggerType: 'front',
+      revealedPieceId: 'piece-trigger-draw',
+    })
+    expect(resolvedEvents).toHaveLength(2)
+    expect(resolvedEvents[0]).toMatchObject({
+      triggerType: 'critical',
+    })
+    expect(resolvedEvents[1]).toMatchObject({
+      triggerType: 'front',
+      powerTargetPieceIds: ['piece-p1-vg', 'piece-p1-rg-a', 'piece-p1-rg-b'],
+    })
+    expect(
+      pieceState(result.nextState, 'piece-p1-vg' as PieceId),
+    ).toMatchObject({
+      powerModifier: TRIGGER_POWER_BONUS * 2,
+      criticalModifier: TRIGGER_CRITICAL_BONUS,
+    })
+    expect(result.nextState.battle?.lastCheck).toMatchObject({
+      triggerResolutionState: 'resolved_triggers',
+    })
+    expect(result.nextState.battle?.lastCheck?.triggerContinuation).toBe(
+      undefined,
+    )
+    expect(result.events.at(-1)).toMatchObject({
+      type: 'effect.resolved',
+      operationKinds: [
+        'trigger_power',
+        'trigger_critical',
+        'trigger_front_power',
+      ],
+    })
+  })
+
+  it('feeds trigger critical into combat and real damage-check count derivation', () => {
+    const checkResult = requireApplied(
+      applyCheck(
+        makeTriggerState({
+          checkKind: 'drive',
+          triggerType: 'critical',
+          p2DeckPieceIds: [
+            'piece-p2-damage-check-1' as PieceId,
+            'piece-p2-damage-check-2' as PieceId,
+          ],
+        }),
+      ),
+    )
+    const triggerResult = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+        criticalTargetPieceId: 'piece-p1-vg' as PieceId,
+      }),
+    )
+    const combatResult = requireApplied(
+      applyGameAction(triggerResult.nextState, {
+        action: {
+          actionId: 'action-trigger-critical-combat' as ActionId,
+          type: 'system.resolve_combat',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          battleId: 'battle-trigger-1' as BattleState['battleId'],
+        },
+        expectedRevision: triggerResult.nextState.revision,
+      }),
+    )
+    const wrongDamageCount = requireInvalid(
+      applyGameAction(combatResult.nextState, {
+        action: {
+          actionId: 'action-trigger-critical-wrong-damage' as ActionId,
+          type: 'system.damage_check',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          battleId: 'battle-trigger-1' as BattleState['battleId'],
+          playerId: PLAYER_2,
+          fromZoneId: 'p2-deck' as ZoneId,
+          toZoneId: 'p2-damage' as ZoneId,
+          count: 1,
+        },
+        expectedRevision: combatResult.nextState.revision,
+      }),
+    )
+    const damageResult = requireApplied(
+      applyGameAction(combatResult.nextState, {
+        action: {
+          actionId: 'action-trigger-critical-damage' as ActionId,
+          type: 'system.damage_check',
+          actor: {
+            kind: 'system',
+            system: 'automatic-flow',
+          },
+          battleId: 'battle-trigger-1' as BattleState['battleId'],
+          playerId: PLAYER_2,
+          fromZoneId: 'p2-deck' as ZoneId,
+          toZoneId: 'p2-damage' as ZoneId,
+          count: 2,
+        },
+        expectedRevision: combatResult.nextState.revision,
+      }),
+    )
+
+    expect(combatResult.nextState.battle?.combat).toMatchObject({
+      attackPower: 23000,
+      attackCritical: 2,
+      damageCheckCount: 2,
+      result: 'hit',
+      attackerCriticalComponents: [
+        {
+          source: 'attacker_base_critical',
+          amount: 1,
+        },
+        {
+          source: 'piece_critical_modifier',
+          amount: 1,
+        },
+      ],
+    })
+    expect(wrongDamageCount.code).toBe('invalid_action')
+    expect(wrongDamageCount.message).toMatch(/derived damage check count 2/)
+    expect(zonePieceIds(damageResult.nextState, 'p2-damage')).toEqual([
+      'piece-p2-damage-check-1',
+      'piece-p2-damage-check-2',
+    ])
+    expect(damageResult.nextState.battle).toMatchObject({
+      status: 'damage_checked',
+      damage: {
+        damageBefore: 0,
+        damageAfter: 2,
+        outcome: 'non_lethal',
+      },
+      lastCheck: {
+        kind: 'damage',
+        revealedCards: [
+          {
+            pieceId: 'piece-p2-damage-check-1',
+          },
+          {
+            pieceId: 'piece-p2-damage-check-2',
+          },
+        ],
+      },
+    })
+  })
+
+  it('creates a Draw trigger request for power and resumes into draw aftermath', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'drive',
@@ -560,11 +999,27 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
         }),
       ),
     )
+    const request = requireTriggerRequest(checkResult.nextState)
 
-    expect(eventTypes(result.events)).toEqual([
+    expect(eventTypes(checkResult.events)).toEqual([
       'piece.moved',
       'battle.drive_checked',
       'trigger.revealed',
+    ])
+    expect(request).toMatchObject({
+      responderPlayerId: PLAYER_1,
+      triggerType: 'draw',
+      powerEligiblePieceIds: ['piece-p1-vg', 'piece-p1-rg'],
+    })
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+      }),
+    )
+
+    expect(eventTypes(result.events)).toEqual([
+      'choice.response_resolved',
       'piece.moved',
       'cards.drawn',
       'trigger.resolved',
@@ -585,10 +1040,10 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
       drawnPieceIds: ['piece-trigger-draw'],
       powerTargetPieceIds: ['piece-p1-vg'],
     })
-    expect(result.events[7]).toMatchObject({
+    expect(result.events[5]).toMatchObject({
       type: 'effect.resolved',
       effectDefinitionId: CARDS_DRAWN_FINALIZE_EFFECT_IDENTITY.id,
-      triggerEventSequence: 4,
+      triggerEventSequence: 2,
       operationKinds: ['typed_handler'],
     })
   })
@@ -651,8 +1106,8 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
   })
 
-  it('resolves Heal trigger after damage placement and prevents lethal when condition passes', () => {
-    const result = requireApplied(
+  it('creates a Heal trigger request and resumes selected heal before lethal aftermath', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'damage',
@@ -661,6 +1116,35 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
           p2DamageCount: 5,
         }),
       ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(request).toMatchObject({
+      responderPlayerId: PLAYER_2,
+      triggerType: 'heal',
+      powerEligiblePieceIds: ['piece-p2-vg', 'piece-p2-rg'],
+      healEligiblePieceIds: [
+        'piece-p2-damage-1',
+        'piece-p2-damage-2',
+        'piece-p2-damage-3',
+        'piece-p2-damage-4',
+        'piece-p2-damage-5',
+      ],
+    })
+    expect(checkResult.nextState.battle).toMatchObject({
+      status: 'damage_checked',
+      damage: {
+        damageBefore: 5,
+        damageAfter: 6,
+        outcome: 'lethal',
+      },
+    })
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p2-vg' as PieceId],
+        healTargetPieceId: 'piece-p2-damage-1' as PieceId,
+      }),
     )
 
     expect(result.nextState.battle).toMatchObject({
@@ -681,7 +1165,7 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
     expect(
       result.events.filter((event) => event.type === 'player.damage_changed'),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(triggerResolvedEvents(result.events)[0]).toMatchObject({
       triggerType: 'heal',
       healedPieceId: 'piece-p2-damage-1',
@@ -693,8 +1177,8 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
   })
 
-  it('resolves Heal trigger without healing when the damage condition fails', () => {
-    const result = requireApplied(
+  it('keeps Heal trigger request power-only when the heal condition fails', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'damage',
@@ -703,6 +1187,20 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
           p2DamageCount: 3,
         }),
       ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(request).toMatchObject({
+      responderPlayerId: PLAYER_2,
+      triggerType: 'heal',
+      powerEligiblePieceIds: ['piece-p2-vg', 'piece-p2-rg'],
+    })
+    expect(request.healEligiblePieceIds).toBeUndefined()
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p2-vg' as PieceId],
+      }),
     )
 
     expect(result.nextState.battle).toMatchObject({
@@ -723,8 +1221,8 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
   })
 
-  it('resolves Stand trigger by standing an eligible rested rear-guard and applying power', () => {
-    const result = requireApplied(
+  it('creates a Stand trigger request and resumes selected rested rear-guard', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'drive',
@@ -733,6 +1231,22 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
           restedPieceIds: ['piece-p1-rg-rested' as PieceId],
         }),
       ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(request).toMatchObject({
+      responderPlayerId: PLAYER_1,
+      triggerType: 'stand',
+      powerEligiblePieceIds: ['piece-p1-vg', 'piece-p1-rg-rested'],
+      standEligiblePieceIds: ['piece-p1-rg-rested'],
+    })
+    expect(eventTypes(checkResult.events)).not.toContain('piece.stood')
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+        standTargetPieceId: 'piece-p1-rg-rested' as PieceId,
+      }),
     )
 
     expect(eventTypes(result.events)).toContain('piece.stood')
@@ -751,8 +1265,8 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
     })
   })
 
-  it('auto-selects the first eligible Stand trigger target deterministically', () => {
-    const result = requireApplied(
+  it('does not auto-select Stand trigger target when multiple rested rear-guards are eligible', () => {
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'drive',
@@ -768,23 +1282,37 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
         }),
       ),
     )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(request.standEligiblePieceIds).toEqual([
+      'piece-p1-rg-first-rested',
+      'piece-p1-rg-second-rested',
+    ])
+    expect(triggerResolvedEvents(checkResult.events)).toEqual([])
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+        standTargetPieceId: 'piece-p1-rg-second-rested' as PieceId,
+      }),
+    )
 
     expect(triggerResolvedEvents(result.events)[0]).toMatchObject({
       triggerType: 'stand',
-      stoodPieceId: 'piece-p1-rg-first-rested',
+      stoodPieceId: 'piece-p1-rg-second-rested',
     })
     expect(
       pieceState(result.nextState, 'piece-p1-rg-first-rested' as PieceId),
-    ).toBeUndefined()
-    expect(
-      pieceState(result.nextState, 'piece-p1-rg-second-rested' as PieceId),
     ).toMatchObject({
       orientation: 'rest',
     })
+    expect(
+      pieceState(result.nextState, 'piece-p1-rg-second-rested' as PieceId),
+    ).toBeUndefined()
   })
 
   it('keeps Stand trigger structured when no stand target is available', () => {
-    const result = requireApplied(
+    const checkResult = requireApplied(
       applyCheck(
         makeTriggerState({
           checkKind: 'drive',
@@ -793,6 +1321,16 @@ describe('@web-vg/rules-core trigger resolution foundation', () => {
           restedPieceIds: [],
         }),
       ),
+    )
+    const request = requireTriggerRequest(checkResult.nextState)
+
+    expect(request.standEligiblePieceIds).toBeUndefined()
+    expect(request.powerEligiblePieceIds).toEqual(['piece-p1-vg'])
+
+    const result = requireApplied(
+      answerTrigger(checkResult.nextState, {
+        powerTargetPieceIds: ['piece-p1-vg' as PieceId],
+      }),
     )
     const resolvedTrigger = triggerResolvedEvents(result.events)[0]
 

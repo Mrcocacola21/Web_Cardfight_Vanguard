@@ -59,9 +59,9 @@ This step does not implement the full trigger engine.
 Instead, each check stores and emits:
 
 - revealed cards
-- `triggerResolutionState: 'pending_future_engine'`
+- `triggerResolutionState: 'pending_resolution'`
 
-That gives later trigger/effect work a clean hook without pretending that trigger resolution already exists.
+That gave later trigger/effect work a clean hook without pretending that trigger resolution already existed in this foundation step. Current trigger choice interruption is documented in `docs/rules/trigger-choice-interrupt-resume.md`.
 
 ## 8. Invalid / blocked behavior
 

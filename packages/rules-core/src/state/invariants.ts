@@ -553,6 +553,36 @@ function assertRequestStateReferences(
         `Pending request ${request.requestId} references an unknown battle attacker ${request.attackerPieceId}.`,
       )
       return
+    case 'trigger.resolve':
+      assertRulesInvariant(
+        pieceIdSet.has(request.revealedPieceId),
+        `Pending request ${request.requestId} references an unknown revealed trigger piece ${request.revealedPieceId}.`,
+      )
+      for (const pieceId of request.powerEligiblePieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown trigger power target piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.criticalEligiblePieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown trigger critical target piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.standEligiblePieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown trigger stand target piece ${pieceId}.`,
+        )
+      }
+      for (const pieceId of request.healEligiblePieceIds ?? []) {
+        assertRulesInvariant(
+          pieceIdSet.has(pieceId),
+          `Pending request ${request.requestId} references an unknown trigger heal target piece ${pieceId}.`,
+        )
+      }
+      return
     case 'choose.option':
     case 'confirm.boolean':
       return
@@ -739,6 +769,9 @@ function assertBattleStateInvariant(
       playerIdSet,
       pieceIdSet,
       zoneIdSet,
+      new Set(
+        state.pendingRequests.map((request) => request.requestId as string),
+      ),
       state,
     )
   }
@@ -841,6 +874,14 @@ function assertBattleCombatStateInvariant(
     { nonNegative: true },
   )
   assertSafeInteger(
+    combat.attackCritical,
+    `Battle ${battleId} attack critical must be a positive safe integer.`,
+  )
+  assertRulesInvariant(
+    combat.attackCritical > 0,
+    `Battle ${battleId} attack critical must be positive.`,
+  )
+  assertSafeInteger(
     combat.defensePower,
     `Battle ${battleId} defense power must be a non-negative safe integer.`,
     { nonNegative: true },
@@ -855,6 +896,11 @@ function assertBattleCombatStateInvariant(
     `Battle ${battleId} total defense power must be a non-negative safe integer.`,
     { nonNegative: true },
   )
+  assertSafeInteger(
+    combat.damageCheckCount,
+    `Battle ${battleId} damage check count must be a non-negative safe integer.`,
+    { nonNegative: true },
+  )
   assertRulesInvariant(
     combat.totalDefensePower === combat.defensePower + combat.shieldPower,
     `Battle ${battleId} total defense power must equal defense plus shield.`,
@@ -864,6 +910,12 @@ function assertBattleCombatStateInvariant(
       ? combat.attackPower >= combat.totalDefensePower
       : combat.attackPower < combat.totalDefensePower,
     `Battle ${battleId} combat result must match attack and defense totals.`,
+  )
+  assertRulesInvariant(
+    combat.result === 'hit'
+      ? combat.damageCheckCount === combat.attackCritical
+      : combat.damageCheckCount === 0,
+    `Battle ${battleId} damage check count must be derived from combat result and attack critical.`,
   )
 
   for (const component of [
@@ -884,6 +936,20 @@ function assertBattleCombatStateInvariant(
       )
     }
   }
+
+  for (const component of combat.attackerCriticalComponents) {
+    assertSafeInteger(
+      component.amount,
+      `Battle ${battleId} combat critical component amount must be a safe integer.`,
+    )
+
+    if (component.pieceId !== undefined) {
+      assertRulesInvariant(
+        pieceIdSet.has(component.pieceId),
+        `Battle ${battleId} combat critical component references unknown piece ${component.pieceId}.`,
+      )
+    }
+  }
 }
 
 function assertBattleCheckStateInvariant(
@@ -892,6 +958,7 @@ function assertBattleCheckStateInvariant(
   playerIdSet: ReadonlySet<string>,
   pieceIdSet: ReadonlySet<string>,
   zoneIdSet: ReadonlySet<string>,
+  requestIdSet: ReadonlySet<string>,
   state: GameState,
 ): void {
   assertRulesInvariant(
@@ -923,6 +990,79 @@ function assertBattleCheckStateInvariant(
         `Battle ${battleId} revealed check piece ${revealedCard.pieceId} must keep a matching canonical card definition id.`,
       )
     }
+  }
+
+  if (check.triggerResolutionState === 'awaiting_choice') {
+    assertRulesInvariant(
+      check.triggerContinuation !== undefined,
+      `Battle ${battleId} awaiting trigger choice must keep trigger continuation state.`,
+    )
+  } else {
+    assertRulesInvariant(
+      check.triggerContinuation === undefined,
+      `Battle ${battleId} must not keep trigger continuation state unless trigger resolution is awaiting a choice.`,
+    )
+  }
+
+  if (check.triggerContinuation !== undefined) {
+    assertTriggerContinuationInvariant(
+      battleId,
+      check,
+      check.triggerContinuation,
+      pieceIdSet,
+      requestIdSet,
+    )
+  }
+}
+
+function assertTriggerContinuationInvariant(
+  battleId: BattleState['battleId'],
+  check: BattleCheckState,
+  continuation: NonNullable<BattleCheckState['triggerContinuation']>,
+  pieceIdSet: ReadonlySet<string>,
+  requestIdSet: ReadonlySet<string>,
+): void {
+  assertRulesInvariant(
+    requestIdSet.has(continuation.requestId as string),
+    `Battle ${battleId} trigger continuation must reference a pending request.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(continuation.sourceCheckEventSequence) &&
+      continuation.sourceCheckEventSequence >= 0,
+    `Battle ${battleId} trigger continuation must keep a non-negative source check event sequence.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(continuation.revealedCardIndex) &&
+      continuation.revealedCardIndex >= 0 &&
+      continuation.revealedCardIndex < check.revealedCards.length,
+    `Battle ${battleId} trigger continuation must reference a revealed check card index.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(continuation.nextRevealedCardIndex) &&
+      continuation.nextRevealedCardIndex > continuation.revealedCardIndex &&
+      continuation.nextRevealedCardIndex <= check.revealedCards.length,
+    `Battle ${battleId} trigger continuation must keep the next revealed check card index in range.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(continuation.resolvedTriggers) &&
+      continuation.resolvedTriggers >= 0,
+    `Battle ${battleId} trigger continuation must keep a non-negative resolved trigger count.`,
+  )
+  assertRulesInvariant(
+    pieceIdSet.has(continuation.revealedPieceId as string),
+    `Battle ${battleId} trigger continuation references unknown revealed piece ${continuation.revealedPieceId}.`,
+  )
+
+  for (const pieceId of [
+    ...(continuation.powerEligiblePieceIds ?? []),
+    ...(continuation.criticalEligiblePieceIds ?? []),
+    ...(continuation.standEligiblePieceIds ?? []),
+    ...(continuation.healEligiblePieceIds ?? []),
+  ]) {
+    assertRulesInvariant(
+      pieceIdSet.has(pieceId as string),
+      `Battle ${battleId} trigger continuation references unknown eligible piece ${pieceId}.`,
+    )
   }
 }
 

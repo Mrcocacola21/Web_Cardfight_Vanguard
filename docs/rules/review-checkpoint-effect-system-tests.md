@@ -43,7 +43,7 @@ know whether an effect is typed or declarative.
 First-effect tests cover the current proof-of-viability examples:
 
 - Twin Drive modifies drive check count through the current pre-check seam.
-- Persona Ride draws a card and applies an observable power flag.
+- Persona Ride draws a card and applies observable materialized power with a marker flag.
 - Check finalization resolves from battle check events.
 - Draw finalization resolves after Persona Ride's nested draw event.
 

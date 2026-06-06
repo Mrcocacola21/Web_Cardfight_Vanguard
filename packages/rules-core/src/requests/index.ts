@@ -36,6 +36,8 @@ export type {
   SelectionChoiceRequestType,
   SelectionChoiceResponse,
   TargetChosenResponse,
+  TriggerChoiceRequest,
+  TriggerChoiceResponse,
   ZoneChoiceOption,
   ZoneChosenResponse,
 } from './request'

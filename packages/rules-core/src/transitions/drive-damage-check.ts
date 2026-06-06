@@ -34,9 +34,10 @@ import {
   drawTopPiecesBetweenZones,
   type PieceZoneMovement,
 } from './ordered-zone-operations'
+import { resolveDeckOutLoss, shouldResolveDeckOutLoss } from './deck-out'
 import { createPieceMovedEvents } from './zone-transfer'
 
-const TRIGGER_RESOLUTION_STATE = 'pending_future_engine' as const
+const TRIGGER_RESOLUTION_STATE = 'pending_resolution' as const
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
 
 interface BaseCheckSummaryEventFields {
@@ -162,6 +163,41 @@ export function applyDriveCheckTransition(
     transitionId,
     sourceActionId: action.actionId,
   })
+  const sourceZone = findZoneById(stateIndex, action.fromZoneId)
+
+  if (
+    sourceZone !== undefined &&
+    shouldResolveDeckOutLoss(sourceZone, effectResolution.count)
+  ) {
+    const deckOutResult = resolveDeckOutLoss({
+      transitionId,
+      currentState,
+      playerId: action.playerId,
+      fromZoneId: action.fromZoneId,
+      requiredCount: effectResolution.count,
+      availableCount: sourceZone.occupants.length,
+      reason: 'drive_check',
+      sourceActionId: action.actionId,
+      system: action.actor.system,
+      startingSequence: effectResolution.events.length,
+    })
+
+    if (!deckOutResult.ok) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        deckOutResult.code,
+        deckOutResult.message,
+      )
+    }
+
+    return createTransitionResult(
+      transitionId,
+      advanceGameStateRevision(deckOutResult.state),
+      [...effectResolution.events, ...deckOutResult.events],
+    )
+  }
+
   const drawResult = drawTopPiecesBetweenZones(
     currentState,
     action.fromZoneId,
@@ -268,6 +304,20 @@ export function applyDamageCheckTransition(
     )
   }
 
+  const expectedDamageCheckCount = battle.combat.damageCheckCount
+
+  if (
+    !Number.isSafeInteger(action.count) ||
+    action.count !== expectedDamageCheckCount
+  ) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Action ${action.type} count ${action.count} must match battle ${battle.battleId} derived damage check count ${expectedDamageCheckCount}.`,
+    )
+  }
+
   if (battle.defendingPlayerId !== action.playerId) {
     return createInvalidTransitionResult(
       transitionId,
@@ -318,11 +368,45 @@ export function applyDamageCheckTransition(
     )
   }
 
+  const sourceZone = findZoneById(stateIndex, action.fromZoneId)
+
+  if (
+    sourceZone !== undefined &&
+    shouldResolveDeckOutLoss(sourceZone, expectedDamageCheckCount)
+  ) {
+    const deckOutResult = resolveDeckOutLoss({
+      transitionId,
+      currentState,
+      playerId: action.playerId,
+      fromZoneId: action.fromZoneId,
+      requiredCount: expectedDamageCheckCount,
+      availableCount: sourceZone.occupants.length,
+      reason: 'damage_check',
+      sourceActionId: action.actionId,
+      system: action.actor.system,
+    })
+
+    if (!deckOutResult.ok) {
+      return createInvalidTransitionResult(
+        transitionId,
+        currentState,
+        deckOutResult.code,
+        deckOutResult.message,
+      )
+    }
+
+    return createTransitionResult(
+      transitionId,
+      advanceGameStateRevision(deckOutResult.state),
+      deckOutResult.events,
+    )
+  }
+
   const drawResult = drawTopPiecesBetweenZones(
     currentState,
     action.fromZoneId,
     action.toZoneId,
-    action.count,
+    expectedDamageCheckCount,
     'damage_check',
   )
 

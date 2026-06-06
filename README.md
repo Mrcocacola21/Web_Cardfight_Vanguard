@@ -8,7 +8,9 @@ auth/RLS, the first real deck builder workflow, format-aware deck validation
 with profile-driven baseline rules, DB-backed atomic deck persistence and
 dense owner-scoped deck reads, an explicit application-layer separation across
 features, a social foundation on top of the profile layer, and an owner-owned
-match history / stats foundation.
+match history / stats foundation. The gameplay stack now includes a bounded
+rules runtime, local match-session prototype, hidden-information projection,
+session serialization/history, and transport-facing realtime runtime contracts.
 
 ## Prerequisites
 
@@ -190,11 +192,14 @@ Current practical coverage is strongest around:
 - deck validation core, format-aware baseline rules, and integration tests
 - gameplay engine actions/transitions/effects/format adapters
 - match room/session lifecycle and local playable match UI flow
+- match-session projection, serialization/history, realtime command runtime,
+  and timer/timeout contracts
 - deck DB persistence hardening:
   - atomic write RPC coverage
   - dense summary/detail read RPC coverage
   - owner-scoped RLS and deck ownership invariant checks
 - owner-owned match history, filters, and stats aggregation
+- printing-level collection inventory, wishlist, and favorite workflows
 
 The browser/runtime layer is still lighter than unit/component coverage and is
 best treated as checkpoint confidence, not a full e2e matrix. The DB checkpoint
@@ -289,10 +294,20 @@ Available now:
   - engine/UI validation boundary with structured accepted/invalid/blocked results
   - Standard, Premium, and V-Premium format adapters with shared hook support
   - zone transfers, runtime piece flag lifecycle, draw/shuffle/mulligan,
-    ride/call, attack/boost/guard, drive/damage checks, and battle completion
+    ride/call, attack/boost/guard, drive/damage checks, deck-out loss,
+    damage defeat, combat math, and battle completion
   - effect registry, resolution queue, event-triggered resolution, and first
     core effect definitions
+  - runtime effect handler dispatch, trigger choice interruption/resume, and
+    trigger resolution foundations for critical/draw/front/heal/stand/over
   - keyword mechanics registry with baseline keyword/effect bindings
+- collection / binder foundation:
+  - collection route at `/collection`
+  - owner-owned printing inventory
+  - printing-level add/remove/quantity mutations
+  - wishlist and favorite printing preferences
+  - collection inventory and preference repository/use-case layers
+  - DB-enforced owner-scoped collection item and preference access
 - local gameplay prototype:
   - `packages/match-session` room/session boundary over `rules-core`
   - local route at `/matches/play/local`
@@ -302,6 +317,15 @@ Available now:
     damage, soul, drop, and bind
   - available action panel backed by room/engine validation probes
   - pending request handling, local event log, and closed-room feedback
+- match-session runtime hardening for realtime prep:
+  - room-owned canonical engine state and participant-to-player bindings
+  - player-visible projections that mask private hands, decks, hidden requests,
+    and sensitive event payloads
+  - versioned snapshot-plus-history serialization and restore validation
+  - transport-facing client command wrapper that rejects stale room revisions
+    and client-submitted system actions
+  - projected state push contracts for participant-specific realtime updates
+  - session-owned clock/deadline state and authoritative timeout resolution
 - application-layer refactoring:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries
@@ -312,13 +336,17 @@ Available now:
 
 Not implemented yet:
 
-- collection/binder product flow
 - notifications, recommendations, and richer social graph/product workflows
 - public/shared match history workflows and richer match-detail editing flows
-- realtime multiplayer transport, room persistence, reconnect/recovery, and
-  production match synchronization
+- production websocket / Supabase Realtime transport adapter
+- DB-backed production match-session persistence adapter for canonical
+  snapshot/history writes
+- reconnect/recovery UI and protocol on top of persisted session truth
+- optimistic client reconciliation against authoritative match-session state
 - full Vanguard gameplay coverage, card-specific effect library, and polished
   product-facing match UX
+- production-grade gameplay room RLS / authorization expansion beyond the
+  current non-realtime baseline
 - advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the

@@ -85,7 +85,7 @@ Risk: the declarative subset is still very small. That is fine now, but first re
 The first effects are real and observable:
 
 - Twin Drive changes drive check count and revealed/moved cards.
-- Persona Ride draws, emits `cards.drawn`, applies a power flag, and triggers a nested draw finalizer.
+- Persona Ride draws, emits `cards.drawn`, materializes power with a marker flag, and triggers a nested draw finalizer.
 - Check finalizer changes check state to `resolved_none`.
 
 They prove registry, keyword, timing/event, hybrid, state mutation, events, and queue ordering.

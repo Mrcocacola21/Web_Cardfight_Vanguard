@@ -9,7 +9,7 @@ Phase 18.4 turns the effect architecture from definitions into bounded runtime b
 The first working effects are intentionally small and representative:
 
 - `Twin Drive` changes the number of drive checks before the existing drive-check transition draws cards.
-- `Persona Ride` reacts after a ride event, validates a richer domain condition, then draws a card and marks affected units with a power flag.
+- `Persona Ride` reacts after a ride event, validates a richer domain condition, then draws a card and materializes power on affected units.
 
 Together they exercise keyword-to-effect lookup, registry lookup, event/timing matching, declarative operations, a hybrid typed condition, zone movement, generated events, and runtime piece flags without requiring a full stack or priority system.
 
@@ -24,7 +24,7 @@ Together they exercise keyword-to-effect lookup, registry lookup, event/timing m
   - Standard-scoped triggered effect.
   - Applies after `card.rode`.
   - Requires the new vanguard to ride over a unit with the same card definition.
-  - Draws one card for the source controller and marks that controller's current vanguard/rear-guards with a persona ride power flag.
+  - Draws one card for the source controller and applies +10000 to that controller's current vanguard/rear-guards through `powerModifier`, while keeping a persona ride marker flag for lifecycle/debug visibility.
 
 ## 4. How They Are Registered
 
@@ -62,7 +62,7 @@ The implemented effects are observable through normal engine output:
 - Twin Drive changes a `system.drive_check` action with `count: 1` into two moved cards and two revealed check cards.
 - Persona Ride moves one card from deck to hand using effect-driven draw movement.
 - Persona Ride emits a `cards.drawn` event for the source controller.
-- Persona Ride adds a runtime flag representing `+10000 until end of turn` to the controller's current vanguard/rear-guards.
+- Persona Ride adds `powerModifier: 10000` to the controller's current vanguard/rear-guards and keeps a runtime marker flag for lifecycle/debug visibility.
 - The emitted `cards.drawn` event now schedules the core draw finalizer through the queue model.
 - Both effects emit `effect.resolved` events with the resolved effect id and operation kinds.
 
@@ -71,7 +71,7 @@ The implemented effects are observable through normal engine output:
 - No full priority/stack model.
 - No unbounded recursive trigger discovery.
 - No simultaneous effect ordering policy.
-- No full power calculator; Persona Ride power is represented as a runtime flag.
+- No full continuous-effect calculator; Persona Ride power is materialized into current runtime modifier state.
 - No complete keyword encyclopedia.
 - No card-text parser.
 - No UI, DB, importer, or browser dependency in the effect path.

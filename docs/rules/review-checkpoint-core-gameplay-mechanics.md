@@ -209,7 +209,7 @@ Positive signals:
 - Revealed cards carry runtime `pieceId` and canonical `cardDefinitionId` when
   present.
 - Post-check movement emits normal `piece.moved` facts.
-- `triggerResolutionState: 'pending_future_engine'` is honest about scope.
+- `triggerResolutionState: 'pending_resolution'` is the current pending check hook.
 
 Risks:
 

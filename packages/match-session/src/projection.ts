@@ -18,6 +18,7 @@ import type {
   MatchRoomParticipantId,
 } from './match-room'
 import { findMatchRoomParticipant, hasMatchRoomEngineState } from './match-room'
+import { projectMatchRoomClock, type ProjectedMatchRoomClock } from './clock'
 
 export interface ProjectedMatchRoomViewer {
   readonly participantId: MatchRoomParticipantId
@@ -31,6 +32,7 @@ export interface ProjectedMatchRoomForParticipant {
   readonly revision: number
   readonly viewer: ProjectedMatchRoomViewer
   readonly participants: readonly MatchRoomParticipant[]
+  readonly clock: ProjectedMatchRoomClock
   readonly visibleState: VisibleGameState
   readonly events: readonly VisibleGameEvent[]
 }
@@ -41,6 +43,7 @@ export interface ProjectedMatchRoomForOmniscientViewer {
   readonly status: MatchRoomLifecycleStatus
   readonly revision: number
   readonly participants: readonly MatchRoomParticipant[]
+  readonly clock: ProjectedMatchRoomClock
   readonly visibleState: VisibleGameState
   readonly events: readonly VisibleGameEvent[]
 }
@@ -81,6 +84,7 @@ export function projectMatchRoomForParticipant(
   participantId: MatchRoomParticipantId,
   options: {
     readonly events?: readonly GameEvent[]
+    readonly serverNow?: string
   } = {},
 ): MatchRoomProjectionResult {
   if (!hasMatchRoomEngineState(room)) {
@@ -135,6 +139,10 @@ export function projectMatchRoomForParticipant(
       formatId: room.formatId,
       status: room.status,
       revision: room.revision,
+      clock: projectMatchRoomClock(
+        room.clock,
+        options.serverNow === undefined ? {} : { serverNow: options.serverNow },
+      ),
       viewer: {
         participantId,
         playerId: participant.enginePlayerId,
@@ -150,6 +158,7 @@ export function projectMatchRoomForOmniscientViewer(
   room: MatchRoom,
   options: {
     readonly events?: readonly GameEvent[]
+    readonly serverNow?: string
   } = {},
 ): MatchRoomOmniscientProjectionResult {
   if (!hasMatchRoomEngineState(room)) {
@@ -168,6 +177,10 @@ export function projectMatchRoomForOmniscientViewer(
       status: room.status,
       revision: room.revision,
       participants: room.participants,
+      clock: projectMatchRoomClock(
+        room.clock,
+        options.serverNow === undefined ? {} : { serverNow: options.serverNow },
+      ),
       visibleState: projectGameStateForOmniscientViewer(room.engineState),
       events: projectGameEventsForOmniscientViewer(
         room.engineState,

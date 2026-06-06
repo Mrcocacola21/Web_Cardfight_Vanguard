@@ -8,6 +8,7 @@ import {
   type GameState,
   type PieceId,
   type PlayerId,
+  type RequestId,
   type ZoneId,
 } from '@web-vg/rules-core'
 import type { CardId, UserId } from '@web-vg/shared'
@@ -125,6 +126,60 @@ describe('@web-vg/match-session hidden information projection', () => {
     expect(JSON.stringify(result.projection.visibleState)).toContain(
       'card-b-hand-secret',
     )
+  })
+
+  it('projects session-owned server time and active deadlines for transport clients', () => {
+    const room = makeInitializedRoom()
+    const result = projectMatchRoomForParticipant(
+      {
+        ...room,
+        clock: {
+          ...room.clock,
+          serverNow: '2026-05-09T00:00:10.000Z',
+          activeRequest: {
+            requestId: 'request-projection-clock' as RequestId,
+            responderPlayerId: PLAYER_A,
+            startedAt: '2026-05-09T00:00:05.000Z',
+            deadlineAt: '2026-05-09T00:00:20.000Z',
+          },
+          activeTurn: {
+            turnNumber: 0,
+            turnPlayerId: PLAYER_A,
+            startedAt: '2026-05-09T00:00:01.000Z',
+            deadlineAt: '2026-05-09T00:00:31.000Z',
+          },
+        },
+      },
+      PARTICIPANT_A,
+      {
+        serverNow: '2026-05-09T00:00:12.000Z',
+      },
+    )
+
+    expect(result.ok).toBe(true)
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    expect(result.projection.clock).toMatchObject({
+      authority: 'match-session',
+      serverNow: '2026-05-09T00:00:12.000Z',
+      activeRequest: {
+        kind: 'request',
+        requestId: 'request-projection-clock',
+        responderPlayerId: PLAYER_A,
+        deadlineAt: '2026-05-09T00:00:20.000Z',
+        remainingMs: 8_000,
+      },
+      activeTurn: {
+        kind: 'turn',
+        turnNumber: 0,
+        turnPlayerId: PLAYER_A,
+        deadlineAt: '2026-05-09T00:00:31.000Z',
+        remainingMs: 19_000,
+      },
+    })
   })
 })
 

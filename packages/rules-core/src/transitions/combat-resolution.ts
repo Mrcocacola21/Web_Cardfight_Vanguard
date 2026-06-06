@@ -1,10 +1,11 @@
 import type { ResolveCombatAction } from '../actions'
 import { resolveBoostRelation } from '../board'
 import { resolveGamePieceCardStats } from '../cards'
+import { resolveCombatPieceModifiers } from '../combat'
 import type { EventId, TransitionId } from '../contracts'
 import type { GameEvent } from '../events'
-import { PERSONA_RIDE_POWER_FLAG } from '../effects/first-effects'
 import type {
+  BattleCombatCriticalComponentState,
   BattleCombatPowerComponentState,
   BattleCombatState,
   BattleState,
@@ -29,7 +30,6 @@ import {
   type InvalidTransitionCode,
   type TransitionResult,
 } from './transition'
-import { resolveGamePieceStatusState } from './piece-state-flags'
 
 type CombatMathResolution =
   | {
@@ -47,6 +47,11 @@ interface PiecePowerResolution {
   readonly components: readonly BattleCombatPowerComponentState[]
 }
 
+interface PieceCriticalResolution {
+  readonly total: number
+  readonly components: readonly BattleCombatCriticalComponentState[]
+}
+
 type PiecePowerResult =
   | ({
       readonly ok: true
@@ -57,7 +62,15 @@ type PiecePowerResult =
       readonly message: string
     }
 
-const PERSONA_RIDE_POWER_AMOUNT = 10000
+type PieceCriticalResult =
+  | ({
+      readonly ok: true
+    } & PieceCriticalResolution)
+  | {
+      readonly ok: false
+      readonly code: InvalidTransitionCode
+      readonly message: string
+    }
 
 export function applyResolveCombatTransition(
   transitionId: TransitionId,
@@ -161,7 +174,9 @@ export function applyResolveCombatTransition(
       attackerPieceId: battle.attackerPieceId,
       target: battle.target,
       attackPower: combat.attackPower,
+      attackCritical: combat.attackCritical,
       totalDefensePower: combat.totalDefensePower,
+      damageCheckCount: combat.damageCheckCount,
     },
   ]
 
@@ -198,6 +213,15 @@ export function resolveBattleCombatMath(
     return attackerPower
   }
 
+  const attackerCritical = resolvePieceCritical(
+    currentState,
+    attackerLocation.piece,
+  )
+
+  if (!attackerCritical.ok) {
+    return attackerCritical
+  }
+
   const boosterPower = resolveBoosterPower(currentState, stateIndex, battle)
 
   if (!boosterPower.ok) {
@@ -229,6 +253,7 @@ export function resolveBattleCombatMath(
   const attackPower = attackerPower.total + boosterPower.total
   const defensePower = defenderPower.total
   const totalDefensePower = defensePower + shield.total
+  const result = attackPower >= totalDefensePower ? 'hit' : 'miss'
 
   return {
     ok: true,
@@ -238,12 +263,15 @@ export function resolveBattleCombatMath(
         ...attackerPower.components,
         ...boosterPower.components,
       ],
+      attackCritical: attackerCritical.total,
+      attackerCriticalComponents: attackerCritical.components,
       defensePower,
       defensePowerComponents: defenderPower.components,
       shieldPower: shield.total,
       shieldComponents: shield.components,
       totalDefensePower,
-      result: attackPower >= totalDefensePower ? 'hit' : 'miss',
+      damageCheckCount: result === 'hit' ? attackerCritical.total : 0,
+      result,
     },
   }
 }
@@ -358,22 +386,31 @@ function resolvePiecePower(
     }
   }
 
+  const modifierResolution = resolveCombatPieceModifiers(
+    currentState,
+    piece.pieceId,
+  )
+
+  if (!modifierResolution.ok) {
+    return modifierResolution
+  }
+
+  if (modifierResolution.modifiers.powerModifier < 0) {
+    return {
+      ok: false,
+      code: 'invalid_action',
+      message: `Combat modifier provider resolved a negative power modifier for piece ${piece.pieceId}, which is outside the current bounded combat model.`,
+    }
+  }
+
   const components: BattleCombatPowerComponentState[] = [
     {
       source: baseSource,
       pieceId: piece.pieceId,
       amount: stats.stats.power,
     },
+    ...modifierResolution.modifiers.powerComponents,
   ]
-  const modifier = resolveSupportedPowerModifier(currentState, piece)
-
-  if (modifier > 0) {
-    components.push({
-      source: 'piece_power_modifier',
-      pieceId: piece.pieceId,
-      amount: modifier,
-    })
-  }
 
   return {
     ok: true,
@@ -382,17 +419,52 @@ function resolvePiecePower(
   }
 }
 
-function resolveSupportedPowerModifier(
+function resolvePieceCritical(
   currentState: GameState,
   piece: GamePieceState,
-): number {
-  const pieceState = resolveGamePieceStatusState(currentState, piece.pieceId)
-  const runtimeModifier = pieceState.powerModifier ?? 0
-  const personaRideModifier = pieceState.flags.includes(PERSONA_RIDE_POWER_FLAG)
-    ? PERSONA_RIDE_POWER_AMOUNT
-    : 0
+): PieceCriticalResult {
+  const stats = resolveGamePieceCardStats(currentState, piece)
 
-  return runtimeModifier + personaRideModifier
+  if (!stats.ok) {
+    return {
+      ok: false,
+      code: 'invalid_action_reference',
+      message: stats.issue.message,
+    }
+  }
+
+  const modifierResolution = resolveCombatPieceModifiers(
+    currentState,
+    piece.pieceId,
+  )
+
+  if (!modifierResolution.ok) {
+    return modifierResolution
+  }
+
+  const components: BattleCombatCriticalComponentState[] = [
+    {
+      source: 'attacker_base_critical',
+      pieceId: piece.pieceId,
+      amount: stats.stats.critical,
+    },
+    ...modifierResolution.modifiers.criticalComponents,
+  ]
+  const total = components.reduce((sum, component) => sum + component.amount, 0)
+
+  if (total < 1) {
+    return {
+      ok: false,
+      code: 'invalid_action',
+      message: `Combat modifier provider resolved effective critical ${total} for piece ${piece.pieceId}; the current damage-check model requires critical to be at least 1.`,
+    }
+  }
+
+  return {
+    ok: true,
+    total,
+    components,
+  }
 }
 
 function resolveDefenderPiece(

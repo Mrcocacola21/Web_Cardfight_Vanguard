@@ -204,6 +204,37 @@ function makePendingRequest(): GameChoiceRequest {
   }
 }
 
+function replaceZoneOccupants(
+  state: GameState,
+  zoneId: ZoneId,
+  pieceIds: readonly PieceId[],
+): GameState {
+  const nextZones = state.zones.map((zone) =>
+    zone.zoneId === zoneId
+      ? {
+          ...zone,
+          occupants: pieceIds.map((pieceId) => ({ pieceId })),
+        }
+      : zone,
+  )
+  const locatedPieceIds = new Set(
+    nextZones
+      .flatMap((zone) => zone.occupants)
+      .map((occupant) => occupant.pieceId as string),
+  )
+
+  return {
+    ...state,
+    zones: nextZones,
+    pieces: state.pieces.filter((piece) =>
+      locatedPieceIds.has(piece.pieceId as string),
+    ),
+    pieceStates: state.pieceStates.filter((pieceState) =>
+      locatedPieceIds.has(pieceState.pieceId as string),
+    ),
+  }
+}
+
 function expectApplied(result: TransitionResult) {
   expect(isAppliedTransitionResult(result)).toBe(true)
 
@@ -372,6 +403,47 @@ describe('turn structure enforcement', () => {
 
     expect(result.code).toBe('invalid_action')
     expect(result.message).toContain('to draw, not battle')
+  })
+
+  it('turns automatic draw-phase deck exhaustion into deck-out loss', () => {
+    const state = replaceZoneOccupants(
+      makeTurnState({ phase: 'stand' as PhaseId }),
+      ZONE_P1_DECK,
+      [],
+    )
+    const result = expectApplied(
+      advancePhase(state, 'draw', 'action-advance-empty-draw'),
+    )
+
+    expect(result.nextState.status).toBe('completed')
+    expect(result.nextState.turn.phase).toBe('draw')
+    expect(result.nextState.players).toContainEqual(
+      expect.objectContaining({
+        playerId: PLAYER_1,
+        status: 'defeated',
+      }),
+    )
+    expect(result.nextState.pendingRequests).toEqual([])
+    expect(result.events.map((event) => event.type)).toEqual([
+      'turn.phase_advanced',
+      'cards.deck_out',
+      'player.defeated',
+      'match.ended',
+    ])
+    expect(result.events[1]).toMatchObject({
+      type: 'cards.deck_out',
+      playerId: PLAYER_1,
+      fromZoneId: ZONE_P1_DECK,
+      requiredCount: 1,
+      availableCount: 0,
+      reason: 'draw',
+    })
+    expect(result.events[3]).toMatchObject({
+      type: 'match.ended',
+      reason: 'deck_out',
+      loserPlayerId: PLAYER_1,
+      winnerPlayerId: PLAYER_2,
+    })
   })
 
   it('lets the current turn player end a phase but rejects the wrong player', () => {

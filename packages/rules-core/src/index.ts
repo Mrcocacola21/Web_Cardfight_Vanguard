@@ -31,6 +31,11 @@ export {
   VANGUARD_DAMAGE_DEFEAT_THRESHOLD,
   resolvePlayerDamageState,
 } from './damage'
+export { resolveCombatPieceModifiers } from './combat'
+export type {
+  CombatPieceModifierResolution,
+  CombatPieceModifierSnapshot,
+} from './combat'
 export {
   FACE_DOWN_DAMAGE_FLAG,
   effectDefinitionHasResourceOperations,
@@ -371,6 +376,8 @@ export type {
   MatchConcedeAction,
   MatchReadyAction,
   MatchStartAction,
+  MatchTimeoutAction,
+  MatchTimeoutReason,
   MovePieceAction,
   PlayCardAction,
   PlayerActionActor,
@@ -406,6 +413,7 @@ export type {
   CardCalledEvent,
   CardEvent,
   CardPlayedEvent,
+  CardsDeckOutEvent,
   CardsDrawnEvent,
   CombatResolvedEvent,
   CardRodeEvent,
@@ -462,6 +470,7 @@ export type {
   StepAdvancedEvent,
   SystemEventOrigin,
   SystemEventSource,
+  TimeoutReason,
   TriggerCheckKind,
   TriggerEvent,
   TriggerEventType,
@@ -516,12 +525,15 @@ export type {
   SelectionChoiceRequestType,
   SelectionChoiceResponse,
   TargetChosenResponse,
+  TriggerChoiceRequest,
+  TriggerChoiceResponse,
   ZoneChoiceOption,
   ZoneChosenResponse,
 } from './requests'
 export type {
   BattleCheckKind,
   BattleCheckState,
+  BattleCombatCriticalComponentState,
   BattleCombatPowerComponentState,
   BattleCombatResult,
   BattleCombatState,

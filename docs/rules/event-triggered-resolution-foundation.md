@@ -69,7 +69,7 @@ Persona Ride:
 - the `card.ride` after window is related to that event;
 - the resolver finds the rode piece's `persona-ride` keyword;
 - keyword mechanics maps it to `effect:keyword:persona-ride.on-ride`;
-- the effect resolves automatically, draws one card, applies the persona ride power flag, and emits `effect.resolved`;
+- the effect resolves automatically, draws one card, materializes Persona Ride power with a marker flag, and emits `effect.resolved`;
 - the emitted `cards.drawn` event can schedule the core draw finalizer as a nested queue item.
 
 Check finalizer:

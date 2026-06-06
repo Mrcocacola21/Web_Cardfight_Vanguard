@@ -34,6 +34,11 @@ export type AutomaticFlowScope =
   | 'resolution'
   | (string & {})
 
+export type MatchTimeoutReason =
+  | 'request_timeout'
+  | 'turn_timeout'
+  | (string & {})
+
 export type PlayerGameActionType =
   | 'match.ready'
   | 'match.concede'
@@ -49,6 +54,7 @@ export type PlayerGameActionType =
 
 export type SystemGameActionType =
   | 'match.start'
+  | 'match.timeout'
   | 'system.begin_mulligan'
   | 'system.drive_check'
   | 'system.resolve_combat'
@@ -84,6 +90,11 @@ export type MatchReadyAction = PlayerGameActionBase<'match.ready'>
 export type MatchConcedeAction = PlayerGameActionBase<'match.concede'>
 
 export type MatchStartAction = SystemGameActionBase<'match.start'>
+
+export interface MatchTimeoutAction extends SystemGameActionBase<'match.timeout'> {
+  readonly playerId: PlayerId
+  readonly reason: MatchTimeoutReason
+}
 
 export interface BeginMulliganAction extends SystemGameActionBase<'system.begin_mulligan'> {
   readonly playerId: PlayerId
@@ -200,6 +211,7 @@ export type MatchAction =
   | MatchReadyAction
   | MatchConcedeAction
   | MatchStartAction
+  | MatchTimeoutAction
   | BeginMulliganAction
 
 export type TurnFlowAction =
@@ -238,6 +250,7 @@ export type PlayerGameAction =
 
 export type SystemGameAction =
   | MatchStartAction
+  | MatchTimeoutAction
   | BeginMulliganAction
   | DriveCheckAction
   | ResolveCombatAction
