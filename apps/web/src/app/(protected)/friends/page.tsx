@@ -1,6 +1,7 @@
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { PageContainer } from '@/components/layout'
-import { FriendsDashboardView } from '@/components/social/friends-dashboard-view'
+import { FriendsDashboardRealtimeClient } from '@/components/social/friends-dashboard-realtime-client'
+import { createSocialFriendsDashboardSnapshot } from '@/features/social/realtime/friends-dashboard-realtime'
 import { getFriendsDashboardPageState } from '@/features/social/server/friends-dashboard-read'
 
 export default async function FriendsPage() {
@@ -41,11 +42,11 @@ export default async function FriendsPage() {
   }
 
   return (
-    <FriendsDashboardView
-      viewerDisplayName={state.viewerDisplayName}
-      friends={state.friends}
-      incomingRequests={state.incomingRequests}
-      outgoingRequests={state.outgoingRequests}
+    <FriendsDashboardRealtimeClient
+      initialSnapshot={createSocialFriendsDashboardSnapshot(
+        state,
+        new Date().toISOString(),
+      )}
     />
   )
 }

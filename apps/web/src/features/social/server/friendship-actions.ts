@@ -7,10 +7,7 @@ import { getCurrentAuthState } from '@/features/auth/server/auth-session'
 import { removeFriendUseCase } from '@/features/social/application/friendship-use-cases'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
-import {
-  initialFriendRemovalFormState,
-  type FriendRemovalFormState,
-} from './friend-removal-form-state'
+import type { FriendRemovalFormState } from './friend-removal-form-state'
 
 export async function removeFriendAction(
   _previousState: FriendRemovalFormState,
@@ -121,5 +118,3 @@ function mapFriendRemovalErrorToFormState(
       }
   }
 }
-
-export { initialFriendRemovalFormState }

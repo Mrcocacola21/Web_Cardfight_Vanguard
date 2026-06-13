@@ -5,6 +5,7 @@ import {
   LOCAL_MATCH_PLAYER_ONE_ID,
   createLocalPrototypeMatchRoom,
 } from '@/features/matches/play/local-match-room'
+import { buildMatchBoardProjection } from '@/features/matches/play/zone-projection'
 
 import { MatchBoard } from './match-board'
 
@@ -13,13 +14,19 @@ describe('MatchBoard', () => {
     cleanup()
   })
 
-  it('renders current and opponent board sides from the room engine state', () => {
+  it('renders current and opponent board sides from a projected board state', () => {
     const room = createLocalPrototypeMatchRoom('match-board')
+    const projection = buildMatchBoardProjection(
+      room.engineState,
+      LOCAL_MATCH_PLAYER_ONE_ID,
+    )
 
     render(
       <MatchBoard
-        engineState={room.engineState}
-        perspectivePlayerId={LOCAL_MATCH_PLAYER_ONE_ID}
+        projection={projection}
+        turn={room.engineState.turn}
+        zoneCount={room.engineState.zones.length}
+        pieceCount={room.engineState.pieces.length}
         resolvePlayerLabel={(playerId) =>
           playerId === LOCAL_MATCH_PLAYER_ONE_ID
             ? 'Aichi Sendou'
@@ -62,11 +69,17 @@ describe('MatchBoard', () => {
 
   it('renders all main zone contents, empty areas, hidden private cards, and piece flags', () => {
     const room = createLocalPrototypeMatchRoom('match-board-contents')
+    const projection = buildMatchBoardProjection(
+      room.engineState,
+      LOCAL_MATCH_PLAYER_ONE_ID,
+    )
 
     render(
       <MatchBoard
-        engineState={room.engineState}
-        perspectivePlayerId={LOCAL_MATCH_PLAYER_ONE_ID}
+        projection={projection}
+        turn={room.engineState.turn}
+        zoneCount={room.engineState.zones.length}
+        pieceCount={room.engineState.pieces.length}
       />,
     )
 

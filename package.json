@@ -32,6 +32,7 @@
     "test:unit": "corepack pnpm --filter @web-vg/db --filter @web-vg/shared --filter @web-vg/catalog --filter @web-vg/decks --filter @web-vg/deck-validation --filter @web-vg/importer --filter @web-vg/legality --filter @web-vg/rules-core --filter @web-vg/match-session --filter @web-vg/social -r run test",
     "test:web": "corepack pnpm --filter @web-vg/web run test",
     "test:e2e": "corepack pnpm exec playwright test",
+    "test:e2e:local": "node apps/web/scripts/test-e2e-local.mjs",
     "typecheck": "corepack pnpm -r --if-present run typecheck",
     "prepare": "husky"
   },

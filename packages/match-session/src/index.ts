@@ -72,6 +72,23 @@ export type {
   SerializableMatchSessionDocument,
 } from './session-persistence'
 export {
+  createInMemoryPersistedMatchSessionStorage,
+  createPersistedMatchSessionAdapter,
+  mapMatchRoomStatusToPersistedRoomStatus,
+} from './persisted-session-adapter'
+export type {
+  LoadedPersistedMatchSession,
+  PersistedAcceptedRoomTransition,
+  PersistedMatchRoomCommandPersistence,
+  PersistedMatchSessionAdapter,
+  PersistedMatchSessionIssue,
+  PersistedMatchSessionIssueCode,
+  PersistedMatchSessionResult,
+  PersistedMatchSessionStorage,
+  PersistedMatchSessionStorageRecord,
+  RestoredAuthoritativeMatchRoom,
+} from './persisted-session-adapter'
+export {
   MATCH_REALTIME_TRANSPORT_BASELINE,
   createRealtimeParticipantSnapshot,
   createRealtimeProjectedStatePushes,
@@ -96,6 +113,22 @@ export type {
   RealtimeTimeoutResolutionResult,
   RealtimeTransportBaseline,
 } from './realtime-runtime'
+export {
+  MATCH_SERVER_ROUTE_REALTIME_TRANSPORT_SHAPE,
+  createServerRouteRealtimeTransport,
+} from './server-route-transport'
+export type {
+  ServerRouteRealtimeAcceptedCommandResponse,
+  ServerRouteRealtimeBlockedCommandResponse,
+  ServerRouteRealtimeCommandRequest,
+  ServerRouteRealtimeCommandResponse,
+  ServerRouteRealtimeInvalidCommandResponse,
+  ServerRouteRealtimeSnapshotRequest,
+  ServerRouteRealtimeSnapshotResponse,
+  ServerRouteRealtimeTransport,
+  ServerRouteRealtimeTransportIssueCode,
+  ServerRouteRealtimeTransportShape,
+} from './server-route-transport'
 export {
   MATCH_ROOM_PREMIUM_ENGINE_ADAPTER_ID,
   MATCH_ROOM_STANDARD_ENGINE_ADAPTER_ID,

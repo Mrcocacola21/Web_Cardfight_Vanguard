@@ -9,6 +9,7 @@
     "./repositories/catalog": "./src/repositories/catalog/index.ts",
     "./repositories/collections": "./src/repositories/collections/index.ts",
     "./repositories/decks": "./src/repositories/decks/index.ts",
+    "./repositories/gameplay": "./src/repositories/gameplay/index.ts",
     "./repositories/importer": "./src/repositories/importer/index.ts",
     "./repositories/matches": "./src/repositories/matches/index.ts",
     "./repositories/profiles": "./src/repositories/profiles/index.ts",
@@ -25,6 +26,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@web-vg/match-session": "workspace:*",
     "@supabase/supabase-js": "^2.102.1",
     "pg": "^8.20.0"
   }

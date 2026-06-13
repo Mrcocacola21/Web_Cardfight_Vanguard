@@ -11,7 +11,7 @@ port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in these schemas will get API
 # endpoints. The local runtime needs the bounded-context schemas that back the
 # importer pipeline, published catalog reads, and user-owned application data.
-schemas = ["public", "graphql_public", "catalog", "importer", "legality", "user_data", "social"]
+schemas = ["public", "graphql_public", "catalog", "importer", "legality", "user_data", "social", "gameplay"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size

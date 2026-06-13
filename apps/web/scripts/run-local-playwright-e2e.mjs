@@ -43,7 +43,9 @@ function runCorepack(corepackArgs, fallbackMessage, env = process.env) {
   }
 
   if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || fallbackMessage)
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n')
+
+    throw new Error(output || fallbackMessage)
   }
 
   return result.stdout
@@ -61,7 +63,7 @@ function assert(value, message) {
 }
 
 export function runLocalPlaywrightE2E({ label, specPath }) {
-  console.log(`Preparing local Supabase services for ${label} e2e smoke...`)
+  console.log(`Preparing local Supabase services for ${label} e2e...`)
 
   runCorepack(
     ['pnpm', 'dev:hard-reset'],
@@ -74,7 +76,10 @@ export function runLocalPlaywrightE2E({ label, specPath }) {
   )
 
   const apiUrl = parseStatusEnv(statusOutput, 'API_URL')
-  const anonKey = parseStatusEnv(statusOutput, 'ANON_KEY')
+  const anonKey =
+    parseStatusEnv(statusOutput, 'ANON_KEY') ??
+    parseStatusEnv(statusOutput, 'PUBLISHABLE_KEY')
+  const serviceRoleKey = parseStatusEnv(statusOutput, 'SERVICE_ROLE_KEY')
 
   assert(
     apiUrl,
@@ -82,7 +87,11 @@ export function runLocalPlaywrightE2E({ label, specPath }) {
   )
   assert(
     anonKey,
-    'Local Supabase auth/api services are not running. `supabase status -o env` did not expose ANON_KEY.',
+    'Local Supabase auth/api services are not running. `supabase status -o env` did not expose ANON_KEY or PUBLISHABLE_KEY.',
+  )
+  assert(
+    serviceRoleKey,
+    'Local Supabase auth/api services are not running. `supabase status -o env` did not expose SERVICE_ROLE_KEY.',
   )
 
   const env = {
@@ -93,11 +102,18 @@ export function runLocalPlaywrightE2E({ label, specPath }) {
     NEXT_PUBLIC_SUPABASE_URL: apiUrl,
     PLAYWRIGHT_BASE_URL: localBaseUrl,
     PLAYWRIGHT_USE_LOCAL_SUPABASE: '1',
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
   }
 
   const output = runCorepack(
-    ['pnpm', 'exec', 'playwright', 'test', specPath],
-    `${label} Playwright smoke tests failed.\n`,
+    [
+      'pnpm',
+      'exec',
+      'playwright',
+      'test',
+      ...(specPath === undefined ? [] : [specPath]),
+    ],
+    `${label} Playwright e2e tests failed.\n`,
     env,
   )
 

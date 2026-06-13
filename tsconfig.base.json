@@ -31,6 +31,9 @@
       "@web-vg/db/repositories/decks": [
         "packages/db/src/repositories/decks/index.ts"
       ],
+      "@web-vg/db/repositories/gameplay": [
+        "packages/db/src/repositories/gameplay/index.ts"
+      ],
       "@web-vg/db/repositories/importer": [
         "packages/db/src/repositories/importer/index.ts"
       ],

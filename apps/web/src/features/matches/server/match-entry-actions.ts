@@ -9,14 +9,8 @@ import { createMatchHistoryRepository } from '@/features/matches/infrastructure/
 import { resolveUserSearchRouteQuery } from '@/features/profiles/user-search-query'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
-import {
-  initialManualMatchEntryFormState,
-  type ManualMatchEntryFormState,
-} from './manual-match-entry-form-state'
-import {
-  initialMatchOpponentSearchFormState,
-  type MatchOpponentSearchFormState,
-} from './match-opponent-search-form-state'
+import type { ManualMatchEntryFormState } from './manual-match-entry-form-state'
+import type { MatchOpponentSearchFormState } from './match-opponent-search-form-state'
 import { validateManualMatchEntryDraft } from './manual-match-entry-validation'
 
 const manualMatchOpponentSearchLimit = 8
@@ -224,5 +218,3 @@ function mapCreateMatchErrorToFormState(
       }
   }
 }
-
-export { initialManualMatchEntryFormState, initialMatchOpponentSearchFormState }

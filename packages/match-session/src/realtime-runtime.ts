@@ -36,10 +36,10 @@ import {
 } from './session-persistence'
 
 export type RealtimeTransportBaseline =
-  'websocket_commands_with_projected_snapshots'
+  'server_route_commands_with_projected_snapshots'
 
 export const MATCH_REALTIME_TRANSPORT_BASELINE =
-  'websocket_commands_with_projected_snapshots' satisfies RealtimeTransportBaseline
+  'server_route_commands_with_projected_snapshots' satisfies RealtimeTransportBaseline
 
 export type RealtimeClientCommandId = Brand<string, 'RealtimeClientCommandId'>
 

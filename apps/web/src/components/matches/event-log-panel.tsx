@@ -2,7 +2,7 @@ import { ScrollText } from 'lucide-react'
 
 import type {
   LocalMatchEventLogCategory,
-  LocalMatchEventLogEntry,
+  ProjectedMatchEventLogEntry,
 } from '@/features/matches/play/event-log'
 
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/card'
 
 interface EventLogPanelProps {
-  readonly entries: readonly LocalMatchEventLogEntry[]
+  readonly entries: readonly ProjectedMatchEventLogEntry[]
 }
 
 export function EventLogPanel({ entries }: EventLogPanelProps) {

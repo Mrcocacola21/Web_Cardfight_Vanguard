@@ -108,7 +108,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['playwright.config.ts', 'tests/e2e/*.ts'],
+    files: ['playwright.config.ts', 'tests/e2e/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -227,7 +227,6 @@ export default defineConfig([
         '@web-vg/decks',
         '@web-vg/importer',
         '@web-vg/legality',
-        '@web-vg/match-session',
         '@web-vg/rules-core',
         '@web-vg/social',
         '@web-vg/ui',
@@ -244,7 +243,6 @@ export default defineConfig([
         '@web-vg/decks',
         '@web-vg/importer',
         '@web-vg/legality',
-        '@web-vg/match-session',
         '@web-vg/rules-core',
         '@web-vg/social',
         '@web-vg/ui',
@@ -416,7 +414,6 @@ export default defineConfig([
         '@web-vg/decks',
         '@web-vg/importer',
         '@web-vg/legality',
-        '@web-vg/match-session',
         '@web-vg/rules-core',
         '@web-vg/social',
         '@web-vg/ui',

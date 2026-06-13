@@ -1,4 +1,4 @@
-import type { GameEvent, PlayerId } from '@web-vg/rules-core'
+import type { GameEvent, PlayerId, VisibleGameEvent } from '@web-vg/rules-core'
 import type { AcceptedMatchRoomCommandResult } from '@web-vg/match-session'
 
 export type LocalMatchEventLogCategory =
@@ -44,7 +44,15 @@ export interface LocalMatchEventLogDetail {
   readonly value: string
 }
 
+export type ProjectedMatchEventLogEntry = LocalMatchEventLogEntry
+
 export interface BuildLocalMatchEventLogOptions {
+  readonly resolvePlayerLabel?: (playerId: PlayerId) => string
+}
+
+export interface BuildProjectedMatchEventLogOptions {
+  readonly roomRevision: number
+  readonly engineRevision: number
   readonly resolvePlayerLabel?: (playerId: PlayerId) => string
 }
 
@@ -92,7 +100,44 @@ export function buildLocalMatchEventLogEntries(
   })
 }
 
-function getEventCategory(event: GameEvent): LocalMatchEventLogCategory {
+export function buildProjectedMatchEventLogEntries(
+  events: readonly VisibleGameEvent[],
+  options: BuildProjectedMatchEventLogOptions,
+): readonly ProjectedMatchEventLogEntry[] {
+  return events.map((event, index) => {
+    const category = getEventCategory(event)
+
+    return {
+      recordId: event.eventId,
+      ordinal: index + 1,
+      roomRevision: options.roomRevision,
+      engineRevision: options.engineRevision,
+      transitionId: 'projected-session-history',
+      eventId: event.eventId,
+      sequence: event.sequence,
+      type: event.type,
+      category,
+      source: formatVisibleEventOrigin(event, options),
+      summary: formatVisibleEventSummary(event, options),
+      details: [
+        { label: 'Visibility', value: event.visibility },
+        ...event.details,
+        ...(event.redactedFields.length === 0
+          ? []
+          : [
+              {
+                label: 'Redacted',
+                value: event.redactedFields.join(', '),
+              },
+            ]),
+      ],
+    }
+  })
+}
+
+function getEventCategory(event: {
+  readonly type: GameEvent['type']
+}): LocalMatchEventLogCategory {
   if (event.type.startsWith('match.')) {
     return 'match'
   }
@@ -131,6 +176,64 @@ function getEventCategory(event: GameEvent): LocalMatchEventLogCategory {
   }
 
   return 'other'
+}
+
+function formatVisibleEventSummary(
+  event: VisibleGameEvent,
+  options: BuildProjectedMatchEventLogOptions,
+): string {
+  switch (event.type) {
+    case 'cards.drawn':
+      return `${formatVisibleEventDetailPlayer(event, options)} drew ${findVisibleEventDetail(event, 'Cards') ?? 'unknown'} cards.`
+    case 'cards.deck_out':
+      return `${formatVisibleEventDetailPlayer(event, options)} decked out while resolving ${findVisibleEventDetail(event, 'Reason') ?? 'unknown'}.`
+    case 'zone.shuffled':
+      return `${findVisibleEventDetail(event, 'Zone') ?? 'A zone'} shuffled ${findVisibleEventDetail(event, 'Cards') ?? 'unknown'} cards.`
+    case 'mulligan.completed':
+      return `${formatVisibleEventDetailPlayer(event, options)} completed mulligan.`
+    case 'battle.drive_checked':
+    case 'battle.damage_checked':
+      return `${formatVisibleEventDetailPlayer(event, options)} performed a ${event.type === 'battle.drive_checked' ? 'drive' : 'damage'} check.`
+    case 'trigger.revealed':
+      return `${formatVisibleEventDetailPlayer(event, options)} revealed a ${findVisibleEventDetail(event, 'Trigger') ?? 'unknown'} trigger.`
+    default:
+      return `${formatEventTypeLabel(event.type)} event.`
+  }
+}
+
+function formatVisibleEventOrigin(
+  event: VisibleGameEvent,
+  options: BuildProjectedMatchEventLogOptions,
+): string {
+  return event.origin.kind === 'player'
+    ? formatPlayer(event.origin.playerId, options)
+    : event.origin.system
+}
+
+function formatVisibleEventDetailPlayer(
+  event: VisibleGameEvent,
+  options: BuildProjectedMatchEventLogOptions,
+): string {
+  const playerId = findVisibleEventDetail(event, 'Player')
+
+  return playerId === undefined
+    ? 'Unknown player'
+    : formatPlayer(playerId as PlayerId, options)
+}
+
+function findVisibleEventDetail(
+  event: VisibleGameEvent,
+  label: string,
+): string | undefined {
+  return event.details.find((detail) => detail.label === label)?.value
+}
+
+function formatEventTypeLabel(type: string): string {
+  return type
+    .split(/[_:.]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function formatEventSummary(

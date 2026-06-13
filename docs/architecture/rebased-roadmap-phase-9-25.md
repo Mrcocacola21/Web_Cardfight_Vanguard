@@ -1,6 +1,7 @@
 # Rebased Roadmap: Phase 9-25
 
-Status: repo-aligned execution plan after Phase 8 and the stabilization follow-up
+Status: repo-aligned execution plan after Phase 8 and the stabilization
+follow-up, updated with the current Phase 20 entry baseline.
 
 Execution assumptions:
 
@@ -12,6 +13,30 @@ Execution assumptions:
 - Deck composition remains canonical-card based.
 - Collection remains printing-based.
 - Catalog remains published source of truth.
+
+## Current Branch Status
+
+This roadmap keeps the historical phase order, but the current branch is
+materially ahead of the original post-Phase-8 baseline.
+
+Phases 9-19 are materially complete as bounded foundation. Catalog, deck,
+social, collection, and match-history surfaces exist; `rules-core` is
+executable for the supported subset, `match-session` owns authoritative room
+truth, and a local playable prototype exists.
+
+Late pre-realtime work also moved several Phase 20 prerequisites out of the
+"missing foundation" bucket: hidden-information projection, session
+serialization/restore, accepted-only history, timer/timeout state,
+transport-facing command contracts, DB-backed persisted session storage,
+gameplay room RLS, authenticated server-route transport, projected persisted
+room rendering, and a live `test:db` checkpoint are now present.
+
+The Phase 20 posture is therefore **GO WITH CONDITIONS**, not "done". A bounded
+20.1 match-room sync loop now exists through authenticated polling and projected
+snapshots, and 20.2 adds bounded live `/friends` dashboard refresh. The
+remaining conditions are the broader realtime product path: live fanout,
+reconnect/recovery, presence, optimistic reconciliation, production multiplayer
+UX, broader scaling hardening, and later format/card coverage.
 
 ## PRE-PHASE 9 STABILIZATION (Closed)
 
@@ -544,17 +569,143 @@ debug screen.
 
 Signature: protect the basic match interaction surface before realtime work.
 
+## LATE PHASE 20 FOUNDATION WORK (Closed as Bounded Foundation)
+
+This block records work that landed after the original pre-Phase-20 readiness
+line and changes what Phase 20 starts from. It is foundation, not completed
+multiplayer.
+
+- effect runtime hardening and trigger runtime completion
+- legality hardening around action validation and request handling
+- battle lifecycle cleanup and combat modifier provider support
+- engine lookup/performance hardening for repeated room/runtime operations
+- deck-out loss and damage/timeout defeat semantics
+- timer/clock contract with session-owned deadlines and timeout aftermath
+- trigger choice interrupt/resume through the pending request model
+- session/runtime prep for realtime:
+  - participant command wrapper
+  - stale revision rejection
+  - system-action exclusion from client commands
+  - projection-driven update contract
+- hidden-information projection and projected multiplayer client-state
+  foundation
+- persisted session adapter and DB-backed persisted match-session storage
+- gameplay room auth/RLS policy hardening for server-owned canonical tables
+- transport shape work around server-route commands with projected snapshots
+- `/matches/play/[roomId]` moved to a persisted, authenticated,
+  participant-projected room path
+- live DB checkpoint through `corepack pnpm test:db`
+
+Impact: Phase 20 no longer starts from only a local in-memory prototype. It
+starts from durable authoritative room truth and participant-safe server route
+boundaries, while still needing realtime fanout and recovery.
+
 ## PHASE 20 - REALTIME
+
+Status: **started; GO WITH CONDITIONS**.
+
+Phase 20 started with entry hardening before broad sync/fanout. The current
+branch has closed the bounded 20.0.x foundation steps, added the first bounded
+20.1 match-room sync loop, and added bounded 20.2 social dashboard refresh
+below. The later 20.x items remain the broader realtime implementation track.
+
+### 20.0.1. DB-backed persisted match-session storage
+
+Status: closed as foundation.
+
+Signature: stop treating authoritative room truth as only in-memory state.
+
+- `PersistedMatchSessionStorage` has a DB-backed implementation over
+  `gameplay.match_rooms`, `room_snapshots`, `room_events`, and
+  `pending_choices`
+- accepted transitions persist atomically as snapshot + accepted events +
+  pending-choice replacement
+- load/restore works for active and completed rooms without persisting
+  participant projections as canonical truth
+
+### 20.0.2. Authenticated server route + realtime transport
+
+Status: closed as foundation.
+
+Signature: commands enter through a server-owned participant route, not through
+client-owned canonical room state.
+
+- `GET`/`POST /api/matches/rooms/[roomId]/realtime` authenticates the caller
+  and resolves persisted room membership
+- app-level code uses `createServerRouteRealtimeTransport`
+- responses expose projected participant-safe updates, not raw `engineState`
+
+### 20.0.3. Projected persisted `/matches/play/[roomId]`
+
+Status: closed as foundation.
+
+Signature: the multiplayer play page reads persisted room truth and renders a
+participant projection.
+
+- `/matches/play/[roomId]` no longer uses local in-memory room creation as its
+  multiplayer backing truth
+- the page resolves authenticated participant membership before rendering
+- `ProjectedMatchRoomView` receives participant-safe client state
+- `/matches/play/local` remains the explicit local prototype path
+
+### 20.0.4. Live DB checkpoint
+
+Status: closed as checkpoint.
+
+Signature: Phase 20 DB confidence is based on a live local Supabase run, not
+only code-level confidence.
+
+- `corepack pnpm test:db` reaches real assertions
+- migrations, repositories, gameplay persistence, and RLS posture are exercised
+  against the local DB harness
+- this does not prove websocket fanout, reconnect, or browser multiplayer UX
+
+### 20.0.5. README and roadmap rebase
+
+Status: current documentation checkpoint.
+
+Signature: top-level docs should match the branch before realtime work
+continues.
+
+- README and roadmap distinguish completed foundation, bounded Phase 20 entry
+  work, and remaining realtime implementation
+- historical checkpoint docs remain as snapshots unless they are directly
+  misleading for current entry work
 
 ### 20.1. Add realtime sync for match rooms
 
-Signature: layer synchronization on top of an already coherent local match
-model.
+Status: started and working in bounded form.
+
+Signature: layer live synchronization on top of the persisted, projected,
+server-owned match room path.
+
+- chosen first baseline: authenticated short-interval polling against the
+  existing server route transport
+- `/matches/play/[roomId]` renders a persisted projected sync client, not a
+  static projected snapshot
+- clients submit participant commands with `expectedRoomRevision`
+- submitter applies the returned projected update; other participants observe
+  the same authoritative room revision through their own projected snapshots
+- current update strategy is full projected snapshot replacement, not deltas
+- websocket/Supabase fanout, reconnect replay, optimistic reconciliation, and
+  the complete gameplay command catalog remain later work
 
 ### 20.2. Add realtime updates for social state where it improves UX
 
+Status: started and useful in bounded form.
+
 Signature: limit realtime scope to meaningful state changes rather than turning
 every user surface into a subscription problem.
+
+- chosen first scope: owner-only `/friends` dashboard state
+- chosen delivery: authenticated `GET /api/social/friends/realtime` with full
+  owner-safe snapshot replacement
+- live now: active friendships, incoming pending requests, outgoing pending
+  requests
+- not live now: user search, public profile pages, privacy editor state,
+  presence, notifications, or raw social table subscriptions
+- gameplay room realtime and social dashboard realtime remain separate routes
+  and models
 
 ### 20.3. Add reconnect and recovery behavior
 

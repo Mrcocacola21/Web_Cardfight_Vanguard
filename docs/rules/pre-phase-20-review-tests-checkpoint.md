@@ -2,6 +2,14 @@
 
 Step 0.12 - Pre-Phase 20 review + tests checkpoint
 
+Current status note: this document remains a historical pre-Phase-20
+checkpoint. Later Phase 20 entry work has closed several conditions named here:
+DB-backed persisted session storage, authenticated server-route transport,
+persisted projected `/matches/play/[roomId]`, and a live `test:db` checkpoint
+now exist. The remaining Phase 20 work is realtime fanout,
+reconnect/recovery, optimistic reconciliation, production multiplayer UX, and
+broader scaling hardening.
+
 Checkpoint question:
 
 > Before realtime, does a match already behave like a real game, or is it still only a state machine demo?

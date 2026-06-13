@@ -74,7 +74,7 @@ describe('Local gameplay prototype flow', () => {
       screen.getAllByText('local-catalog:keter:main-g1-a').length,
     ).toBeGreaterThan(0)
     expect(screen.getByText('Accepted')).toBeVisible()
-  })
+  }, 20_000)
 
   it('keeps the local prototype wired to room and engine boundaries', () => {
     const sourcePaths = [

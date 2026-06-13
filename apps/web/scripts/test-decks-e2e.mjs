@@ -3,7 +3,7 @@ import { runLocalPlaywrightE2E } from './run-local-playwright-e2e.mjs'
 function main() {
   runLocalPlaywrightE2E({
     label: 'deck builder',
-    specPath: 'tests/e2e/decks.spec.ts',
+    specPath: 'tests/e2e/decks/deck-builder.spec.ts',
   })
 }
 

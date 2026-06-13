@@ -77,6 +77,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.102.1
         version: 2.102.1
+      '@web-vg/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@web-vg/match-session':
         specifier: workspace:*
         version: link:../../packages/match-session
@@ -138,6 +141,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@web-vg/match-session':
+        specifier: workspace:*
+        version: link:../match-session
       '@supabase/supabase-js':
         specifier: ^2.102.1
         version: 2.102.1

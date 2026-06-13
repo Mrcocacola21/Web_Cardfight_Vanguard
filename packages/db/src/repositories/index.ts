@@ -11,6 +11,7 @@ export {
 } from './catalog'
 export { createCollectionsRepository } from './collections'
 export { createDecksRepository } from './decks'
+export { createDbPersistedMatchSessionStorage } from './gameplay'
 export { createImporterRepository } from './importer'
 export { createMatchesRepository } from './matches'
 export { createProfilesRepository } from './profiles'

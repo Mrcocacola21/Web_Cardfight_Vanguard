@@ -3,7 +3,7 @@ import { runLocalPlaywrightE2E } from './run-local-playwright-e2e.mjs'
 function main() {
   runLocalPlaywrightE2E({
     label: 'auth',
-    specPath: 'tests/e2e/auth.spec.ts',
+    specPath: 'tests/e2e/auth/routing.spec.ts',
   })
 }
 

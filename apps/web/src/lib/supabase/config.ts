@@ -3,6 +3,11 @@ type SupabasePublicEnv = Readonly<{
   publishableKey: string
 }>
 
+type SupabaseServiceRoleEnv = Readonly<{
+  url: string
+  serviceRoleKey: string
+}>
+
 function requireEnv(name: string, value: string | undefined): string {
   const normalizedValue = value?.trim()
 
@@ -24,6 +29,19 @@ export function getSupabasePublicEnv(): SupabasePublicEnv {
     publishableKey: requireEnv(
       'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    ),
+  }
+}
+
+export function getSupabaseServiceRoleEnv(): SupabaseServiceRoleEnv {
+  return {
+    url: requireEnv(
+      'NEXT_PUBLIC_SUPABASE_URL',
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    ),
+    serviceRoleKey: requireEnv(
+      'SUPABASE_SERVICE_ROLE_KEY',
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
     ),
   }
 }

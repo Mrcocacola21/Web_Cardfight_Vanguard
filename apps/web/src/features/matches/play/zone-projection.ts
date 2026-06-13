@@ -4,7 +4,14 @@ import type {
   GameState,
   PieceId,
   PlayerId,
+  VisibleGamePieceState,
+  VisibleGameState,
+  VisiblePieceVisibility,
+  VisiblePlayerState,
+  VisibleZoneContentsVisibility,
+  VisibleZoneState,
 } from '@web-vg/rules-core'
+import { projectGameStateForPlayer } from '@web-vg/rules-core'
 
 export type MatchBoardSideKind = 'current' | 'opponent'
 export type MatchBoardZoneRole =
@@ -21,33 +28,37 @@ export type MatchBoardZoneRole =
   | 'other'
 
 export interface ProjectedMatchBoardPiece {
-  readonly pieceId: PieceId
+  readonly refId: string
+  readonly visibility: VisiblePieceVisibility
+  readonly pieceId?: PieceId
   readonly cardDefinitionId?: GameState['pieces'][number]['cardDefinitionId']
   readonly ownerPlayerId?: PlayerId
   readonly controllerPlayerId?: PlayerId
-  readonly slotId?: GameState['zones'][number]['occupants'][number]['slotId']
+  readonly slotId?: VisibleZoneState['occupants'][number]['slotId']
   readonly position: number
   readonly orientation?: GamePieceOrientation
   readonly flags: readonly GamePieceFlagKey[]
 }
 
 export interface ProjectedMatchBoardZone {
-  readonly zoneId: GameState['zones'][number]['zoneId']
-  readonly kind: GameState['zones'][number]['kind']
+  readonly zoneId: VisibleZoneState['zoneId']
+  readonly kind: VisibleZoneState['kind']
   readonly role: MatchBoardZoneRole
   readonly label: string
   readonly ownerPlayerId?: PlayerId
-  readonly visibility: GameState['zones'][number]['visibility']
-  readonly layout: GameState['zones'][number]['layout']
+  readonly visibility: VisibleZoneState['visibility']
+  readonly contentsVisibility: VisibleZoneContentsVisibility
+  readonly layout: VisibleZoneState['layout']
+  readonly occupantCount: number
   readonly slotIds: readonly NonNullable<
-    GameState['zones'][number]['layout']['slotIds']
+    VisibleZoneState['layout']['slotIds']
   >[number][]
   readonly pieces: readonly ProjectedMatchBoardPiece[]
 }
 
 export interface MatchBoardSideProjection {
   readonly side: MatchBoardSideKind
-  readonly player: GameState['players'][number]
+  readonly player: VisiblePlayerState
   readonly zones: readonly ProjectedMatchBoardZone[]
   readonly centralZones: readonly ProjectedMatchBoardZone[]
   readonly battlefieldZones: readonly ProjectedMatchBoardZone[]
@@ -110,32 +121,50 @@ export function buildMatchBoardProjection(
   state: GameState,
   perspectivePlayerId: PlayerId,
 ): MatchBoardProjection {
-  const currentPlayer =
-    state.players.find((player) => player.playerId === perspectivePlayerId) ??
-    state.players[0]
-  const pieceById = new Map(
-    state.pieces.map((piece) => [piece.pieceId as string, piece] as const),
-  )
-  const pieceStateById = new Map(
-    state.pieceStates.map(
-      (pieceState) => [pieceState.pieceId as string, pieceState] as const,
-    ),
-  )
+  const visibleState = projectGameStateForPlayer(state, perspectivePlayerId)
 
-  if (currentPlayer === undefined) {
+  if (!visibleState.ok) {
     return {
       perspectivePlayerId,
       opponentSides: [],
     }
   }
 
+  return buildMatchBoardProjectionFromVisibleState(
+    visibleState.state,
+    perspectivePlayerId,
+  )
+}
+
+export function buildMatchBoardProjectionFromVisibleState(
+  state: VisibleGameState,
+  perspectivePlayerId?: PlayerId,
+): MatchBoardProjection {
+  const resolvedPerspectivePlayerId =
+    perspectivePlayerId ?? state.viewerPlayerId ?? state.players[0]?.playerId
+  const currentPlayer =
+    state.players.find(
+      (player) => player.playerId === resolvedPerspectivePlayerId,
+    ) ?? state.players[0]
+  const pieceById = new Map(
+    state.pieces.map((piece) => [piece.refId, piece] as const),
+  )
+
+  if (currentPlayer === undefined) {
+    return {
+      perspectivePlayerId:
+        resolvedPerspectivePlayerId ?? ('unknown-player' as PlayerId),
+      opponentSides: [],
+    }
+  }
+
   const sideForPlayer = (
-    player: GameState['players'][number],
+    player: VisiblePlayerState,
     side: MatchBoardSideKind,
   ): MatchBoardSideProjection => {
     const zones = state.zones
       .filter((zone) => zone.ownerPlayerId === player.playerId)
-      .map((zone) => projectZone(zone, pieceById, pieceStateById))
+      .map((zone) => projectZone(zone, pieceById))
       .sort(compareProjectedZones)
     const centralZones = zones.filter((zone) =>
       BATTLEFIELD_ZONE_ROLES.includes(zone.role),
@@ -188,9 +217,8 @@ export function buildMatchBoardProjection(
 }
 
 function projectZone(
-  zone: GameState['zones'][number],
-  pieceById: ReadonlyMap<string, GameState['pieces'][number]>,
-  pieceStateById: ReadonlyMap<string, GameState['pieceStates'][number]>,
+  zone: VisibleZoneState,
+  pieceById: ReadonlyMap<string, VisibleGamePieceState>,
 ): ProjectedMatchBoardZone {
   const role = getZoneRole(zone.kind)
 
@@ -203,14 +231,19 @@ function projectZone(
       ? {}
       : { ownerPlayerId: zone.ownerPlayerId }),
     visibility: zone.visibility,
+    contentsVisibility: zone.contentsVisibility,
     layout: zone.layout,
+    occupantCount: zone.occupantCount,
     slotIds: zone.layout.slotIds ?? [],
-    pieces: zone.occupants.map((occupant, position) => {
-      const piece = pieceById.get(occupant.pieceId as string)
-      const pieceState = pieceStateById.get(occupant.pieceId as string)
+    pieces: zone.occupants.map((occupant) => {
+      const piece = pieceById.get(occupant.refId)
 
       return {
-        pieceId: occupant.pieceId,
+        refId: occupant.refId,
+        visibility: occupant.visibility,
+        ...(occupant.pieceId === undefined
+          ? {}
+          : { pieceId: occupant.pieceId }),
         ...(piece?.cardDefinitionId === undefined
           ? {}
           : { cardDefinitionId: piece.cardDefinitionId }),
@@ -221,19 +254,17 @@ function projectZone(
           ? {}
           : { controllerPlayerId: piece.controllerPlayerId }),
         ...(occupant.slotId === undefined ? {} : { slotId: occupant.slotId }),
-        position,
-        ...(pieceState?.orientation === undefined
+        position: occupant.position,
+        ...(piece?.orientation === undefined
           ? {}
-          : { orientation: pieceState.orientation }),
-        flags: pieceState?.flags ?? [],
+          : { orientation: piece.orientation }),
+        flags: piece?.flags ?? [],
       }
     }),
   }
 }
 
-function getZoneRole(
-  kind: GameState['zones'][number]['kind'],
-): MatchBoardZoneRole {
+function getZoneRole(kind: VisibleZoneState['kind']): MatchBoardZoneRole {
   switch (kind) {
     case 'vanguard_circle':
       return 'vanguard'
@@ -281,7 +312,7 @@ function compareProjectedZones(
 
 function formatZoneRoleLabel(
   role: MatchBoardZoneRole,
-  kind: GameState['zones'][number]['kind'],
+  kind: VisibleZoneState['kind'],
 ): string {
   switch (role) {
     case 'vanguard':

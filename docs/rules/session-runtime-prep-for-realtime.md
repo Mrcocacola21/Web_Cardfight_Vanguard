@@ -10,9 +10,9 @@ The local prototype already used `match-session` as a strong in-memory authority
 
 ## 3. Chosen transport baseline
 
-The chosen baseline is `websocket_commands_with_projected_snapshots`.
+The transport-facing runtime primitive originally targeted bidirectional pushes. The Phase 20 transport decision now uses `server_route_commands_with_projected_snapshots` as the first canonical baseline, with this runtime contract sitting behind the server route.
 
-Clients send commands over a bidirectional realtime transport. The session validates and applies them through the existing room/rules-core authority. After accepted commands, the server pushes full projected snapshots per participant, plus accepted history entry ids for reconciliation. Full projections are intentionally preferred first over fine-grained deltas because they are simpler, hidden-information safe, and reconnect friendly.
+Clients send participant commands to the server/session authority. After accepted commands, the server returns or makes available full projected snapshots per participant, plus accepted history entry ids for reconciliation. Full projections are intentionally preferred first over fine-grained deltas because they are simpler, hidden-information safe, and reconnect friendly.
 
 ## 4. Command contract
 

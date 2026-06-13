@@ -567,7 +567,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_persisted_match_session: {
+        Args: { create_payload?: Json }
+        Returns: {
+          room_id: string
+          persisted_at: string
+          document: Json
+        }[]
+      }
+      persist_accepted_match_session_transition: {
+        Args: { transition_payload?: Json }
+        Returns: {
+          room_id: string
+          persisted_at: string
+          document: Json
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

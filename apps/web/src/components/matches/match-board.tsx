@@ -1,8 +1,8 @@
-import type { GameState, PlayerId } from '@web-vg/rules-core'
+import type { PlayerId, VisibleGameState } from '@web-vg/rules-core'
 
 import { Badge } from '@/components/ui/badge'
 import {
-  buildMatchBoardProjection,
+  type MatchBoardProjection,
   type MatchBoardSideProjection,
   type MatchBoardZoneRole,
   type ProjectedMatchBoardPiece,
@@ -19,17 +19,20 @@ type ZoneVisualMode =
   | 'other'
 
 interface MatchBoardProps {
-  readonly engineState: GameState
-  readonly perspectivePlayerId: PlayerId
+  readonly projection: MatchBoardProjection
+  readonly turn: VisibleGameState['turn']
+  readonly zoneCount: number
+  readonly pieceCount: number
   readonly resolvePlayerLabel?: (playerId: PlayerId) => string
 }
 
 export function MatchBoard({
-  engineState,
-  perspectivePlayerId,
+  projection,
+  turn,
+  zoneCount,
+  pieceCount,
   resolvePlayerLabel,
 }: MatchBoardProps) {
-  const projection = buildMatchBoardProjection(engineState, perspectivePlayerId)
   const currentSide = projection.currentSide
 
   return (
@@ -41,12 +44,12 @@ export function MatchBoard({
         <div>
           <h2 className="text-base font-semibold">Match Board</h2>
           <p className="text-sm text-muted-foreground">
-            Turn {engineState.turn.turnNumber} | {engineState.turn.phase}
-            {engineState.turn.step ? ` / ${engineState.turn.step}` : ''}
+            Turn {turn.turnNumber} | {turn.phase}
+            {turn.step ? ` / ${turn.step}` : ''}
           </p>
         </div>
         <Badge variant="outline">
-          {engineState.zones.length} zones | {engineState.pieces.length} pieces
+          {zoneCount} zones | {pieceCount} pieces
         </Badge>
       </div>
 
@@ -55,7 +58,6 @@ export function MatchBoard({
           <BoardSide
             key={side.player.playerId}
             side={side}
-            perspectivePlayerId={projection.perspectivePlayerId}
             playerLabel={resolveLabel(side.player.playerId, resolvePlayerLabel)}
           />
         ))}
@@ -65,7 +67,6 @@ export function MatchBoard({
         {currentSide ? (
           <BoardSide
             side={currentSide}
-            perspectivePlayerId={projection.perspectivePlayerId}
             playerLabel={resolveLabel(
               currentSide.player.playerId,
               resolvePlayerLabel,
@@ -84,11 +85,9 @@ export function MatchBoard({
 function BoardSide({
   side,
   playerLabel,
-  perspectivePlayerId,
 }: {
   readonly side: MatchBoardSideProjection
   readonly playerLabel: string
-  readonly perspectivePlayerId: PlayerId
 }) {
   const sideLabel =
     side.side === 'current' ? 'Current player side' : 'Opponent side'
@@ -102,7 +101,6 @@ function BoardSide({
       title="Hand"
       ariaLabel={`${sideLabel} hand zones`}
       zones={side.handZones}
-      perspectivePlayerId={perspectivePlayerId}
       gridClassName="grid-cols-1"
     />
   )
@@ -112,14 +110,12 @@ function BoardSide({
         title="Battlefield"
         ariaLabel={`${sideLabel} battlefield zones`}
         zones={side.battlefieldZones}
-        perspectivePlayerId={perspectivePlayerId}
         gridClassName="sm:grid-cols-2"
       />
       <ZoneSection
         title="Support / Resources"
         ariaLabel={`${sideLabel} support zones`}
         zones={supportZones}
-        perspectivePlayerId={perspectivePlayerId}
         gridClassName="sm:grid-cols-2 xl:grid-cols-1"
       />
     </div>
@@ -152,7 +148,6 @@ function BoardSide({
           title="Other Zones"
           ariaLabel={`${sideLabel} other zones`}
           zones={side.otherZones}
-          perspectivePlayerId={perspectivePlayerId}
           gridClassName="sm:grid-cols-2"
         />
       ) : null}
@@ -164,13 +159,11 @@ function ZoneSection({
   title,
   ariaLabel,
   zones,
-  perspectivePlayerId,
   gridClassName,
 }: {
   readonly title: string
   readonly ariaLabel: string
   readonly zones: readonly ProjectedMatchBoardZone[]
-  readonly perspectivePlayerId: PlayerId
   readonly gridClassName: string
 }) {
   if (zones.length === 0) {
@@ -190,7 +183,6 @@ function ZoneSection({
           <BoardZone
             key={zone.zoneId}
             zone={zone}
-            perspectivePlayerId={perspectivePlayerId}
             visualMode={getZoneVisualMode(zone.role)}
           />
         ))}
@@ -201,11 +193,9 @@ function ZoneSection({
 
 function BoardZone({
   zone,
-  perspectivePlayerId,
   visualMode,
 }: {
   readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
   readonly visualMode: ZoneVisualMode
 }) {
   const summaryStyle = isSummaryStyleZone(zone)
@@ -230,24 +220,18 @@ function BoardZone({
           </p>
         </div>
         <Badge variant={summaryStyle ? 'secondary' : 'outline'}>
-          {zone.pieces.length}
+          {zone.occupantCount}
         </Badge>
       </div>
 
       {zone.layout.occupancy === 'slotted' && zone.slotIds.length > 0 ? (
-        <SlottedZoneContents
-          zone={zone}
-          perspectivePlayerId={perspectivePlayerId}
-        />
+        <SlottedZoneContents zone={zone} />
       ) : summaryStyle ? (
-        <SummaryZoneContents
-          zone={zone}
-          perspectivePlayerId={perspectivePlayerId}
-        />
+        <SummaryZoneContents zone={zone} />
       ) : visualMode === 'hand' ? (
-        <PieceGrid zone={zone} perspectivePlayerId={perspectivePlayerId} />
+        <PieceGrid zone={zone} />
       ) : (
-        <PieceStack zone={zone} perspectivePlayerId={perspectivePlayerId} />
+        <PieceStack zone={zone} />
       )}
     </section>
   )
@@ -255,10 +239,8 @@ function BoardZone({
 
 function SlottedZoneContents({
   zone,
-  perspectivePlayerId,
 }: {
   readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
 }) {
   const unassignedPieces = zone.pieces.filter(
     (piece) =>
@@ -282,12 +264,7 @@ function SlottedZoneContents({
                 {slotId}
               </span>
               {piece ? (
-                <BoardPiece
-                  piece={piece}
-                  zone={zone}
-                  perspectivePlayerId={perspectivePlayerId}
-                  compact={false}
-                />
+                <BoardPiece piece={piece} compact={false} />
               ) : (
                 <span className="self-center justify-self-center text-xs text-muted-foreground">
                   Empty slot
@@ -302,10 +279,8 @@ function SlottedZoneContents({
         <div className="grid gap-1">
           {unassignedPieces.map((piece) => (
             <BoardPiece
-              key={`${piece.pieceId}:${piece.position}`}
+              key={`${piece.refId}:${piece.position}`}
               piece={piece}
-              zone={zone}
-              perspectivePlayerId={perspectivePlayerId}
               compact
             />
           ))}
@@ -317,10 +292,8 @@ function SlottedZoneContents({
 
 function SummaryZoneContents({
   zone,
-  perspectivePlayerId,
 }: {
   readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
 }) {
   if (zone.pieces.length === 0) {
     return (
@@ -337,14 +310,12 @@ function SummaryZoneContents({
     <div className="grid gap-1">
       <div className="flex items-center justify-between gap-2 rounded border border-border/45 bg-background/45 px-2 py-1 text-[11px] text-muted-foreground">
         <span>Pile</span>
-        <span>{zone.pieces.length} cards</span>
+        <span>{zone.occupantCount} cards</span>
       </div>
       {visiblePieces.map((piece) => (
         <BoardPiece
-          key={`${piece.pieceId}:${piece.position}`}
+          key={`${piece.refId}:${piece.position}`}
           piece={piece}
-          zone={zone}
-          perspectivePlayerId={perspectivePlayerId}
           compact
         />
       ))}
@@ -357,13 +328,7 @@ function SummaryZoneContents({
   )
 }
 
-function PieceGrid({
-  zone,
-  perspectivePlayerId,
-}: {
-  readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
-}) {
+function PieceGrid({ zone }: { readonly zone: ProjectedMatchBoardZone }) {
   if (zone.pieces.length === 0) {
     return (
       <div className="grid min-h-16 place-items-center rounded border border-dashed border-border/65 bg-background/45 text-xs text-muted-foreground">
@@ -376,10 +341,8 @@ function PieceGrid({
     <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-1">
       {zone.pieces.map((piece) => (
         <BoardPiece
-          key={`${piece.pieceId}:${piece.position}`}
+          key={`${piece.refId}:${piece.position}`}
           piece={piece}
-          zone={zone}
-          perspectivePlayerId={perspectivePlayerId}
           compact
         />
       ))}
@@ -387,13 +350,7 @@ function PieceGrid({
   )
 }
 
-function PieceStack({
-  zone,
-  perspectivePlayerId,
-}: {
-  readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
-}) {
+function PieceStack({ zone }: { readonly zone: ProjectedMatchBoardZone }) {
   if (zone.pieces.length === 0) {
     return (
       <div className="grid min-h-14 place-items-center rounded border border-dashed border-border/65 bg-background/45 text-xs text-muted-foreground">
@@ -406,10 +363,8 @@ function PieceStack({
     <div className="grid gap-1">
       {zone.pieces.map((piece) => (
         <BoardPiece
-          key={`${piece.pieceId}:${piece.position}`}
+          key={`${piece.refId}:${piece.position}`}
           piece={piece}
-          zone={zone}
-          perspectivePlayerId={perspectivePlayerId}
           compact={false}
         />
       ))}
@@ -419,18 +374,14 @@ function PieceStack({
 
 function BoardPiece({
   piece,
-  zone,
-  perspectivePlayerId,
   compact = false,
 }: {
   readonly piece: ProjectedMatchBoardPiece
-  readonly zone: ProjectedMatchBoardZone
-  readonly perspectivePlayerId: PlayerId
   readonly compact?: boolean
 }) {
-  const identityVisible = canShowPieceIdentity(zone, piece, perspectivePlayerId)
+  const identityVisible = piece.visibility === 'visible'
   const pieceLabel = identityVisible
-    ? (piece.cardDefinitionId ?? piece.pieceId)
+    ? (piece.cardDefinitionId ?? piece.pieceId ?? piece.refId)
     : 'Hidden card'
 
   return (
@@ -462,28 +413,6 @@ function BoardPiece({
       ) : null}
     </article>
   )
-}
-
-function canShowPieceIdentity(
-  zone: ProjectedMatchBoardZone,
-  piece: ProjectedMatchBoardPiece,
-  perspectivePlayerId: PlayerId,
-) {
-  switch (zone.visibility) {
-    case 'public':
-      return true
-    case 'owner-private':
-      return (
-        zone.ownerPlayerId === perspectivePlayerId ||
-        piece.ownerPlayerId === perspectivePlayerId
-      )
-    case 'controller-private':
-      return piece.controllerPlayerId === perspectivePlayerId
-    case 'hidden':
-      return false
-    default:
-      return false
-  }
 }
 
 function getZoneVisualMode(role: MatchBoardZoneRole): ZoneVisualMode {

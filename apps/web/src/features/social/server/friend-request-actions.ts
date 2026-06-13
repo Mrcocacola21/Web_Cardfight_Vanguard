@@ -11,14 +11,8 @@ import {
 } from '@/features/social/application/friend-request-use-cases'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
-import {
-  initialFriendRequestFormState,
-  type FriendRequestFormState,
-} from './friend-request-form-state'
-import {
-  initialFriendRequestResponseFormState,
-  type FriendRequestResponseFormState,
-} from './friend-request-response-form-state'
+import type { FriendRequestFormState } from './friend-request-form-state'
+import type { FriendRequestResponseFormState } from './friend-request-response-form-state'
 
 export async function sendFriendRequestAction(
   _previousState: FriendRequestFormState,
@@ -310,5 +304,3 @@ function mapFriendRequestResponseErrorToFormState(
       }
   }
 }
-
-export { initialFriendRequestFormState, initialFriendRequestResponseFormState }

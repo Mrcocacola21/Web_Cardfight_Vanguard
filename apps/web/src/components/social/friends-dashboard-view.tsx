@@ -13,11 +13,23 @@ import { FriendsListCard } from './friends-list-card'
 import { IncomingFriendRequestsCard } from './incoming-friend-requests-card'
 import { OutgoingFriendRequestsCard } from './outgoing-friend-requests-card'
 
+export type FriendsDashboardSyncStatus =
+  | {
+      readonly status: 'synced' | 'syncing'
+      readonly label: string
+    }
+  | {
+      readonly status: 'error'
+      readonly label: string
+      readonly message: string
+    }
+
 interface FriendsDashboardViewProps {
   readonly viewerDisplayName: string
   readonly friends: readonly ActiveFriendRecord[]
   readonly incomingRequests: readonly IncomingFriendRequestRecord[]
   readonly outgoingRequests: readonly OutgoingFriendRequestRecord[]
+  readonly syncStatus?: FriendsDashboardSyncStatus | null
 }
 
 export function FriendsDashboardView({
@@ -25,6 +37,7 @@ export function FriendsDashboardView({
   friends,
   incomingRequests,
   outgoingRequests,
+  syncStatus = null,
 }: FriendsDashboardViewProps) {
   return (
     <DashboardPageLayout
@@ -37,6 +50,11 @@ export function FriendsDashboardView({
             <>
               <Badge variant="outline">Social</Badge>
               <Badge variant="secondary">Protected dashboard</Badge>
+              {syncStatus === null ? null : (
+                <Badge variant={getSyncStatusBadgeVariant(syncStatus.status)}>
+                  {syncStatus.label}
+                </Badge>
+              )}
             </>
           }
           title="Friends"
@@ -50,6 +68,12 @@ export function FriendsDashboardView({
               <span>{incomingRequests.length} incoming</span>
               <span aria-hidden="true">|</span>
               <span>{outgoingRequests.length} outgoing</span>
+              {syncStatus?.status === 'error' ? (
+                <>
+                  <span aria-hidden="true">|</span>
+                  <span>{syncStatus.message}</span>
+                </>
+              ) : null}
             </div>
           }
         />
@@ -82,4 +106,17 @@ export function FriendsDashboardView({
       </section>
     </DashboardPageLayout>
   )
+}
+
+function getSyncStatusBadgeVariant(
+  status: NonNullable<FriendsDashboardSyncStatus>['status'],
+) {
+  switch (status) {
+    case 'synced':
+      return 'success'
+    case 'syncing':
+      return 'secondary'
+    case 'error':
+      return 'destructive'
+  }
 }

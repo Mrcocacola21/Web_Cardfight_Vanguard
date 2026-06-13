@@ -86,7 +86,7 @@ describe('@web-vg/match-session realtime runtime contract', () => {
     }
 
     expect(MATCH_REALTIME_TRANSPORT_BASELINE).toBe(
-      'websocket_commands_with_projected_snapshots',
+      'server_route_commands_with_projected_snapshots',
     )
     expect(result.document.room.revision).toBe(document.room.revision + 1)
     expect(result.acceptedHistory).toHaveLength(1)

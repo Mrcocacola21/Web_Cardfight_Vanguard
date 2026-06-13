@@ -95,9 +95,7 @@ export function createCollectionsRepository(
       const query = client
         .schema('user_data')
         .from('collection_items')
-        .select(
-          `id, owner_profile_id, card_printing_id, quantity, created_at, updated_at, printing:card_printings(${collectionPrintingRelationSelect})`,
-        )
+        .select(collectionItemSelect)
         .eq('owner_profile_id', ownerProfileId)
         .order('updated_at', { ascending: false })
         .order('id', { ascending: true })
@@ -110,19 +108,28 @@ export function createCollectionsRepository(
         )
       }
 
-      const rows = (data ??
-        []) as unknown as readonly CollectionInventoryWithRelationsRow[]
+      const rows = (data ?? []) as unknown as readonly Omit<
+        CollectionInventoryWithRelationsRow,
+        'printing'
+      >[]
+      const rowsWithPrintings = await attachCollectionPrintingRelations(
+        client,
+        rows,
+        'Failed to load collection inventory items.',
+      )
 
-      return ok(rows.map(mapCollectionInventoryItemRow))
+      if (!rowsWithPrintings.ok) {
+        return rowsWithPrintings
+      }
+
+      return ok(rowsWithPrintings.data.map(mapCollectionInventoryItemRow))
     },
 
     async listCollectionPrintingPreferenceItemsByOwner(ownerProfileId) {
       const query = client
         .schema('user_data')
         .from('collection_printing_preferences')
-        .select(
-          `${collectionPrintingPreferenceSelect}, printing:card_printings(${collectionPrintingRelationSelect})`,
-        )
+        .select(collectionPrintingPreferenceSelect)
         .eq('owner_profile_id', ownerProfileId)
         .order('preference_kind', { ascending: true })
         .order('updated_at', { ascending: false })
@@ -139,10 +146,23 @@ export function createCollectionsRepository(
         )
       }
 
-      const rows = (data ??
-        []) as unknown as readonly CollectionPrintingPreferenceWithRelationsRow[]
+      const rows = (data ?? []) as unknown as readonly Omit<
+        CollectionPrintingPreferenceWithRelationsRow,
+        'printing'
+      >[]
+      const rowsWithPrintings = await attachCollectionPrintingRelations(
+        client,
+        rows,
+        'Failed to load collection printing preferences.',
+      )
 
-      return ok(rows.map(mapCollectionPrintingPreferenceItemRow))
+      if (!rowsWithPrintings.ok) {
+        return rowsWithPrintings
+      }
+
+      return ok(
+        rowsWithPrintings.data.map(mapCollectionPrintingPreferenceItemRow),
+      )
     },
 
     async listCollectionPrintingPreferencesByOwnerAndPrinting(
@@ -305,6 +325,53 @@ export function createCollectionsRepository(
       return ok(undefined)
     },
   }
+}
+
+async function attachCollectionPrintingRelations<
+  Row extends { readonly card_printing_id: string },
+>(
+  client: DbClient,
+  rows: readonly Row[],
+  errorMessage: string,
+): Promise<
+  RepositoryResult<
+    readonly (Row & {
+      readonly printing: CollectionInventoryWithRelationsRow['printing']
+    })[]
+  >
+> {
+  const printingIds = Array.from(
+    new Set(rows.map((row) => row.card_printing_id)),
+  )
+
+  if (printingIds.length === 0) {
+    return ok(rows.map((row) => ({ ...row, printing: null })))
+  }
+
+  const { data, error } = await client
+    .schema('catalog')
+    .from('card_printings')
+    .select(collectionPrintingRelationSelect)
+    .in('id', printingIds)
+
+  if (error) {
+    return err(mapQueryError(error, errorMessage))
+  }
+
+  const printingsById = new Map(
+    (
+      (data ?? []) as unknown as readonly NonNullable<
+        CollectionInventoryWithRelationsRow['printing']
+      >[]
+    ).map((printing) => [printing.id, printing]),
+  )
+
+  return ok(
+    rows.map((row) => ({
+      ...row,
+      printing: printingsById.get(row.card_printing_id) ?? null,
+    })),
+  )
 }
 
 function buildChangeCollectionItemQuantityArgs(

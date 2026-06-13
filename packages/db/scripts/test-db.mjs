@@ -48,7 +48,17 @@ function runCorepack(corepackArgs, fallbackMessage) {
   }
 
   if (result.status !== 0) {
-    throw new Error(result.stderr || fallbackMessage)
+    throw new Error(
+      [
+        fallbackMessage.trimEnd(),
+        `Command: corepack ${corepackArgs.join(' ')}`,
+        `Exit status: ${result.status}`,
+        result.stdout ? `stdout:\n${result.stdout.trimEnd()}` : '',
+        result.stderr ? `stderr:\n${result.stderr.trimEnd()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    )
   }
 
   return result.stdout
@@ -3266,6 +3276,595 @@ async function verifyAuthorizationRls(client, { onlyDeck = false } = {}) {
   )
 }
 
+async function verifyGameplayRoomAuthorizationRls(client) {
+  console.log('Verifying gameplay room authorization and RLS...')
+
+  const canonicalGameplayTables = [
+    'match_rooms',
+    'room_players',
+    'room_snapshots',
+    'room_events',
+    'pending_choices',
+  ]
+
+  await withRollback(
+    client,
+    'canonical gameplay room tables stay server-only',
+    async () => {
+      const participant = await createProfileFixture(client, {
+        displayName: 'Gameplay Participant',
+      })
+      const stranger = await createProfileFixture(client, {
+        displayName: 'Gameplay Stranger',
+      })
+      const roomId = randomUUID()
+      const roomPlayerId = randomUUID()
+      const persistentPendingChoiceId = randomUUID()
+      const deletedPendingChoiceId = randomUUID()
+
+      await runAsDatabaseRole(client, { role: 'service_role' }, async () => {
+        await client.query(
+          `
+            insert into gameplay.match_rooms (
+              id,
+              format_id,
+              host_profile_id,
+              status,
+              latest_event_sequence,
+              latest_snapshot_sequence,
+              started_at
+            ) values (
+              $1,
+              'standard',
+              $2,
+              'active',
+              1,
+              1,
+              now()
+            )
+          `,
+          [roomId, participant.profileId],
+        )
+
+        await client.query(
+          `
+            insert into gameplay.room_players (
+              id,
+              room_id,
+              profile_id,
+              seat_order,
+              player_status
+            ) values (
+              $1,
+              $2,
+              $3,
+              1,
+              'active'
+            )
+          `,
+          [roomPlayerId, roomId, participant.profileId],
+        )
+
+        await client.query(
+          `
+            insert into gameplay.room_events (
+              room_id,
+              event_sequence,
+              actor_room_player_id,
+              event_kind,
+              source_kind,
+              event_payload
+            ) values (
+              $1,
+              1,
+              $2,
+              'match.started',
+              'setup',
+              '{"event":"canonical-start"}'::jsonb
+            )
+          `,
+          [roomId, roomPlayerId],
+        )
+
+        await client.query(
+          `
+            insert into gameplay.room_snapshots (
+              room_id,
+              snapshot_sequence,
+              last_event_sequence,
+              turn_number,
+              phase_key,
+              active_room_player_id,
+              is_current,
+              game_state_payload
+            ) values (
+              $1,
+              1,
+              1,
+              1,
+              'main',
+              $2,
+              true,
+              '{"engineState":"canonical-hidden-state"}'::jsonb
+            )
+          `,
+          [roomId, roomPlayerId],
+        )
+
+        await client.query(
+          `
+            insert into gameplay.pending_choices (
+              id,
+              room_id,
+              owner_kind,
+              owner_room_player_id,
+              choice_kind,
+              opened_event_sequence,
+              options_payload,
+              context_payload
+            ) values (
+              $1,
+              $2,
+              'player',
+              $3,
+              'confirm.boolean',
+              1,
+              '{"secret":"pending-choice-options"}'::jsonb,
+              '{"context":"canonical"}'::jsonb
+            ),
+            (
+              $4,
+              $2,
+              'player',
+              $3,
+              'confirm.boolean',
+              1,
+              '{"secret":"delete-proof"}'::jsonb,
+              '{"context":"canonical"}'::jsonb
+            )
+          `,
+          [
+            persistentPendingChoiceId,
+            roomId,
+            roomPlayerId,
+            deletedPendingChoiceId,
+          ],
+        )
+
+        const canonicalSnapshot = await client.query(
+          `
+            select game_state_payload
+            from gameplay.room_snapshots
+            where room_id = $1
+          `,
+          [roomId],
+        )
+
+        assert(
+          canonicalSnapshot.rowCount === 1,
+          'Service role should read canonical room snapshots for session restore.',
+        )
+
+        const roomUpdate = await client.query(
+          `
+            update gameplay.match_rooms
+            set latest_event_sequence = 2
+            where id = $1
+            returning id
+          `,
+          [roomId],
+        )
+
+        assert(
+          roomUpdate.rowCount === 1,
+          'Service role should update canonical room metadata.',
+        )
+
+        const pendingDelete = await client.query(
+          `
+            delete from gameplay.pending_choices
+            where id = $1
+            returning id
+          `,
+          [deletedPendingChoiceId],
+        )
+
+        assert(
+          pendingDelete.rowCount === 1,
+          'Service role should delete canonical pending choice rows.',
+        )
+      })
+
+      await runAsDatabaseRole(client, { role: 'anon' }, async () => {
+        for (const tableName of canonicalGameplayTables) {
+          await expectPgError(
+            `anon cannot read gameplay.${tableName}`,
+            () => client.query(`select * from gameplay.${tableName} limit 1`),
+            '42501',
+          )
+        }
+      })
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: participant.authUserId },
+        async () => {
+          for (const tableName of canonicalGameplayTables) {
+            await expectPgError(
+              `participant cannot directly read gameplay.${tableName}`,
+              () => client.query(`select * from gameplay.${tableName} limit 1`),
+              '42501',
+            )
+          }
+
+          await expectPgError(
+            'participant cannot patch canonical room status directly',
+            () =>
+              client.query(
+                `
+                  update gameplay.match_rooms
+                  set status = 'completed'
+                  where id = $1
+                `,
+                [roomId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
+            'participant cannot append raw canonical room events directly',
+            () =>
+              client.query(
+                `
+                  insert into gameplay.room_events (
+                    room_id,
+                    event_sequence,
+                    event_kind,
+                    source_kind,
+                    event_payload
+                  ) values (
+                    $1,
+                    99,
+                    'client.injected',
+                    'player-action',
+                    '{"cheat":true}'::jsonb
+                  )
+                `,
+                [roomId],
+              ),
+            '42501',
+          )
+
+          await expectPgError(
+            'participant cannot mutate canonical pending choices directly',
+            () =>
+              client.query(
+                `
+                  delete from gameplay.pending_choices
+                  where id = $1
+                `,
+                [persistentPendingChoiceId],
+              ),
+            '42501',
+          )
+        },
+      )
+
+      await runAsDatabaseRole(
+        client,
+        { role: 'authenticated', authUserId: stranger.authUserId },
+        async () => {
+          for (const tableName of canonicalGameplayTables) {
+            await expectPgError(
+              `non-participant cannot directly read gameplay.${tableName}`,
+              () => client.query(`select * from gameplay.${tableName} limit 1`),
+              '42501',
+            )
+          }
+        },
+      )
+    },
+  )
+}
+
+async function verifyGameplayPersistedMatchSessionStorage(client) {
+  console.log('Verifying gameplay persisted match session storage...')
+
+  await withRollback(
+    client,
+    'persisted match session RPCs create and advance one durable room aggregate atomically',
+    async () => {
+      const roomId = randomUUID()
+      const roomPlayerId = randomUUID()
+      const pendingChoiceId = randomUUID()
+      const createdAt = '2026-06-07T11:00:00.000Z'
+      const initializedAt = '2026-06-07T11:00:00.500Z'
+      const transitionAt = '2026-06-07T11:01:00.000Z'
+      const persistedAt = '2026-06-07T11:01:01.000Z'
+      const createdDocument = {
+        version: 1,
+        persistenceModel: 'snapshot+event-history',
+        room: {
+          roomId,
+          formatId: 'standard',
+          engineAdapterId: 'rules-core:standard',
+          status: 'initialized',
+          revision: 1,
+          participants: [
+            {
+              participantId: 'participant-db-smoke-1',
+              seat: 0,
+              enginePlayerId: 'player-db-smoke-1',
+            },
+          ],
+          metadata: {
+            createdAt,
+            initializedAt,
+            updatedAt: initializedAt,
+          },
+          clock: {
+            authority: 'server',
+            settings: {
+              requestTimeoutMs: 120000,
+              turnTimeoutMs: 1800000,
+            },
+            activeTurn: null,
+            activeRequest: null,
+            closedAt: null,
+          },
+          engineState: {
+            status: 'setup',
+            revision: 0,
+            pendingRequests: [],
+          },
+        },
+        history: [],
+      }
+      const nextHistoryEntry = {
+        entryId: `${roomId}:history:1`,
+        sequence: 1,
+        roomId,
+        roomRevision: 2,
+        engineRevision: 1,
+        recordedAt: persistedAt,
+        event: {
+          kind: 'engine_event',
+          transitionId: 'transition-db-smoke-1',
+          event: {
+            eventId: 'event-db-smoke-1',
+            type: 'mulligan.started',
+            sequence: 1,
+            origin: {
+              kind: 'system',
+              system: 'match-setup',
+            },
+            playerId: 'player-db-smoke-1',
+            requestId: 'request-db-smoke-1',
+          },
+        },
+      }
+      const nextDocument = {
+        ...createdDocument,
+        room: {
+          ...createdDocument.room,
+          status: 'in_progress',
+          revision: 2,
+          metadata: {
+            ...createdDocument.room.metadata,
+            startedAt: transitionAt,
+            updatedAt: transitionAt,
+          },
+          clock: {
+            ...createdDocument.room.clock,
+            activeRequest: {
+              requestId: 'request-db-smoke-1',
+              responderPlayerId: 'player-db-smoke-1',
+              deadlineAt: '2026-06-07T11:03:00.000Z',
+              openedAt: transitionAt,
+              timeoutReason: 'request_timeout',
+            },
+          },
+          engineState: {
+            ...createdDocument.room.engineState,
+            status: 'awaiting_choice',
+            revision: 1,
+            pendingRequests: [
+              {
+                requestId: 'request-db-smoke-1',
+                type: 'mulligan.select_cards',
+                responderPlayerId: 'player-db-smoke-1',
+                purpose: 'rule',
+                visibility: 'responder-only',
+              },
+            ],
+          },
+        },
+        history: [nextHistoryEntry],
+      }
+      const createPayload = {
+        room: {
+          id: roomId,
+          format_id: 'standard',
+          host_profile_id: null,
+          status: 'setup',
+          latest_event_sequence: 0,
+          latest_snapshot_sequence: 1,
+          created_at: createdAt,
+          started_at: null,
+          ended_at: null,
+          updated_at: initializedAt,
+        },
+        roomPlayers: [
+          {
+            id: roomPlayerId,
+            profile_id: null,
+            seat_order: 1,
+            player_status: 'active',
+            submitted_deck_version_id: null,
+            submitted_deck_snapshot: null,
+          },
+        ],
+        snapshot: {
+          snapshot_sequence: 1,
+          last_event_sequence: 0,
+          turn_number: null,
+          phase_key: 'pregame',
+          active_room_player_id: roomPlayerId,
+          game_state_payload: createdDocument,
+          created_at: initializedAt,
+        },
+        events: [],
+        pendingChoices: [],
+        document: createdDocument,
+        persistedAt: initializedAt,
+      }
+      const transitionPayload = {
+        room: {
+          id: roomId,
+          format_id: 'standard',
+          host_profile_id: null,
+          status: 'active',
+          latest_event_sequence: 1,
+          latest_snapshot_sequence: 2,
+          created_at: createdAt,
+          started_at: transitionAt,
+          ended_at: null,
+          updated_at: persistedAt,
+        },
+        roomPlayers: createPayload.roomPlayers,
+        snapshot: {
+          snapshot_sequence: 2,
+          last_event_sequence: 1,
+          turn_number: null,
+          phase_key: 'pregame',
+          active_room_player_id: roomPlayerId,
+          game_state_payload: nextDocument,
+          created_at: persistedAt,
+        },
+        events: [
+          {
+            event_sequence: 1,
+            actor_room_player_id: null,
+            event_kind: 'mulligan.started',
+            source_kind: 'setup',
+            source_ref: 'transition-db-smoke-1:event-db-smoke-1',
+            event_payload: nextHistoryEntry,
+            created_at: persistedAt,
+          },
+        ],
+        pendingChoices: [
+          {
+            id: pendingChoiceId,
+            owner_kind: 'player',
+            owner_room_player_id: roomPlayerId,
+            choice_kind: 'mulligan.select_cards',
+            opened_event_sequence: 1,
+            options_payload: nextDocument.room.engineState.pendingRequests[0],
+            context_payload: {
+              requestId: 'request-db-smoke-1',
+              queueIndex: 0,
+              deadline: nextDocument.room.clock.activeRequest,
+            },
+            created_at: persistedAt,
+            updated_at: persistedAt,
+          },
+        ],
+        document: nextDocument,
+        persistedAt,
+        expectedRoomRevision: 1,
+        expectedHistoryLength: 0,
+      }
+
+      await runAsDatabaseRole(client, { role: 'service_role' }, async () => {
+        const created = await client.query(
+          `
+            select *
+            from gameplay.create_persisted_match_session($1::jsonb)
+          `,
+          [JSON.stringify(createPayload)],
+        )
+
+        assert(
+          created.rowCount === 1 && created.rows[0].room_id === roomId,
+          'Create persisted match session RPC should return the created room.',
+        )
+
+        const advanced = await client.query(
+          `
+            select *
+            from gameplay.persist_accepted_match_session_transition($1::jsonb)
+          `,
+          [JSON.stringify(transitionPayload)],
+        )
+
+        assert(
+          advanced.rowCount === 1 && advanced.rows[0].room_id === roomId,
+          'Accepted transition RPC should return the advanced room.',
+        )
+
+        const persistedState = await client.query(
+          `
+            select
+              match_rooms.status,
+              match_rooms.latest_event_sequence,
+              match_rooms.latest_snapshot_sequence,
+              (
+                select count(*)::int
+                from gameplay.room_snapshots
+                where room_id = match_rooms.id
+              ) as snapshot_count,
+              (
+                select count(*)::int
+                from gameplay.room_snapshots
+                where room_id = match_rooms.id
+                  and is_current
+              ) as current_snapshot_count,
+              (
+                select count(*)::int
+                from gameplay.room_events
+                where room_id = match_rooms.id
+              ) as event_count,
+              (
+                select count(*)::int
+                from gameplay.pending_choices
+                where room_id = match_rooms.id
+                  and status = 'pending'
+              ) as pending_choice_count
+            from gameplay.match_rooms
+            where id = $1
+          `,
+          [roomId],
+        )
+        const state = persistedState.rows[0]
+
+        assert(
+          state.status === 'active' &&
+            state.latest_event_sequence === '1' &&
+            state.latest_snapshot_sequence === 2 &&
+            state.snapshot_count === 2 &&
+            state.current_snapshot_count === 1 &&
+            state.event_count === 1 &&
+            state.pending_choice_count === 1,
+          'Accepted transition RPC should atomically update room, snapshots, events, and pending choices.',
+        )
+
+        await expectPgError(
+          'repeated accepted transition rejects stale room revision',
+          () =>
+            client.query(
+              `
+                select *
+                from gameplay.persist_accepted_match_session_transition($1::jsonb)
+              `,
+              [JSON.stringify(transitionPayload)],
+            ),
+          'VG002',
+        )
+      })
+    },
+  )
+}
+
 async function main() {
   console.log('Starting DB checkpoint verification...')
   const runDeckBoundaryOnly = process.argv.slice(2).includes('--suite=decks')
@@ -3301,6 +3900,8 @@ async function main() {
     await verifyDeckWriteAtomicity(client)
     await verifyDeckReadDensification(client)
     await verifyAuthorizationRls(client)
+    await verifyGameplayRoomAuthorizationRls(client)
+    await verifyGameplayPersistedMatchSessionStorage(client)
     console.log('DB checkpoint verification completed successfully.')
   } finally {
     await client.end().catch(() => {})

@@ -9,8 +9,12 @@ with profile-driven baseline rules, DB-backed atomic deck persistence and
 dense owner-scoped deck reads, an explicit application-layer separation across
 features, a social foundation on top of the profile layer, and an owner-owned
 match history / stats foundation. The gameplay stack now includes a bounded
-rules runtime, local match-session prototype, hidden-information projection,
-session serialization/history, and transport-facing realtime runtime contracts.
+rules runtime, authoritative match-session boundary, hidden-information
+projection, session serialization/history, DB-backed persisted match-session
+storage, an authenticated server-route command baseline, and a persisted
+projection-backed match play route with bounded authenticated polling sync for
+match rooms plus bounded live friends-dashboard refresh. Full realtime
+multiplayer fanout and reconnect/recovery are still in progress.
 
 ## Prerequisites
 
@@ -32,12 +36,14 @@ corepack enable
 corepack pnpm install
 ```
 
-If you want to use the Supabase integration foundation later, copy
-`apps/web/.env.example` to `apps/web/.env.local` and set:
+For Supabase-backed development, copy `apps/web/.env.example` to
+`apps/web/.env.local` and set:
 
 - `NEXT_PUBLIC_APP_ORIGIN`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` for server-only gameplay persistence and
+  authenticated match route operations
 
 ## Run Locally
 
@@ -179,7 +185,7 @@ Current test setup:
 - Vitest for package/domain unit tests
 - Vitest + React Testing Library for `apps/web`
 - DB-backed local Supabase checkpoint verification through
-  `corepack pnpm test:db`
+  `corepack pnpm test:db`, including gameplay persistence and RLS posture
 - Playwright for local runtime/browser checkpoints
 
 Current practical coverage is strongest around:
@@ -192,8 +198,16 @@ Current practical coverage is strongest around:
 - deck validation core, format-aware baseline rules, and integration tests
 - gameplay engine actions/transitions/effects/format adapters
 - match room/session lifecycle and local playable match UI flow
-- match-session projection, serialization/history, realtime command runtime,
-  and timer/timeout contracts
+- match-session projection, serialization/history, DB-backed persisted session
+  storage, authenticated server-route transport, and timer/timeout contracts
+- projected persisted match room route and participant-safe multiplayer client
+  state
+- gameplay DB persistence and RLS:
+  - canonical room tables remain server-owned
+  - room snapshots, accepted room events, and pending choices persist through
+    DB-backed storage
+  - gameplay RLS and storage checks run against live local Supabase in
+    `test:db`
 - deck DB persistence hardening:
   - atomic write RPC coverage
   - dense summary/detail read RPC coverage
@@ -209,6 +223,16 @@ suite is stronger for persistence invariants than for end-to-end UI behavior.
 
 This README reflects the current repository state, not the final product.
 
+Current Phase 20 posture: **GO WITH CONDITIONS**. The project is no longer only
+a local gameplay prototype: rules/session/projection foundations are strong,
+canonical match room truth can be persisted and restored, participant commands
+have an authenticated server route baseline, and `/matches/play/[roomId]`
+loads persisted room truth before rendering a participant-safe projection. The
+first bounded 20.1 match-room sync loop now runs through authenticated polling
+and projected snapshot replacement. The 20.2 social realtime scope is limited
+to owner-safe `/friends` dashboard snapshots. Fanout, reconnect/recovery,
+presence, optimistic reconciliation, and production multiplayer UX are not done.
+
 Available now:
 
 - monorepo/workspace foundation
@@ -217,12 +241,14 @@ Available now:
 - Supabase browser/server client foundation
 - SSR-friendly auth/session foundation
 - baseline owner-based authorization and RLS for profiles, decks, collections,
-  and matches
+  and match records
+- server-owned RLS posture for canonical gameplay room persistence
 - protected and public profile surfaces
 - social foundation:
   - public user search at `/users`
   - public profile route at `/users/[profileId]`
   - friends dashboard at `/friends`
+  - bounded live refresh for `/friends` active friendships and pending requests
   - explicit friend requests
   - accept / decline request lifecycle
   - explicit active friendship edges
@@ -311,7 +337,6 @@ Available now:
 - local gameplay prototype:
   - `packages/match-session` room/session boundary over `rules-core`
   - local route at `/matches/play/local`
-  - room-id route at `/matches/play/[roomId]`
   - deterministic two-player Standard bootstrap for manual testing
   - match board projection across main zones, hand, deck, ride deck, G deck,
     damage, soul, drop, and bind
@@ -326,6 +351,27 @@ Available now:
     and client-submitted system actions
   - projected state push contracts for participant-specific realtime updates
   - session-owned clock/deadline state and authoritative timeout resolution
+- Phase 20 realtime foundation:
+  - DB-backed `PersistedMatchSessionStorage` for canonical room snapshots,
+    accepted room events, lifecycle metadata, and pending-choice mirrors
+  - authenticated `GET`/`POST`
+    `/api/matches/rooms/[roomId]/realtime` server route wired to
+    `createServerRouteRealtimeTransport`
+  - participant command -> authoritative session runtime -> projected update
+    path with accepted-only persistence semantics
+  - persisted `/matches/play/[roomId]` page that resolves the authenticated
+    participant and renders the persisted projected match room sync client
+  - bounded 20.1 browser sync loop:
+    - authenticated short-interval polling for participant-safe snapshots
+    - browser command submission with `expectedRoomRevision`
+    - full projected snapshot replacement for submitter and observer
+      convergence
+  - bounded 20.2 social dashboard sync:
+    - authenticated `GET /api/social/friends/realtime`
+    - owner-safe full snapshot replacement for active friends, incoming
+      requests, and outgoing requests
+  - local prototype kept separate at `/matches/play/local`
+  - live `test:db` checkpoint for gameplay persistence and RLS confidence
 - application-layer refactoring:
   - explicit application/use-case layer split from server actions
   - DTO-to-domain mapping at feature boundaries
@@ -337,16 +383,19 @@ Available now:
 Not implemented yet:
 
 - notifications, recommendations, and richer social graph/product workflows
+- realtime user search, public profile pages, profile/privacy editor state, and
+  presence
 - public/shared match history workflows and richer match-detail editing flows
-- production websocket / Supabase Realtime transport adapter
-- DB-backed production match-session persistence adapter for canonical
-  snapshot/history writes
+- production websocket / Supabase Realtime fanout, presence, and subscription
+  transport
 - reconnect/recovery UI and protocol on top of persisted session truth
 - optimistic client reconciliation against authoritative match-session state
+- duplicate command idempotency, distributed room locking, and production
+  multiplayer scaling/observability
 - full Vanguard gameplay coverage, card-specific effect library, and polished
   product-facing match UX
-- production-grade gameplay room RLS / authorization expansion beyond the
-  current non-realtime baseline
+- richer gameplay room access workflows beyond the current server-owned
+  canonical table posture
 - advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the

@@ -9,10 +9,10 @@ import {
 } from 'lucide-react'
 
 import type {
-  LocalAvailableActionGroup,
-  LocalAvailableActionIntent,
-  LocalAvailableActionsProjection,
-} from '@/features/matches/play/available-actions'
+  MatchClientActionGroup,
+  MatchClientActionView,
+  MatchClientActionsProjection,
+} from '@/features/matches/play/projected-client-state'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,13 +25,15 @@ import {
 } from '@/components/ui/card'
 
 interface AvailableActionsPanelProps {
-  readonly projection: LocalAvailableActionsProjection
-  readonly onSubmitAction: (action: LocalAvailableActionIntent) => void
+  readonly projection: MatchClientActionsProjection
+  readonly onSubmitAction?: (action: MatchClientActionView) => void
+  readonly actionsDisabled?: boolean
 }
 
 export function AvailableActionsPanel({
   projection,
   onSubmitAction,
+  actionsDisabled = false,
 }: AvailableActionsPanelProps) {
   const groupedAvailableActions = groupAvailableActions(
     projection.availableActions,
@@ -64,7 +66,8 @@ export function AvailableActionsPanel({
                 key={group}
                 group={group}
                 actions={actions}
-                onSubmitAction={onSubmitAction}
+                actionsDisabled={actionsDisabled}
+                {...(onSubmitAction === undefined ? {} : { onSubmitAction })}
               />
             ))}
           </div>
@@ -89,10 +92,12 @@ function ActionGroup({
   group,
   actions,
   onSubmitAction,
+  actionsDisabled,
 }: {
-  readonly group: LocalAvailableActionGroup
-  readonly actions: readonly LocalAvailableActionIntent[]
-  readonly onSubmitAction: (action: LocalAvailableActionIntent) => void
+  readonly group: MatchClientActionGroup
+  readonly actions: readonly MatchClientActionView[]
+  readonly onSubmitAction?: (action: MatchClientActionView) => void
+  readonly actionsDisabled: boolean
 }) {
   return (
     <section
@@ -110,7 +115,8 @@ function ActionGroup({
             type="button"
             variant={group === 'decision' ? 'default' : 'outline'}
             className="h-auto justify-start gap-2 py-2 text-left"
-            onClick={() => onSubmitAction(action)}
+            disabled={actionsDisabled || onSubmitAction === undefined}
+            onClick={() => onSubmitAction?.(action)}
           >
             <ActionGroupIcon group={group} className="size-4 shrink-0" />
             <span className="grid min-w-0 gap-0.5">
@@ -133,7 +139,7 @@ function ActionStatusList({
 }: {
   readonly title: string
   readonly variant: 'warning' | 'destructive'
-  readonly actions: readonly LocalAvailableActionIntent[]
+  readonly actions: readonly MatchClientActionView[]
 }) {
   if (actions.length === 0) {
     return null
@@ -178,11 +184,11 @@ function ActionStatusList({
 }
 
 function groupAvailableActions(
-  actions: readonly LocalAvailableActionIntent[],
+  actions: readonly MatchClientActionView[],
 ): ReadonlyArray<
-  readonly [LocalAvailableActionGroup, readonly LocalAvailableActionIntent[]]
+  readonly [MatchClientActionGroup, readonly MatchClientActionView[]]
 > {
-  const groups: LocalAvailableActionGroup[] = [
+  const groups: MatchClientActionGroup[] = [
     'decision',
     'setup',
     'turn_flow',
@@ -202,7 +208,7 @@ function ActionGroupIcon({
   group,
   className,
 }: {
-  readonly group: LocalAvailableActionGroup
+  readonly group: MatchClientActionGroup
   readonly className: string
 }) {
   switch (group) {
@@ -233,7 +239,7 @@ function ActionStatusIcon({
   )
 }
 
-function formatGroupLabel(group: LocalAvailableActionGroup) {
+function formatGroupLabel(group: MatchClientActionGroup) {
   switch (group) {
     case 'decision':
       return 'Decision'
@@ -248,7 +254,7 @@ function formatGroupLabel(group: LocalAvailableActionGroup) {
   }
 }
 
-function formatModeLabel(mode: LocalAvailableActionsProjection['mode']) {
+function formatModeLabel(mode: MatchClientActionsProjection['mode']) {
   switch (mode) {
     case 'normal':
       return 'Normal'
@@ -259,7 +265,7 @@ function formatModeLabel(mode: LocalAvailableActionsProjection['mode']) {
   }
 }
 
-function getModeBadgeVariant(mode: LocalAvailableActionsProjection['mode']) {
+function getModeBadgeVariant(mode: MatchClientActionsProjection['mode']) {
   switch (mode) {
     case 'normal':
       return 'secondary'

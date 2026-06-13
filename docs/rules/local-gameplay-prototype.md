@@ -2,9 +2,12 @@
 
 ## 1. Purpose
 
-The local gameplay prototype is the first single-session proof that the match room, rules engine, match UI, zone rendering, available actions, pending requests, and event log can operate together as one playable flow.
+The local gameplay prototype is the first single-session proof that the match
+room, rules engine, match UI, zone rendering, available actions, pending
+requests, and event log can operate together as one playable flow.
 
-It is intentionally local. It does not introduce realtime transport, matchmaking, persistence, reconnect, or a second demo rules engine.
+It is intentionally local. It does not use the persisted multiplayer room path,
+matchmaking, reconnect, or a second demo rules engine.
 
 ## 2. What "playable" Means at This Stage
 
@@ -18,7 +21,9 @@ The stable local entrypoint is:
 
 `/matches/play/local`
 
-It renders the existing match screen with the deterministic local room id `local-prototype`. The generic live-room route `/matches/play/[roomId]` remains available for room-id based sessions.
+It renders the existing match screen with the deterministic local room id
+`local-prototype`. The multiplayer route `/matches/play/[roomId]` is now a
+separate persisted, authenticated, participant-projected room path.
 
 ## 4. Session Bootstrap Model
 
@@ -61,8 +66,9 @@ Invalid and blocked results are shown as structured feedback. The UI does not pa
 
 ## 7. What Is Intentionally NOT Implemented Yet
 
-- Realtime multiplayer or websocket synchronization.
-- Backend room persistence.
+- Realtime multiplayer or websocket synchronization from this local route.
+- DB-backed persisted room loading for this local route; that belongs to
+  `/matches/play/[roomId]`.
 - Reconnect/recovery flow.
 - Full match completion across all Vanguard mechanics.
 - Final production board UX, drag-and-drop, animation, or full responsive polish.
