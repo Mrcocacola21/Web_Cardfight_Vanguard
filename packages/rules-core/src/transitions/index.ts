@@ -1,8 +1,14 @@
 export {
+  applyActivateCardEffectTransition,
+  applyActivatedEffectChoiceResponseTransition,
+} from './activated-effects'
+export type { ActivatedEffectRuntimeEnvironment } from './activated-effects'
+export {
   applyGameAction,
   applyGameChoiceResponse,
   reduceGameState,
 } from './reducer'
+export type { RuntimeTransitionOptions } from './reducer'
 export {
   PREGAME_PHASE,
   TURN_PHASE_BATTLE,

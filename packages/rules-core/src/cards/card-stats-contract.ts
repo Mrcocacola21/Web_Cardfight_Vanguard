@@ -1,20 +1,27 @@
 import type {
   CardId,
   CardType,
+  Clan,
+  EffectRefId,
   Grade,
   Keyword,
+  Nation,
   TriggerType,
 } from '@web-vg/shared'
 
 export interface EngineCardStats {
   readonly cardDefinitionId: CardId
+  readonly name?: string
   readonly cardType: CardType
   readonly grade: Grade
+  readonly nation?: Nation
+  readonly clan?: Clan
   readonly power: number
   readonly shield: number
   readonly critical: number
   readonly triggerType: TriggerType | null
   readonly keywords: readonly Keyword[]
+  readonly effectRefs?: readonly EffectRefId[]
 }
 
 export interface EngineCardStatsSnapshot {

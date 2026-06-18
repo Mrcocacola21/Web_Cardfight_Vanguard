@@ -14,7 +14,8 @@ describe('EventLogPanel', () => {
     render(<EventLogPanel entries={[]} />)
 
     expect(screen.getByRole('region', { name: 'Event log' })).toBeVisible()
-    expect(screen.getByText('No engine events yet.')).toBeVisible()
+    expect(screen.getByText('Recent Play')).toBeVisible()
+    expect(screen.getByText('No table events yet.')).toBeVisible()
   })
 
   it('renders ordered readable entries with structured details', () => {
@@ -28,9 +29,8 @@ describe('EventLogPanel', () => {
     expect(within(entries[0]!).getByText('#1')).toBeVisible()
     expect(within(entries[1]!).getByText('Turn 0 started.')).toBeVisible()
     expect(within(entries[1]!).getByText('#2')).toBeVisible()
-    expect(within(log).getAllByText('Engine timeline').length).toBeGreaterThan(
-      0,
-    )
+    expect(within(log).getByText('2 recent events')).toBeVisible()
+    expect(within(log).queryByText('Engine timeline')).toBeNull()
   })
 })
 

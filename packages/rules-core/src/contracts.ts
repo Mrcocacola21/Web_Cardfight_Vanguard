@@ -8,6 +8,7 @@ export type PieceId = Brand<string, 'RulesPieceId'>
 export type ActionId = Brand<string, 'RulesActionId'>
 export type EventId = Brand<string, 'RulesEventId'>
 export type EffectDefinitionId = Brand<string, 'RulesEffectDefinitionId'>
+export type EffectContinuationId = Brand<string, 'RulesEffectContinuationId'>
 export type RequestId = Brand<string, 'RulesRequestId'>
 export type RequestOptionId = Brand<string, 'RulesRequestOptionId'>
 export type TransitionId = Brand<string, 'RulesTransitionId'>

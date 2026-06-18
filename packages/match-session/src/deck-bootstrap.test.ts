@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
+  applyGameAction,
+  type ActionId,
   STANDARD_FORMAT_ID,
   type GameId,
   type PlayerId,
@@ -11,6 +13,7 @@ import type {
   CardId,
   DeckId,
   DeckSnapshot,
+  EffectRefId,
   GameplayCard,
   UserId,
 } from '@web-vg/shared'
@@ -61,8 +64,17 @@ describe('real deck-to-match bootstrap', () => {
     const playerOneDeck = state.zones.find(
       (zone) => zone.ownerPlayerId === PLAYER_1 && zone.kind === 'deck',
     )
+    const playerOneOrderZone = state.zones.find(
+      (zone) => zone.ownerPlayerId === PLAYER_1 && zone.kind === 'order_zone',
+    )
+    const playerOnePrison = state.zones.find(
+      (zone) => zone.ownerPlayerId === PLAYER_1 && zone.kind === 'prison',
+    )
     const playerOneRideDeck = state.zones.find(
       (zone) => zone.ownerPlayerId === PLAYER_1 && zone.kind === 'ride_deck',
+    )
+    const playerOne = state.players.find(
+      (player) => player.playerId === PLAYER_1,
     )
     const starterPiece = state.pieces.find(
       (piece) => piece.pieceId === playerOneVanguard?.occupants[0]?.pieceId,
@@ -75,6 +87,25 @@ describe('real deck-to-match bootstrap', () => {
     expect(playerOneHand?.occupants).toHaveLength(2)
     expect(playerOneDeck?.occupants).toHaveLength(1)
     expect(playerOneRideDeck?.occupants).toHaveLength(3)
+    expect(playerOneOrderZone).toMatchObject({
+      visibility: 'public',
+      layout: {
+        ordering: 'ordered',
+        occupancy: 'multi',
+      },
+    })
+    expect(playerOnePrison).toMatchObject({
+      visibility: 'public',
+      layout: {
+        ordering: 'unordered',
+        occupancy: 'multi',
+      },
+    })
+    expect(playerOne?.counters).toContainEqual({
+      key: 'energy',
+      amount: 0,
+      visibility: 'public',
+    })
     expect(
       state.pieces
         .filter((piece) => piece.ownerPlayerId === PLAYER_1)
@@ -103,6 +134,81 @@ describe('real deck-to-match bootstrap', () => {
     ).toMatchObject({
       cardType: 'trigger-unit',
       triggerType: 'critical',
+    })
+    expect(
+      state.pieces.find((piece) => piece.cardDefinitionId === CARD_G3)
+        ?.effectDefinitionIds,
+    ).toEqual(['effect:test:grade-3-activated'])
+  })
+
+  it('lets the Standard prison zone hold opponent-owned cards without rewriting ownership', () => {
+    const result = createDeckBackedGameState(createBootstrapInput())
+
+    expect(result.ok).toBe(true)
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    const state = result.state
+    const playerOnePrison = state.zones.find(
+      (zone) => zone.ownerPlayerId === PLAYER_1 && zone.kind === 'prison',
+    )
+    const playerTwoHand = state.zones.find(
+      (zone) => zone.ownerPlayerId === PLAYER_2 && zone.kind === 'hand',
+    )
+    const imprisonedPieceId = playerTwoHand?.occupants[0]?.pieceId
+
+    if (
+      playerOnePrison === undefined ||
+      playerTwoHand === undefined ||
+      imprisonedPieceId === undefined
+    ) {
+      throw new Error(
+        'Expected Standard bootstrap to create prison and hand zones.',
+      )
+    }
+
+    const transition = applyGameAction(state, {
+      expectedRevision: state.revision,
+      action: {
+        actionId: 'action-imprison-opponent-card' as ActionId,
+        type: 'zone.move_piece',
+        actor: {
+          kind: 'system',
+          system: 'rules-engine',
+        },
+        pieceId: imprisonedPieceId,
+        from: {
+          zoneId: playerTwoHand.zoneId,
+        },
+        to: {
+          zoneId: playerOnePrison.zoneId,
+        },
+        reason: 'imprison',
+      },
+    })
+
+    expect(transition.status).toBe('applied')
+
+    if (transition.status !== 'applied') {
+      throw new Error(transition.message)
+    }
+
+    const nextState = transition.nextState
+    const nextPrison = nextState.zones.find(
+      (zone) => zone.zoneId === playerOnePrison.zoneId,
+    )
+    const movedPiece = nextState.pieces.find(
+      (piece) => piece.pieceId === imprisonedPieceId,
+    )
+
+    expect(nextPrison?.occupants).toContainEqual({
+      pieceId: imprisonedPieceId,
+    })
+    expect(movedPiece).toMatchObject({
+      ownerPlayerId: PLAYER_2,
+      controllerPlayerId: PLAYER_2,
     })
   })
 
@@ -306,7 +412,16 @@ function catalogCards(): readonly GameplayCard[] {
     gameplayCard(CARD_G0, 'Keter Starter', 0, 6000, 5000),
     gameplayCard(CARD_G1, 'Keter Grade 1', 1, 8000, 5000),
     gameplayCard(CARD_G2, 'Keter Grade 2', 2, 10000, 5000),
-    gameplayCard(CARD_G3, 'Keter Grade 3', 3, 13000, 0),
+    gameplayCard(CARD_G3, 'Keter Grade 3', 3, 13000, 0, {
+      effectRefs: [
+        {
+          id: 'effect:test:grade-3-activated' as EffectRefId,
+          sourceCardId: CARD_G3,
+          source: 'printed',
+          key: 'grade-3-activated',
+        },
+      ],
+    }),
     gameplayCard(CARD_TRIGGER, 'Keter Critical Trigger', 0, 5000, 15000, {
       cardType: 'trigger-unit',
       triggerType: 'critical',
@@ -323,6 +438,7 @@ function gameplayCard(
   options: {
     readonly cardType?: GameplayCard['cardType']
     readonly triggerType?: GameplayCard['triggerType']
+    readonly effectRefs?: GameplayCard['effectRefs']
   } = {},
 ): GameplayCard {
   return {
@@ -340,6 +456,6 @@ function gameplayCard(
           triggerType: options.triggerType,
         }),
     keywords: [],
-    effectRefs: [],
+    effectRefs: options.effectRefs ?? [],
   }
 }

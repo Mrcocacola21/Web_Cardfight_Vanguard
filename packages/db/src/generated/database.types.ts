@@ -1585,6 +1585,54 @@ export type Database = {
         }
         Relationships: []
       }
+      match_lobby_invites: {
+        Row: {
+          created_at: string
+          format_id: string
+          id: string
+          invitee_deck_id: string | null
+          invitee_profile_id: string
+          invitee_ready: boolean
+          requester_deck_id: string | null
+          requester_profile_id: string
+          requester_ready: boolean
+          responded_at: string | null
+          started_room_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          format_id: string
+          id?: string
+          invitee_deck_id?: string | null
+          invitee_profile_id: string
+          invitee_ready?: boolean
+          requester_deck_id?: string | null
+          requester_profile_id: string
+          requester_ready?: boolean
+          responded_at?: string | null
+          started_room_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          format_id?: string
+          id?: string
+          invitee_deck_id?: string | null
+          invitee_profile_id?: string
+          invitee_ready?: boolean
+          requester_deck_id?: string | null
+          requester_profile_id?: string
+          requester_ready?: boolean
+          responded_at?: string | null
+          started_room_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       match_participants: {
         Row: {
           deck_version_id: string | null

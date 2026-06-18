@@ -202,6 +202,64 @@ describe('core Vanguard resource effect operations', () => {
     ])
   })
 
+  it('Energy Blasts from the public Standard energy counter', () => {
+    const result = resolveResourceEffectDefinition({
+      currentState: makeResourceState({
+        energy: 3,
+      }),
+      transitionId: 'transition-resource-eb2' as TransitionId,
+      sourcePieceId: SOURCE_PIECE,
+      effectDefinition: defineResourceEffect('energy-blast-2', [
+        energyBlast(2),
+      ]),
+    })
+
+    expect(result.ok).toBe(true)
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    expect(
+      result.state.players.find((player) => player.playerId === PLAYER_1)
+        ?.counters,
+    ).toContainEqual({
+      key: 'energy',
+      amount: 1,
+      visibility: 'public',
+    })
+    expect(result.events.map((event) => event.type)).toEqual([
+      'effect.resolved',
+      'resource.energy_blasted',
+    ])
+    expect(result.events[1]).toMatchObject({
+      type: 'resource.energy_blasted',
+      playerId: PLAYER_1,
+      counterKey: 'energy',
+      previousAmount: 3,
+      nextAmount: 1,
+      count: 2,
+    })
+  })
+
+  it('rejects Energy Blast when energy is insufficient', () => {
+    const result = resolveResourceEffectDefinition({
+      currentState: makeResourceState({
+        energy: 1,
+      }),
+      transitionId: 'transition-resource-eb-fail' as TransitionId,
+      sourcePieceId: SOURCE_PIECE,
+      effectDefinition: defineResourceEffect('energy-blast-fail', [
+        energyBlast(2),
+      ]),
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'invalid_action',
+    })
+  })
+
   it('routes resource operations through event-triggered effect resolution', () => {
     const state = makeResourceState()
     const effectDefinition = defineResourceEffect(
@@ -269,6 +327,7 @@ describe('core Vanguard resource effect operations', () => {
 
 interface ResourceStateOptions {
   readonly faceDownDamagePieceIds?: readonly PieceId[]
+  readonly energy?: number
 }
 
 function makeResourceState(options: ResourceStateOptions = {}): GameState {
@@ -297,7 +356,16 @@ function makeResourceState(options: ResourceStateOptions = {}): GameState {
           ZONE_DROP,
           ZONE_VANGUARD,
         ],
-        counters: [],
+        counters:
+          options.energy === undefined
+            ? []
+            : [
+                {
+                  key: 'energy',
+                  amount: options.energy,
+                  visibility: 'public',
+                },
+              ],
         flags: [],
       },
       {
@@ -452,6 +520,16 @@ function soulCharge(count: number): ResourceEffectOperation {
     player: 'source_controller',
     selection: 'deterministic_first',
     role: 'effect',
+    duration: 'immediate',
+  }
+}
+
+function energyBlast(count: number): ResourceEffectOperation {
+  return {
+    kind: 'energy_blast',
+    count,
+    player: 'source_controller',
+    role: 'cost',
     duration: 'immediate',
   }
 }

@@ -10,6 +10,7 @@ export type {
   BattleState,
   BattleStatus,
   CheckTriggerResolutionState,
+  EffectContinuationState,
   GameFlagKey,
   GameFlagState,
   GamePieceFlagKey,

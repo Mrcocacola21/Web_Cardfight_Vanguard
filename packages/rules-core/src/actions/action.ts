@@ -1,6 +1,7 @@
 import type {
   ActionId,
   BattleId,
+  EffectDefinitionId,
   PieceId,
   PlayerId,
   ZoneId,
@@ -48,6 +49,7 @@ export type PlayerGameActionType =
   | 'card.play'
   | 'card.ride'
   | 'card.call'
+  | 'card.activate_effect'
   | 'battle.declare_attack'
   | 'battle.commit_boost'
   | 'battle.guard'
@@ -144,6 +146,11 @@ export interface RideCardAction
 export interface CallCardAction
   extends PlayerGameActionBase<'card.call'>, PieceCommitActionFields {}
 
+export interface ActivateCardEffectAction extends PlayerGameActionBase<'card.activate_effect'> {
+  readonly sourcePieceId: PieceId
+  readonly effectDefinitionId: EffectDefinitionId
+}
+
 export interface DeclareAttackAction extends PlayerGameActionBase<'battle.declare_attack'> {
   readonly attackerPieceId: PieceId
   readonly target: AttackTarget
@@ -231,7 +238,11 @@ export type TurnFlowAction =
 
 export type ZoneAction = MovePieceAction | ShuffleZoneAction | DrawCardsAction
 
-export type CardAction = PlayCardAction | RideCardAction | CallCardAction
+export type CardAction =
+  | PlayCardAction
+  | RideCardAction
+  | CallCardAction
+  | ActivateCardEffectAction
 
 export type BattleAction = DeclareAttackAction | CommitBoostAction | GuardAction
 
@@ -244,6 +255,7 @@ export type PlayerGameAction =
   | PlayCardAction
   | RideCardAction
   | CallCardAction
+  | ActivateCardEffectAction
   | DeclareAttackAction
   | CommitBoostAction
   | GuardAction

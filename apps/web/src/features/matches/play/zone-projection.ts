@@ -2,6 +2,7 @@ import type {
   GamePieceFlagKey,
   GamePieceOrientation,
   GameState,
+  EngineCardStats,
   PieceId,
   PlayerId,
   VisibleGamePieceState,
@@ -25,6 +26,10 @@ export type MatchBoardZoneRole =
   | 'soul'
   | 'drop'
   | 'bind'
+  | 'order'
+  | 'prison'
+  | 'guardian'
+  | 'energy'
   | 'other'
 
 export interface ProjectedMatchBoardPiece {
@@ -32,12 +37,31 @@ export interface ProjectedMatchBoardPiece {
   readonly visibility: VisiblePieceVisibility
   readonly pieceId?: PieceId
   readonly cardDefinitionId?: GameState['pieces'][number]['cardDefinitionId']
+  readonly card?: ProjectedMatchBoardCardDetails
   readonly ownerPlayerId?: PlayerId
   readonly controllerPlayerId?: PlayerId
   readonly slotId?: VisibleZoneState['occupants'][number]['slotId']
   readonly position: number
   readonly orientation?: GamePieceOrientation
   readonly flags: readonly GamePieceFlagKey[]
+  readonly powerModifier?: number
+  readonly criticalModifier?: number
+}
+
+export interface ProjectedMatchBoardCardDetails {
+  readonly cardDefinitionId: EngineCardStats['cardDefinitionId']
+  readonly name: string
+  readonly cardType: EngineCardStats['cardType']
+  readonly grade: EngineCardStats['grade']
+  readonly nation?: EngineCardStats['nation']
+  readonly clan?: EngineCardStats['clan']
+  readonly power: EngineCardStats['power']
+  readonly shield: EngineCardStats['shield']
+  readonly critical: EngineCardStats['critical']
+  readonly triggerType: EngineCardStats['triggerType']
+  readonly keywords: EngineCardStats['keywords']
+  readonly effectRefs: readonly string[]
+  readonly imageUrl?: string
 }
 
 export interface ProjectedMatchBoardZone {
@@ -87,6 +111,10 @@ const ZONE_ROLE_ORDER: readonly MatchBoardZoneRole[] = [
   'soul',
   'drop',
   'bind',
+  'order',
+  'prison',
+  'guardian',
+  'energy',
   'other',
 ]
 
@@ -103,7 +131,11 @@ const LIBRARY_ZONE_ROLES: readonly MatchBoardZoneRole[] = [
   'g_deck',
 ]
 
-const RESOURCE_ZONE_ROLES: readonly MatchBoardZoneRole[] = ['damage', 'soul']
+const RESOURCE_ZONE_ROLES: readonly MatchBoardZoneRole[] = [
+  'damage',
+  'soul',
+  'energy',
+]
 
 const DISCARD_ZONE_ROLES: readonly MatchBoardZoneRole[] = ['drop', 'bind']
 
@@ -115,6 +147,10 @@ const SUPPORT_ZONE_ROLES: readonly MatchBoardZoneRole[] = [
   'soul',
   'drop',
   'bind',
+  'order',
+  'prison',
+  'guardian',
+  'energy',
 ]
 
 export function buildMatchBoardProjection(
@@ -149,6 +185,11 @@ export function buildMatchBoardProjectionFromVisibleState(
   const pieceById = new Map(
     state.pieces.map((piece) => [piece.refId, piece] as const),
   )
+  const cardStatsByDefinitionId = new Map(
+    (state.cardStats?.cards ?? []).map(
+      (card) => [card.cardDefinitionId as string, card] as const,
+    ),
+  )
 
   if (currentPlayer === undefined) {
     return {
@@ -164,7 +205,7 @@ export function buildMatchBoardProjectionFromVisibleState(
   ): MatchBoardSideProjection => {
     const zones = state.zones
       .filter((zone) => zone.ownerPlayerId === player.playerId)
-      .map((zone) => projectZone(zone, pieceById))
+      .map((zone) => projectZone(zone, pieceById, cardStatsByDefinitionId))
       .sort(compareProjectedZones)
     const centralZones = zones.filter((zone) =>
       BATTLEFIELD_ZONE_ROLES.includes(zone.role),
@@ -219,6 +260,7 @@ export function buildMatchBoardProjectionFromVisibleState(
 function projectZone(
   zone: VisibleZoneState,
   pieceById: ReadonlyMap<string, VisibleGamePieceState>,
+  cardStatsByDefinitionId: ReadonlyMap<string, EngineCardStats>,
 ): ProjectedMatchBoardZone {
   const role = getZoneRole(zone.kind)
 
@@ -237,6 +279,10 @@ function projectZone(
     slotIds: zone.layout.slotIds ?? [],
     pieces: zone.occupants.map((occupant) => {
       const piece = pieceById.get(occupant.refId)
+      const cardStats =
+        piece?.cardDefinitionId === undefined
+          ? undefined
+          : cardStatsByDefinitionId.get(piece.cardDefinitionId as string)
 
       return {
         refId: occupant.refId,
@@ -247,6 +293,7 @@ function projectZone(
         ...(piece?.cardDefinitionId === undefined
           ? {}
           : { cardDefinitionId: piece.cardDefinitionId }),
+        ...(cardStats === undefined ? {} : { card: mapCardStats(cardStats) }),
         ...(piece?.ownerPlayerId === undefined
           ? {}
           : { ownerPlayerId: piece.ownerPlayerId }),
@@ -259,9 +306,42 @@ function projectZone(
           ? {}
           : { orientation: piece.orientation }),
         flags: piece?.flags ?? [],
+        ...(piece?.powerModifier === undefined
+          ? {}
+          : { powerModifier: piece.powerModifier }),
+        ...(piece?.criticalModifier === undefined
+          ? {}
+          : { criticalModifier: piece.criticalModifier }),
       }
     }),
   }
+}
+
+function mapCardStats(card: EngineCardStats): ProjectedMatchBoardCardDetails {
+  return {
+    cardDefinitionId: card.cardDefinitionId,
+    name: card.name ?? formatCardDefinitionFallbackName(card.cardDefinitionId),
+    cardType: card.cardType,
+    grade: card.grade,
+    ...(card.nation === undefined ? {} : { nation: card.nation }),
+    ...(card.clan === undefined ? {} : { clan: card.clan }),
+    power: card.power,
+    shield: card.shield,
+    critical: card.critical,
+    triggerType: card.triggerType,
+    keywords: card.keywords,
+    effectRefs: card.effectRefs ?? [],
+  }
+}
+
+function formatCardDefinitionFallbackName(cardDefinitionId: string): string {
+  const lastSegment = cardDefinitionId.split(':').at(-1) ?? cardDefinitionId
+
+  return lastSegment
+    .split(/[-_.]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function getZoneRole(kind: VisibleZoneState['kind']): MatchBoardZoneRole {
@@ -291,6 +371,18 @@ function getZoneRole(kind: VisibleZoneState['kind']): MatchBoardZoneRole {
     case 'bind':
     case 'bind_zone':
       return 'bind'
+    case 'order':
+    case 'order_zone':
+      return 'order'
+    case 'prison':
+    case 'prison_zone':
+      return 'prison'
+    case 'guardian':
+    case 'guardian_circle':
+      return 'guardian'
+    case 'energy':
+    case 'energy_zone':
+      return 'energy'
     default:
       return 'other'
   }
@@ -335,6 +427,14 @@ function formatZoneRoleLabel(
       return 'Drop'
     case 'bind':
       return 'Bind'
+    case 'order':
+      return 'Order'
+    case 'prison':
+      return 'Prison'
+    case 'guardian':
+      return 'Guardian Circle'
+    case 'energy':
+      return 'Energy'
     case 'other':
       return kind
         .split('_')

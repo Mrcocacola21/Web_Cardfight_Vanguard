@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { DeckListItemRecord } from '@web-vg/db/repositories/decks'
 import type { ProfileRecord } from '@web-vg/db/repositories/profiles'
-import { ArrowRight, Copy, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Copy, Plus, Swords, Trash2 } from 'lucide-react'
 
 import {
   FilterBar,
@@ -20,6 +20,7 @@ import {
   type DeckListQuery,
 } from '@/features/decks/deck-list-query'
 import {
+  createStandardSliceQaDecksAction,
   deleteDeckAction,
   duplicateDeckAction,
 } from '@/features/decks/server/deck-actions'
@@ -31,6 +32,7 @@ interface DeckListViewProps {
   readonly totalDeckCount: number
   readonly query: DeckListQuery
   readonly profile: ProfileRecord
+  readonly showStandardSliceQaBootstrap?: boolean
 }
 
 function formatDate(value: string) {
@@ -42,6 +44,7 @@ export function DeckListView({
   totalDeckCount,
   query,
   profile,
+  showStandardSliceQaBootstrap = false,
 }: DeckListViewProps) {
   const hasPersistedDecks = totalDeckCount > 0
   const hasFilteredDecks = decks.length > 0
@@ -65,17 +68,33 @@ export function DeckListView({
             </>
           }
           actions={
-            <Link
-              href="/decks/create"
-              className={buttonVariants({
-                variant: 'default',
-                size: 'default',
-              })}
-              aria-label="Create deck"
-            >
-              <Plus className="size-4" />
-              Create deck
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              {showStandardSliceQaBootstrap ? (
+                <form action={createStandardSliceQaDecksAction}>
+                  <DeckSubmitButton
+                    label="Create QA slice decks"
+                    pendingLabel="Creating QA decks..."
+                    variant="outline"
+                    size="default"
+                    aria-label="Create Standard slice QA decks"
+                  >
+                    <Swords className="size-4" />
+                    Create QA slice decks
+                  </DeckSubmitButton>
+                </form>
+              ) : null}
+              <Link
+                href="/decks/create"
+                className={buttonVariants({
+                  variant: 'default',
+                  size: 'default',
+                })}
+                aria-label="Create deck"
+              >
+                <Plus className="size-4" />
+                Create deck
+              </Link>
+            </div>
           }
         />
       }
@@ -155,6 +174,19 @@ export function DeckListView({
                     <p>Created: {formatDate(deck.createdAt)}</p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    {deck.currentVersionNumber &&
+                    deck.format.id === 'standard' ? (
+                      <Link
+                        href="/matches/lobby"
+                        className={buttonVariants({
+                          variant: 'secondary',
+                          size: 'sm',
+                        })}
+                      >
+                        <Swords className="size-4" />
+                        Invite to match
+                      </Link>
+                    ) : null}
                     <form action={duplicateDeckAction}>
                       <input type="hidden" name="deckId" value={deck.id} />
                       <DeckSubmitButton

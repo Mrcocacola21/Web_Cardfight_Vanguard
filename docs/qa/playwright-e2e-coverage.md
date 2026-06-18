@@ -29,8 +29,8 @@ tests where a unit or integration test already owns the contract.
   accept, owner dashboard live refresh, and removal.
 - `tests/e2e/matches/history-and-gameplay.spec.ts`: manual match recording,
   history filtering, stats rendering, friends match view empty state, local match
-  prototype actions, persisted room access denial, and two-browser persisted room
-  sync.
+  prototype actions, persisted room access denial, deck-to-match room entry, and
+  two-browser persisted room sync.
 
 ## Test Data / Auth Strategy
 
@@ -39,9 +39,10 @@ through the UI and use generated display names/emails to avoid depending on
 manual database state. Decks, collection entries, social records, and manual
 matches are created by user-visible flows where practical.
 
-The persisted match room test uses a small service-role helper to insert a room
-session after the participant profiles are created through the UI. This keeps
-room setup stable without inventing an unavailable room-creation UI.
+Older persisted match room tests use a small service-role helper to insert a
+room session after the participant profiles are created through the UI. The
+product path now also exposes `/matches/start?deckId=...`, which creates a
+deck-backed persisted room from an owned Standard deck and a visible opponent.
 
 ## Routes/Features Intentionally Not Covered Yet
 
@@ -53,8 +54,9 @@ room setup stable without inventing an unavailable room-creation UI.
   are covered through their server-mediated polling routes.
 - Every catalog/deck-validation rule combination. E2E checks visible feedback;
   combinatorial rules coverage belongs in package tests.
-- Persisted multiplayer room creation through UI, because the current app
-  exposes the projected room route but not a stable room creation workflow.
+- Full matchmaking/lobby coverage. The current room creation workflow is a
+  bounded direct challenge from an owned Standard deck, not a public matchmaking
+  platform.
 
 ## How To Run The Suite
 

@@ -3,6 +3,7 @@ import type { CardId, FormatId, Keyword, TriggerType } from '@web-vg/shared'
 import type {
   ActionId,
   BattleId,
+  EffectContinuationId,
   EffectDefinitionId,
   GameId,
   PieceId,
@@ -125,6 +126,7 @@ export interface GamePieceState {
   readonly pieceId: PieceId
   readonly kind: GamePieceKind
   readonly cardDefinitionId?: CardId
+  readonly effectDefinitionIds?: readonly EffectDefinitionId[]
   readonly keywords?: readonly Keyword[]
   readonly ownerPlayerId?: PlayerId
   readonly controllerPlayerId?: PlayerId
@@ -241,6 +243,17 @@ export interface BattleState {
   readonly damage?: BattleDamageState
 }
 
+export interface EffectContinuationState {
+  readonly continuationId: EffectContinuationId
+  readonly requestId: RequestId
+  readonly sourceActionId: ActionId
+  readonly sourcePieceId: PieceId
+  readonly effectDefinitionId: EffectDefinitionId
+  readonly actorPlayerId: PlayerId
+  readonly operationIndex: number
+  readonly operationKinds: readonly string[]
+}
+
 export interface GameState {
   readonly gameId: GameId
   readonly formatId: FormatId
@@ -254,6 +267,7 @@ export interface GameState {
   readonly pieceStates: readonly GamePieceStatusState[]
   readonly flags: readonly GameFlagState[]
   readonly battle?: BattleState
+  readonly effectContinuations?: readonly EffectContinuationState[]
   /**
    * Ordered FIFO queue of pending choice requests.
    *

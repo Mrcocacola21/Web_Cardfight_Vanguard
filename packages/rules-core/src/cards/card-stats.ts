@@ -68,13 +68,17 @@ export function mapGameplayCardToEngineStats(
 
   return {
     cardDefinitionId: card.cardId,
+    name: card.name,
     cardType: card.cardType,
     grade: card.grade,
+    nation: card.nation,
+    ...(card.clan === undefined ? {} : { clan: card.clan }),
     power: card.power,
     shield: card.shield,
     critical: card.critical,
     triggerType: card.triggerType ?? null,
     keywords: card.keywords,
+    effectRefs: card.effectRefs.map((effect) => effect.id),
   }
 }
 

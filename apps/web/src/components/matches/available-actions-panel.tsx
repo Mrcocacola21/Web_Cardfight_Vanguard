@@ -40,24 +40,35 @@ export function AvailableActionsPanel({
   )
 
   return (
-    <Card role="region" aria-label="Available actions">
+    <Card
+      role="region"
+      aria-label="Available actions"
+      className="border-white/10 bg-black/35 text-slate-50"
+    >
       <CardHeader>
-        <CardTitle>Available Actions</CardTitle>
+        <CardTitle>Action Rail</CardTitle>
         <CardDescription>
           <div className="flex flex-wrap gap-2">
             <Badge variant={getModeBadgeVariant(projection.mode)}>
               {formatModeLabel(projection.mode)}
             </Badge>
             {projection.pendingRequest ? (
-              <Badge variant="warning">{projection.pendingRequest.type}</Badge>
+              <Badge variant="warning">
+                {formatActionIssueCode(projection.pendingRequest.type)}
+              </Badge>
             ) : null}
           </div>
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {projection.availableActions.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/65 bg-background-elevated/45 p-3 text-sm text-muted-foreground">
-            No available actions.
+          <div className="rounded-xl border border-dashed border-white/15 bg-black/25 p-3 text-sm text-slate-300">
+            <div>No available actions.</div>
+            <div className="mt-1 text-xs">
+              {projection.mode === 'pending_request'
+                ? 'Finish the active choice to continue.'
+                : 'Waiting for the next table update.'}
+            </div>
           </div>
         ) : (
           <div className="grid gap-3">
@@ -114,7 +125,7 @@ function ActionGroup({
             key={action.id}
             type="button"
             variant={group === 'decision' ? 'default' : 'outline'}
-            className="h-auto justify-start gap-2 py-2 text-left"
+            className="h-auto justify-start gap-2 rounded-xl py-2 text-left"
             disabled={actionsDisabled || onSubmitAction === undefined}
             onClick={() => onSubmitAction?.(action)}
           >
@@ -158,22 +169,17 @@ function ActionStatusList({
         {actions.slice(0, 6).map((action) => (
           <div
             key={action.id}
-            className="grid gap-1 rounded-md border border-border/55 bg-background-elevated/45 p-2"
+            className="grid gap-1 rounded-xl border border-white/10 bg-black/25 p-2"
           >
             <div className="flex items-start justify-between gap-2">
               <span className="text-sm font-medium">{action.label}</span>
               <Badge variant={variant}>
-                {action.preview.code ?? action.status}
+                {formatActionIssueCode(action.preview.code ?? action.status)}
               </Badge>
             </div>
-            {action.preview.message ? (
-              <p className="text-xs text-muted-foreground">
-                {action.preview.message}
-              </p>
-            ) : null}
-            {action.preview.blockingRequestIds.length > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Blocking: {action.preview.blockingRequestIds.join(', ')}
+            {formatActionIssueMessage(action) ? (
+              <p className="text-xs text-slate-400">
+                {formatActionIssueMessage(action)}
               </p>
             ) : null}
           </div>
@@ -252,6 +258,25 @@ function formatGroupLabel(group: MatchClientActionGroup) {
     case 'match':
       return 'Match'
   }
+}
+
+function formatActionIssueCode(code: string) {
+  return code
+    .split(/[._:-]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatActionIssueMessage(action: MatchClientActionView) {
+  if (
+    action.preview.code === 'pending_request' ||
+    action.preview.blockingRequestIds.length > 0
+  ) {
+    return 'Finish the active choice before taking another action.'
+  }
+
+  return action.preview.message
 }
 
 function formatModeLabel(mode: MatchClientActionsProjection['mode']) {

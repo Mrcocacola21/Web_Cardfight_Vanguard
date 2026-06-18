@@ -94,6 +94,7 @@ export interface ProjectedMatchRoomClientState {
   readonly pieceCount: number
   readonly playerSummaries: readonly ProjectedMatchPlayerSummary[]
   readonly board: MatchBoardProjection
+  readonly battle?: VisibleGameState['battle']
   readonly pendingRequests: readonly VisibleGameChoiceRequest[]
   readonly eventLogEntries: readonly ProjectedMatchEventLogEntry[]
   readonly acceptedHistoryEntryIds: readonly string[]
@@ -187,6 +188,9 @@ export function buildProjectedMatchRoomClientState(input: {
         visibleState,
         projection.viewer.playerId,
       ),
+      ...(visibleState.battle === undefined
+        ? {}
+        : { battle: visibleState.battle }),
       pendingRequests: visibleState.pendingRequests,
       eventLogEntries: buildProjectedMatchEventLogEntries(projection.events, {
         roomRevision,

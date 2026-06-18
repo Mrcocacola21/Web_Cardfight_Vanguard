@@ -1,4 +1,10 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -21,7 +27,7 @@ describe('MatchBoard', () => {
       LOCAL_MATCH_PLAYER_ONE_ID,
     )
 
-    render(
+    const { container } = render(
       <MatchBoard
         projection={projection}
         turn={room.engineState.turn}
@@ -36,6 +42,8 @@ describe('MatchBoard', () => {
     )
 
     expect(screen.getByRole('region', { name: 'Match board' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Table Surface' })).toBeVisible()
+    expect(container.querySelector('[data-playmat="vanguard"]')).not.toBeNull()
 
     const currentSide = screen.getByRole('region', {
       name: 'Current player side',
@@ -53,22 +61,69 @@ describe('MatchBoard', () => {
 
     expect(within(currentSide).getByText('Aichi Sendou')).toBeVisible()
     expect(within(opponentSide).getByText('Toshiki Kai')).toBeVisible()
+    expect(within(currentBattlefield).getByText(/Starting Sage/i)).toBeVisible()
+    expect(within(currentSupport).getByText(/Wayward Boost/i)).toBeVisible()
     expect(
-      within(currentBattlefield).getByText('local-catalog:keter:starting-sage'),
-    ).toBeVisible()
+      within(currentHand).getAllByText(/Main Grade 1 A/i).length,
+    ).toBeGreaterThan(0)
+    expect(within(opponentSide).getByText(/Starting Sage/i)).toBeVisible()
     expect(
-      within(currentSupport).getByText('local-catalog:keter:wayward-boost'),
-    ).toBeVisible()
-    expect(
-      within(currentHand).getAllByText('local-catalog:keter:main-g1-a').length,
+      container.querySelectorAll('[data-playmat-circle="vanguard"]').length,
     ).toBeGreaterThan(0)
     expect(
-      within(opponentSide).getByText('local-catalog:keter:starting-sage'),
-    ).toBeVisible()
+      container.querySelector(
+        '[data-card-identity="local-catalog:keter:starting-sage"]',
+      ),
+    ).not.toBeNull()
   })
 
   it('renders all main zone contents, empty areas, hidden private cards, and piece flags', () => {
     const room = createLocalPrototypeMatchRoom('match-board-contents')
+    const projection = buildMatchBoardProjection(
+      room.engineState,
+      LOCAL_MATCH_PLAYER_ONE_ID,
+    )
+
+    const { container } = render(
+      <MatchBoard
+        projection={projection}
+        turn={room.engineState.turn}
+        zoneCount={room.engineState.zones.length}
+        pieceCount={room.engineState.pieces.length}
+      />,
+    )
+
+    const currentSide = screen.getByRole('region', {
+      name: 'Current player side',
+    })
+    const opponentSide = screen.getByRole('region', { name: 'Opponent side' })
+
+    expect(within(currentSide).getByText(/Starting Sage/i)).toBeVisible()
+    expect(within(currentSide).getByText(/Wayward Boost/i)).toBeVisible()
+    expect(
+      within(currentSide).getAllByText('Open circle').length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(currentSide).getAllByText('Empty stack').length,
+    ).toBeGreaterThanOrEqual(2)
+    expect(
+      within(opponentSide).getAllByText('Hidden card').length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(opponentSide).queryByText('local-catalog:keter:main-g1-a'),
+    ).toBeNull()
+    expect(
+      within(opponentSide).queryByText('local-catalog:keter:wayward-boost'),
+    ).toBeNull()
+    expect(
+      container.querySelector(
+        '[data-card-identity="local-catalog:keter:main-g1-a"]',
+      ),
+    ).not.toBeNull()
+  })
+
+  it('opens a pinned card inspect surface without leaking hidden cards', () => {
+    const room = createLocalPrototypeMatchRoom('match-board-inspect')
     const projection = buildMatchBoardProjection(
       room.engineState,
       LOCAL_MATCH_PLAYER_ONE_ID,
@@ -83,31 +138,34 @@ describe('MatchBoard', () => {
       />,
     )
 
-    const currentSide = screen.getByRole('region', {
-      name: 'Current player side',
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Starting Sage/i })[0]!,
+    )
+
+    const inspect = screen.getByRole('complementary', {
+      name: 'Card inspect',
     })
-    const opponentSide = screen.getByRole('region', { name: 'Opponent side' })
+
+    expect(inspect).toHaveAttribute('data-card-inspect', 'pinned')
+    expect(
+      within(inspect).getAllByText(/Starting Sage/i).length,
+    ).toBeGreaterThan(0)
+    expect(within(inspect).getByText('Grade')).toBeVisible()
+    expect(within(inspect).getByText('Power')).toBeVisible()
+    expect(within(inspect).getByText('Shield')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hidden card' })[0]!)
+
+    const hiddenInspect = screen.getByRole('complementary', {
+      name: 'Card inspect',
+    })
 
     expect(
-      within(currentSide).getByText('local-catalog:keter:starting-sage'),
+      within(hiddenInspect).getByText(
+        /hidden by the participant-safe projection/i,
+      ),
     ).toBeVisible()
-    expect(
-      within(currentSide).getByText('local-catalog:keter:wayward-boost'),
-    ).toBeVisible()
-    expect(
-      within(currentSide).getAllByText('Empty slot').length,
-    ).toBeGreaterThan(0)
-    expect(
-      within(currentSide).getAllByText('Empty zone').length,
-    ).toBeGreaterThanOrEqual(2)
-    expect(
-      within(opponentSide).getAllByText('Hidden card').length,
-    ).toBeGreaterThan(0)
-    expect(
-      within(opponentSide).queryByText('local-catalog:keter:main-g1-a'),
-    ).toBeNull()
-    expect(
-      within(opponentSide).queryByText('local-catalog:keter:wayward-boost'),
-    ).toBeNull()
+    expect(within(hiddenInspect).queryByText(/Starting Sage/i)).toBeNull()
   })
 })

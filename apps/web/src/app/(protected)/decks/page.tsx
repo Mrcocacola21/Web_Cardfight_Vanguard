@@ -5,6 +5,7 @@ import {
   filterDeckListItems,
   resolveDeckListQuery,
 } from '@/features/decks/deck-list-query'
+import { isStandardSliceQaBootstrapEnabled } from '@/features/decks/standard-slice-qa-bootstrap-config'
 import { listDecksByOwnerProfileId } from '@/features/decks/server/deck-read'
 import { getCurrentProfileState } from '@/features/profiles/server/profile-read'
 
@@ -81,6 +82,7 @@ export default async function DecksPage({ searchParams }: DecksPageProps) {
       totalDeckCount={decksResult.data.length}
       query={query}
       profile={profileState.profile}
+      showStandardSliceQaBootstrap={isStandardSliceQaBootstrapEnabled()}
     />
   )
 }

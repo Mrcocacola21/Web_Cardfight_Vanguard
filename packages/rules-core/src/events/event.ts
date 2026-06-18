@@ -132,10 +132,11 @@ export type PlayerResourceEventType =
 export type ResourceEventType =
   | 'resource.counter_blasted'
   | 'resource.counter_charged'
+  | 'resource.energy_blasted'
   | 'resource.soul_blasted'
   | 'resource.soul_charged'
 
-export type EffectEventType = 'effect.resolved'
+export type EffectEventType = 'effect.activated' | 'effect.resolved'
 
 export type TriggerEventType = 'trigger.revealed' | 'trigger.resolved'
 
@@ -558,6 +559,17 @@ export interface CounterChargedEvent extends EventBase<
   readonly count: number
 }
 
+export interface EnergyBlastedEvent extends EventBase<
+  'resource.energy_blasted',
+  SystemEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly counterKey: PlayerCounterKey
+  readonly previousAmount: number
+  readonly nextAmount: number
+  readonly count: number
+}
+
 export interface SoulBlastedEvent extends EventBase<
   'resource.soul_blasted',
   SystemEventOrigin
@@ -588,6 +600,15 @@ export interface EffectResolvedEvent extends EventBase<
   readonly sourcePieceId?: PieceId
   readonly triggerEventSequence?: EventSequenceNumber
   readonly operationKinds: readonly string[]
+}
+
+export interface EffectActivatedEvent extends EventBase<
+  'effect.activated',
+  PlayerEventOrigin
+> {
+  readonly playerId: PlayerId
+  readonly sourcePieceId: PieceId
+  readonly effectDefinitionId: EffectDefinitionId
 }
 
 export type TriggerCheckKind = 'drive' | 'damage'
@@ -687,10 +708,11 @@ export type PlayerResourceEvent =
 export type ResourceEvent =
   | CounterBlastedEvent
   | CounterChargedEvent
+  | EnergyBlastedEvent
   | SoulBlastedEvent
   | SoulChargedEvent
 
-export type EffectEvent = EffectResolvedEvent
+export type EffectEvent = EffectActivatedEvent | EffectResolvedEvent
 
 export type TriggerEvent = TriggerRevealedEvent | TriggerResolvedEvent
 

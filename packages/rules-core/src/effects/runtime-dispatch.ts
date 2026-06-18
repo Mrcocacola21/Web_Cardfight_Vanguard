@@ -137,6 +137,7 @@ function isResourceOperation(
   return (
     operation.kind === 'counter_blast' ||
     operation.kind === 'counter_charge' ||
+    operation.kind === 'energy_blast' ||
     operation.kind === 'soul_blast' ||
     operation.kind === 'soul_charge'
   )

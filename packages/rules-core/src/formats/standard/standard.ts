@@ -3,6 +3,7 @@ import type { FormatId } from '@web-vg/shared'
 import type {
   CallCardAction,
   GameActionType,
+  PlayCardAction,
   RideCardAction,
 } from '../../actions'
 import type { EngineCommand, EngineDispatchResult } from '../../boundary'
@@ -26,6 +27,8 @@ export const STANDARD_FORMAT_GAMEPLAY_MARKERS = [
 export const STANDARD_ZONE_KINDS = {
   rideDeck: 'ride_deck',
   vanguardCircle: 'vanguard_circle',
+  orderZone: 'order_zone',
+  prison: 'prison',
   soul: 'soul',
 } as const
 
@@ -53,7 +56,9 @@ export const STANDARD_FORMAT_ACTION_TYPES = [
   'zone.draw',
   'zone.move_piece',
   'card.call',
+  'card.play',
   'card.ride',
+  'card.activate_effect',
   'battle.declare_attack',
   'battle.commit_boost',
   'battle.guard',
@@ -87,6 +92,11 @@ function evaluateStandardCommand(
         context.currentState,
         context.command.submission.action,
       )
+    case 'card.play':
+      return evaluateStandardPlayAction(
+        context.currentState,
+        context.command.submission.action,
+      )
     case 'card.ride':
       return evaluateStandardRideAction(
         context.currentState,
@@ -95,6 +105,19 @@ function evaluateStandardCommand(
     default:
       return { status: 'allow' }
   }
+}
+
+function evaluateStandardPlayAction(
+  currentState: GameState,
+  action: PlayCardAction,
+): FormatCommandDecision {
+  return (
+    rejectZoneKindReferences(currentState, action, {
+      rejectedZoneKinds: [STANDARD_ZONE_KINDS.rideDeck],
+      message: ({ action: rejectedAction }) =>
+        `Standard adapter does not allow ${rejectedAction.type} to move cards into or out of the ride deck.`,
+    }) ?? { status: 'allow' }
+  )
 }
 
 function evaluateStandardCallAction(

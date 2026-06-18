@@ -217,6 +217,10 @@ export function assertGameStateInvariant(state: GameState): void {
   const requestIds = state.pendingRequests.map(
     (request) => request.requestId as string,
   )
+  const effectContinuationIds =
+    state.effectContinuations?.map(
+      (continuation) => continuation.continuationId as string,
+    ) ?? []
   const pieceStatePieceIds = state.pieceStates.map(
     (pieceState) => pieceState.pieceId as string,
   )
@@ -238,6 +242,10 @@ export function assertGameStateInvariant(state: GameState): void {
   assertUniqueValues(
     requestIds,
     'Game state must not declare duplicate pending request ids.',
+  )
+  assertUniqueValues(
+    effectContinuationIds,
+    'Game state must not declare duplicate effect continuation ids.',
   )
 
   const playerIdSet = new Set(playerIds)
@@ -341,6 +349,15 @@ export function assertGameStateInvariant(state: GameState): void {
         `Piece ${piece.pieceId} must not repeat gameplay keywords.`,
       )
     }
+
+    if (piece.effectDefinitionIds !== undefined) {
+      assertUniqueValues(
+        piece.effectDefinitionIds.map(
+          (effectDefinitionId) => effectDefinitionId as string,
+        ),
+        `Piece ${piece.pieceId} must not repeat effect definition bindings.`,
+      )
+    }
   }
 
   if (state.cardStats !== undefined) {
@@ -389,6 +406,30 @@ export function assertGameStateInvariant(state: GameState): void {
     }
 
     assertRequestStateReferences(request, pieceIdSet, playerIdSet, state.zones)
+  }
+
+  for (const continuation of state.effectContinuations ?? []) {
+    assertRulesInvariant(
+      pieceIdSet.has(continuation.sourcePieceId as string),
+      `Effect continuation ${continuation.continuationId} references unknown source piece ${continuation.sourcePieceId}.`,
+    )
+    assertRulesInvariant(
+      playerIdSet.has(continuation.actorPlayerId as string),
+      `Effect continuation ${continuation.continuationId} references unknown actor player ${continuation.actorPlayerId}.`,
+    )
+    assertRulesInvariant(
+      requestIds.includes(continuation.requestId as string),
+      `Effect continuation ${continuation.continuationId} must reference a pending request.`,
+    )
+    assertRulesInvariant(
+      Number.isSafeInteger(continuation.operationIndex) &&
+        continuation.operationIndex >= 0,
+      `Effect continuation ${continuation.continuationId} must keep a non-negative operation index.`,
+    )
+    assertUniqueValues(
+      continuation.operationKinds,
+      `Effect continuation ${continuation.continuationId} must not repeat operation kinds.`,
+    )
   }
 
   if (state.battle !== undefined) {

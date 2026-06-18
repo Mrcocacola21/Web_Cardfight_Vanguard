@@ -1,4 +1,11 @@
-import type { PlayerId, VisibleGameState } from '@web-vg/rules-core'
+'use client'
+
+import { useState } from 'react'
+import type {
+  PlayerId,
+  VisibleGameChoiceRequest,
+  VisibleGameState,
+} from '@web-vg/rules-core'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -10,393 +17,979 @@ import {
 } from '@/features/matches/play/zone-projection'
 import { cn } from '@/lib/utils'
 
-type ZoneVisualMode =
-  | 'battlefield'
-  | 'hand'
-  | 'library'
-  | 'resource'
-  | 'discard'
-  | 'other'
-
 interface MatchBoardProps {
   readonly projection: MatchBoardProjection
   readonly turn: VisibleGameState['turn']
   readonly zoneCount: number
   readonly pieceCount: number
+  readonly activeRequest?: VisibleGameChoiceRequest
+  readonly battle?: VisibleGameState['battle']
+  readonly selectedPieceRefIds?: readonly string[]
+  readonly selectedZoneIds?: readonly string[]
+  readonly onTogglePieceTarget?: (piece: ProjectedMatchBoardPiece) => void
+  readonly onToggleZoneTarget?: (zone: ProjectedMatchBoardZone) => void
   readonly resolvePlayerLabel?: (playerId: PlayerId) => string
 }
+
+type BoardSideOrientation = 'opponent' | 'current'
+type TargetVisualState = 'available' | 'selected' | 'unavailable' | 'none'
+type CircleSlotKey =
+  | 'front-left'
+  | 'front-right'
+  | 'back-left'
+  | 'back-center'
+  | 'back-right'
+
+interface RequestTargetContext {
+  readonly pieceRefIds: ReadonlySet<string>
+  readonly pieceIds: ReadonlySet<string>
+  readonly zoneIds: ReadonlySet<string>
+  readonly hasPieceTargets: boolean
+  readonly hasZoneTargets: boolean
+}
+
+interface BattleVisualContext {
+  readonly attackerRefId?: string
+  readonly attackerPieceId?: string
+  readonly targetPieceId?: string
+  readonly boosterRefId?: string
+  readonly boosterPieceId?: string
+  readonly guardianRefIds: ReadonlySet<string>
+  readonly guardianPieceIds: ReadonlySet<string>
+}
+
+interface BoardInteractionContext {
+  readonly requestTargets: RequestTargetContext | null
+  readonly battle: BattleVisualContext | null
+  readonly selectedPieceRefIds: ReadonlySet<string>
+  readonly selectedZoneIds: ReadonlySet<string>
+  readonly pinnedPieceRefId?: string
+  readonly onPreviewPiece?: (piece: ProjectedMatchBoardPiece) => void
+  readonly onClearPreviewPiece?: (piece: ProjectedMatchBoardPiece) => void
+  readonly onPinPiece?: (piece: ProjectedMatchBoardPiece) => void
+  readonly onTogglePieceTarget?: (piece: ProjectedMatchBoardPiece) => void
+  readonly onToggleZoneTarget?: (zone: ProjectedMatchBoardZone) => void
+}
+
+const REAR_GUARD_BACK_SLOTS: readonly CircleSlotKey[] = [
+  'back-left',
+  'back-center',
+  'back-right',
+]
+
+const LEFT_STACK_ROLES: readonly MatchBoardZoneRole[] = [
+  'damage',
+  'order',
+  'prison',
+  'bind',
+  'guardian',
+]
+
+const RIGHT_STACK_ROLES: readonly MatchBoardZoneRole[] = [
+  'deck',
+  'ride_deck',
+  'drop',
+  'soul',
+  'g_deck',
+  'energy',
+  'other',
+]
 
 export function MatchBoard({
   projection,
   turn,
   zoneCount,
   pieceCount,
+  activeRequest,
+  battle,
+  selectedPieceRefIds = [],
+  selectedZoneIds = [],
+  onTogglePieceTarget,
+  onToggleZoneTarget,
   resolvePlayerLabel,
 }: MatchBoardProps) {
   const currentSide = projection.currentSide
+  const [previewPiece, setPreviewPiece] =
+    useState<ProjectedMatchBoardPiece | null>(null)
+  const [pinnedPiece, setPinnedPiece] =
+    useState<ProjectedMatchBoardPiece | null>(null)
+  const inspectedPiece = pinnedPiece ?? previewPiece
+  const interaction: BoardInteractionContext = {
+    requestTargets: createRequestTargetContext(activeRequest),
+    battle: createBattleVisualContext(battle),
+    selectedPieceRefIds: new Set(selectedPieceRefIds),
+    selectedZoneIds: new Set(selectedZoneIds),
+    ...(pinnedPiece === null ? {} : { pinnedPieceRefId: pinnedPiece.refId }),
+    onPreviewPiece: setPreviewPiece,
+    onClearPreviewPiece: (piece) => {
+      setPreviewPiece((current) =>
+        current?.refId === piece.refId ? null : current,
+      )
+    },
+    onPinPiece: (piece) => {
+      setPinnedPiece((current) =>
+        current?.refId === piece.refId ? null : piece,
+      )
+    },
+    ...(onTogglePieceTarget === undefined ? {} : { onTogglePieceTarget }),
+    ...(onToggleZoneTarget === undefined ? {} : { onToggleZoneTarget }),
+  }
 
   return (
     <section
       aria-label="Match board"
-      className="grid gap-4 rounded-xl border border-border/70 bg-background-elevated/40 p-4"
+      data-playmat="vanguard"
+      className="relative overflow-hidden rounded-[1.35rem] border border-cyan-300/25 bg-slate-950 p-3 text-slate-50 shadow-[0_28px_80px_-42px_rgba(34,211,238,0.75)] sm:p-4"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">Match Board</h2>
-          <p className="text-sm text-muted-foreground">
-            Turn {turn.turnNumber} | {turn.phase}
-            {turn.step ? ` / ${turn.step}` : ''}
-          </p>
-        </div>
-        <Badge variant="outline">
-          {zoneCount} zones | {pieceCount} pieces
-        </Badge>
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        aria-hidden="true"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(56,189,248,0.24),transparent_34%),linear-gradient(135deg,rgba(14,165,233,0.22),transparent_28%,rgba(244,63,94,0.16)_72%,transparent)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:44px_44px]" />
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-cyan-200/20" />
       </div>
 
-      <div className="grid gap-3">
-        {projection.opponentSides.map((side) => (
-          <BoardSide
-            key={side.player.playerId}
-            side={side}
-            playerLabel={resolveLabel(side.player.playerId, resolvePlayerLabel)}
-          />
-        ))}
-
-        <div className="h-px bg-border/70" aria-hidden="true" />
-
-        {currentSide ? (
-          <BoardSide
-            side={currentSide}
-            playerLabel={resolveLabel(
-              currentSide.player.playerId,
-              resolvePlayerLabel,
-            )}
-          />
-        ) : (
-          <div className="rounded-lg border border-border/60 bg-background/70 p-3 text-sm text-muted-foreground">
-            No current player side is available.
+      <div className="relative grid gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur">
+          <div>
+            <h2 className="text-lg font-semibold tracking-normal">
+              Table Surface
+            </h2>
+            <p className="text-sm text-slate-300">
+              Turn {turn.turnNumber} | {formatStateLabel(turn.phase)}
+              {turn.step ? ` / ${formatStateLabel(turn.step)}` : ''}
+            </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" aria-label="Projected table size">
+              {zoneCount} zones | {pieceCount} cards
+            </Badge>
+            <Badge variant={battle === undefined ? 'secondary' : 'warning'}>
+              {battle === undefined
+                ? 'No battle'
+                : formatBattleStatus(battle.status)}
+            </Badge>
+          </div>
+        </div>
+
+        {activeRequest === undefined ? null : (
+          <PlaymatRequestBanner request={activeRequest} />
+        )}
+
+        <div className="grid gap-3">
+          {projection.opponentSides.map((side) => (
+            <PlaymatSide
+              key={side.player.playerId}
+              side={side}
+              orientation="opponent"
+              interaction={interaction}
+              playerLabel={resolveLabel(
+                side.player.playerId,
+                resolvePlayerLabel,
+              )}
+            />
+          ))}
+
+          <BattleAxis
+            projection={projection}
+            battle={battle}
+            interaction={interaction}
+            resolvePlayerLabel={resolvePlayerLabel}
+          />
+
+          {currentSide ? (
+            <PlaymatSide
+              side={currentSide}
+              orientation="current"
+              interaction={interaction}
+              playerLabel={resolveLabel(
+                currentSide.player.playerId,
+                resolvePlayerLabel,
+              )}
+            />
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-slate-300">
+              No current player side is available.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {inspectedPiece === null ? null : (
+        <CardInspectPanel
+          piece={inspectedPiece}
+          pinned={pinnedPiece !== null}
+          onClose={() => setPinnedPiece(null)}
+        />
+      )}
+    </section>
+  )
+}
+
+function PlaymatRequestBanner({
+  request,
+}: {
+  readonly request: VisibleGameChoiceRequest
+}) {
+  return (
+    <div
+      aria-label="Current playmat request"
+      className="relative z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/45 bg-amber-400/12 px-4 py-3 shadow-[0_0_28px_rgba(251,191,36,0.16)]"
+    >
+      <div>
+        <div className="text-xs font-semibold uppercase text-amber-200">
+          Current choice
+        </div>
+        <div className="text-sm font-semibold text-white">
+          {formatPlaymatRequestPrompt(request)}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="warning">{formatRequestType(request.type)}</Badge>
+        {request.visibilityToViewer === 'redacted' ? (
+          <Badge variant="secondary">Opponent choice</Badge>
+        ) : (
+          <Badge variant="success">Targets glow on mat</Badge>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PlaymatSide({
+  side,
+  orientation,
+  interaction,
+  playerLabel,
+}: {
+  readonly side: MatchBoardSideProjection
+  readonly orientation: BoardSideOrientation
+  readonly interaction: BoardInteractionContext
+  readonly playerLabel: string
+}) {
+  const ariaSideLabel =
+    side.side === 'current' ? 'Current player side' : 'Opponent side'
+  const isCurrent = orientation === 'current'
+  const leftStackZones = getStackZones(side, LEFT_STACK_ROLES)
+  const rightStackZones = getStackZones(side, RIGHT_STACK_ROLES)
+  const otherZones = side.zones.filter((zone) => {
+    return (
+      zone.role !== 'vanguard' &&
+      zone.role !== 'rear_guard' &&
+      zone.role !== 'hand' &&
+      !leftStackZones.includes(zone) &&
+      !rightStackZones.includes(zone)
+    )
+  })
+
+  return (
+    <section
+      aria-label={ariaSideLabel}
+      data-board-side={side.side}
+      className={cn(
+        'relative overflow-hidden rounded-[1.15rem] border bg-black/35 p-3 backdrop-blur',
+        isCurrent
+          ? 'border-cyan-300/35 shadow-[inset_0_0_48px_rgba(14,165,233,0.12)]'
+          : 'border-rose-300/25 shadow-[inset_0_0_48px_rgba(244,63,94,0.1)]',
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        aria-hidden
+      >
+        <div
+          className={cn(
+            'absolute inset-x-10 h-24 rounded-full blur-3xl',
+            isCurrent ? 'bottom-8 bg-cyan-400/20' : 'top-8 bg-rose-400/20',
+          )}
+        />
+      </div>
+
+      <div className="relative grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-white">{playerLabel}</h3>
+            <p className="text-xs text-slate-300">
+              {isCurrent ? 'Your playfield' : 'Opponent playfield'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={isCurrent ? 'default' : 'secondary'}>
+              Seat {side.player.seat}
+            </Badge>
+            <Badge variant="outline">
+              {formatStateLabel(side.player.status)}
+            </Badge>
+          </div>
+        </div>
+
+        {isCurrent ? null : (
+          <HandBand
+            ariaSideLabel={ariaSideLabel}
+            side={side}
+            interaction={interaction}
+            orientation={orientation}
+          />
+        )}
+
+        <div className="grid gap-3 xl:grid-cols-[9.25rem_minmax(0,1fr)_9.25rem]">
+          <StackRail
+            ariaLabel={`${ariaSideLabel} left stack zones`}
+            zones={leftStackZones}
+            interaction={interaction}
+          />
+          <BattlefieldMat
+            ariaSideLabel={ariaSideLabel}
+            side={side}
+            interaction={interaction}
+            orientation={orientation}
+          />
+          <StackRail
+            ariaLabel={`${ariaSideLabel} support zones`}
+            zones={rightStackZones}
+            interaction={interaction}
+          />
+        </div>
+
+        {isCurrent ? (
+          <HandBand
+            ariaSideLabel={ariaSideLabel}
+            side={side}
+            interaction={interaction}
+            orientation={orientation}
+          />
+        ) : null}
+
+        {otherZones.length === 0 ? null : (
+          <StackRail
+            ariaLabel={`${ariaSideLabel} other zones`}
+            zones={otherZones}
+            interaction={interaction}
+            horizontal
+          />
         )}
       </div>
     </section>
   )
 }
 
-function BoardSide({
+function BattlefieldMat({
+  ariaSideLabel,
   side,
-  playerLabel,
+  interaction,
+  orientation,
 }: {
+  readonly ariaSideLabel: string
   readonly side: MatchBoardSideProjection
-  readonly playerLabel: string
+  readonly interaction: BoardInteractionContext
+  readonly orientation: BoardSideOrientation
 }) {
-  const sideLabel =
-    side.side === 'current' ? 'Current player side' : 'Opponent side'
-  const supportZones = [
-    ...side.libraryZones,
-    ...side.resourceZones,
-    ...side.discardZones,
-  ]
-  const handSection = (
-    <ZoneSection
-      title="Hand"
-      ariaLabel={`${sideLabel} hand zones`}
-      zones={side.handZones}
-      gridClassName="grid-cols-1"
-    />
-  )
-  const boardSurface = (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <ZoneSection
-        title="Battlefield"
-        ariaLabel={`${sideLabel} battlefield zones`}
-        zones={side.battlefieldZones}
-        gridClassName="sm:grid-cols-2"
-      />
-      <ZoneSection
-        title="Support / Resources"
-        ariaLabel={`${sideLabel} support zones`}
-        zones={supportZones}
-        gridClassName="sm:grid-cols-2 xl:grid-cols-1"
-      />
-    </div>
-  )
+  const vanguardZone = findZoneByRole(side, 'vanguard')
+  const rearGuardZone = findZoneByRole(side, 'rear_guard')
+  const isOpponent = orientation === 'opponent'
 
   return (
     <section
-      aria-label={sideLabel}
-      className={cn(
-        'grid gap-3 rounded-lg border border-border/60 bg-background/70 p-3',
-        side.side === 'opponent' && 'bg-muted/20',
-      )}
+      aria-label={`${ariaSideLabel} battlefield zones`}
+      className="relative min-h-[19rem] overflow-hidden rounded-2xl border border-cyan-200/20 bg-slate-950/40 p-3 shadow-[inset_0_0_70px_rgba(14,165,233,0.12)]"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">{playerLabel}</h3>
-          <p className="text-xs text-muted-foreground">{sideLabel}</p>
-        </div>
-        <Badge variant={side.side === 'current' ? 'default' : 'secondary'}>
-          Seat {side.player.seat}
-        </Badge>
+      <div
+        className="pointer-events-none absolute inset-0 opacity-75"
+        aria-hidden
+      >
+        <div className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-200/30 bg-cyan-300/5 shadow-[0_0_46px_rgba(34,211,238,0.22)]" />
+        <div className="absolute inset-x-10 top-1/2 h-px bg-cyan-200/25" />
+        <div className="absolute left-1/2 top-8 h-[calc(100%-4rem)] w-px -translate-x-1/2 bg-cyan-200/20" />
       </div>
 
-      {side.side === 'opponent' ? handSection : null}
-      {boardSurface}
-      {side.side === 'current' ? handSection : null}
-
-      {side.otherZones.length > 0 ? (
-        <ZoneSection
-          title="Other Zones"
-          ariaLabel={`${sideLabel} other zones`}
-          zones={side.otherZones}
-          gridClassName="sm:grid-cols-2"
-        />
-      ) : null}
+      <div
+        className={cn(
+          'relative grid min-h-[17rem] grid-rows-[1fr_1fr] gap-4',
+          isOpponent && 'grid-rows-[1fr_1fr]',
+        )}
+      >
+        {isOpponent ? (
+          <>
+            <RearGuardRow
+              zone={rearGuardZone}
+              slots={REAR_GUARD_BACK_SLOTS}
+              interaction={interaction}
+              rowLabel="Back row"
+            />
+            <FrontRow
+              vanguardZone={vanguardZone}
+              rearGuardZone={rearGuardZone}
+              interaction={interaction}
+              rowLabel="Front row"
+            />
+          </>
+        ) : (
+          <>
+            <FrontRow
+              vanguardZone={vanguardZone}
+              rearGuardZone={rearGuardZone}
+              interaction={interaction}
+              rowLabel="Front row"
+            />
+            <RearGuardRow
+              zone={rearGuardZone}
+              slots={REAR_GUARD_BACK_SLOTS}
+              interaction={interaction}
+              rowLabel="Back row"
+            />
+          </>
+        )}
+      </div>
     </section>
   )
 }
 
-function ZoneSection({
-  title,
-  ariaLabel,
-  zones,
-  gridClassName,
+function FrontRow({
+  vanguardZone,
+  rearGuardZone,
+  interaction,
+  rowLabel,
 }: {
-  readonly title: string
-  readonly ariaLabel: string
-  readonly zones: readonly ProjectedMatchBoardZone[]
-  readonly gridClassName: string
+  readonly vanguardZone: ProjectedMatchBoardZone | undefined
+  readonly rearGuardZone: ProjectedMatchBoardZone | undefined
+  readonly interaction: BoardInteractionContext
+  readonly rowLabel: string
 }) {
-  if (zones.length === 0) {
+  return (
+    <div aria-label={rowLabel} className="grid grid-cols-3 gap-3">
+      <PlaymatCircle
+        label="Front left"
+        slotKey="front-left"
+        zone={rearGuardZone}
+        piece={findPieceForSlot(rearGuardZone, 'front-left')}
+        interaction={interaction}
+        circleKind="rear_guard"
+      />
+      <PlaymatCircle
+        label="Vanguard"
+        slotKey={null}
+        zone={vanguardZone}
+        piece={vanguardZone?.pieces[0]}
+        interaction={interaction}
+        circleKind="vanguard"
+      />
+      <PlaymatCircle
+        label="Front right"
+        slotKey="front-right"
+        zone={rearGuardZone}
+        piece={findPieceForSlot(rearGuardZone, 'front-right')}
+        interaction={interaction}
+        circleKind="rear_guard"
+      />
+    </div>
+  )
+}
+
+function RearGuardRow({
+  zone,
+  slots,
+  interaction,
+  rowLabel,
+}: {
+  readonly zone: ProjectedMatchBoardZone | undefined
+  readonly slots: readonly CircleSlotKey[]
+  readonly interaction: BoardInteractionContext
+  readonly rowLabel: string
+}) {
+  return (
+    <div aria-label={rowLabel} className="grid grid-cols-3 gap-3">
+      {slots.map((slot) => (
+        <PlaymatCircle
+          key={slot}
+          label={formatSlotLabel(slot)}
+          slotKey={slot}
+          zone={zone}
+          piece={findPieceForSlot(zone, slot)}
+          interaction={interaction}
+          circleKind="rear_guard"
+        />
+      ))}
+    </div>
+  )
+}
+
+function PlaymatCircle({
+  label,
+  slotKey,
+  zone,
+  piece,
+  interaction,
+  circleKind,
+}: {
+  readonly label: string
+  readonly slotKey: CircleSlotKey | null
+  readonly zone: ProjectedMatchBoardZone | undefined
+  readonly piece: ProjectedMatchBoardPiece | undefined
+  readonly interaction: BoardInteractionContext
+  readonly circleKind: 'vanguard' | 'rear_guard'
+}) {
+  const slotId =
+    slotKey === null || zone === undefined
+      ? undefined
+      : findSlotId(zone, slotKey)
+  const zoneTargetState =
+    zone === undefined ? 'none' : getZoneTargetState(zone, interaction)
+  const canSelectZone =
+    piece === undefined &&
+    zone !== undefined &&
+    (zoneTargetState === 'available' || zoneTargetState === 'selected') &&
+    interaction.onToggleZoneTarget !== undefined
+
+  return (
+    <div
+      data-playmat-circle={circleKind}
+      data-slot-id={slotId}
+      data-target-state={piece === undefined ? zoneTargetState : undefined}
+      className={cn(
+        'relative grid min-h-36 place-items-center rounded-[1rem] border border-cyan-100/20 bg-black/25 p-2',
+        circleKind === 'vanguard' &&
+          'border-cyan-200/45 bg-cyan-300/10 shadow-[0_0_34px_rgba(34,211,238,0.22)]',
+        circleKind === 'rear_guard' && 'border-amber-100/22 bg-amber-200/5',
+        zoneTargetState === 'available' &&
+          'border-emerald-300/80 bg-emerald-400/12 ring-2 ring-emerald-300/35',
+        zoneTargetState === 'selected' &&
+          'border-emerald-200 bg-emerald-400/18 ring-2 ring-emerald-200/55',
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className={cn(
+          'absolute inset-4 rounded-full border border-dashed border-white/18',
+          circleKind === 'vanguard' && 'border-cyan-100/45',
+        )}
+      />
+      <div className="relative grid w-full gap-2">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-normal text-slate-300">
+          <span>{label}</span>
+          {slotId === undefined && slotKey !== null ? (
+            <span className="text-slate-500">No slot</span>
+          ) : null}
+        </div>
+        {piece === undefined || zone === undefined ? (
+          <EmptyCircle
+            label={label}
+            zone={zone}
+            zoneTargetState={zoneTargetState}
+            canSelectZone={canSelectZone}
+            onSelect={() => {
+              if (zone !== undefined) {
+                interaction.onToggleZoneTarget?.(zone)
+              }
+            }}
+          />
+        ) : (
+          <BoardPiece
+            piece={piece}
+            zone={zone}
+            interaction={interaction}
+            presentation="circle"
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EmptyCircle({
+  label,
+  zone,
+  zoneTargetState,
+  canSelectZone,
+  onSelect,
+}: {
+  readonly label: string
+  readonly zone: ProjectedMatchBoardZone | undefined
+  readonly zoneTargetState: TargetVisualState
+  readonly canSelectZone: boolean
+  readonly onSelect: () => void
+}) {
+  if (canSelectZone) {
+    return (
+      <button
+        type="button"
+        className="grid min-h-24 place-items-center rounded-xl border border-emerald-200/45 bg-emerald-400/10 px-2 text-center text-xs font-semibold text-emerald-50 hover:bg-emerald-400/18"
+        onClick={onSelect}
+      >
+        {zoneTargetState === 'selected' ? 'Selected circle' : 'Select circle'}
+      </button>
+    )
+  }
+
+  return (
+    <div className="grid min-h-24 place-items-center rounded-xl border border-dashed border-white/14 bg-black/20 px-2 text-center text-xs text-slate-400">
+      {zone === undefined ? `${label} unavailable` : 'Open circle'}
+    </div>
+  )
+}
+
+function HandBand({
+  ariaSideLabel,
+  side,
+  interaction,
+  orientation,
+}: {
+  readonly ariaSideLabel: string
+  readonly side: MatchBoardSideProjection
+  readonly interaction: BoardInteractionContext
+  readonly orientation: BoardSideOrientation
+}) {
+  const handZones = side.handZones
+
+  if (handZones.length === 0) {
     return null
   }
 
   return (
     <section
-      aria-label={ariaLabel}
-      className="grid content-start gap-2 rounded-md border border-border/45 bg-background/45 p-2"
+      aria-label={`${ariaSideLabel} hand zones`}
+      className={cn(
+        'rounded-2xl border border-white/10 bg-black/30 p-3',
+        orientation === 'current'
+          ? 'shadow-[0_-12px_40px_-34px_rgba(34,211,238,0.9)]'
+          : '',
+      )}
     >
-      <h4 className="text-xs font-semibold uppercase text-muted-foreground">
-        {title}
-      </h4>
-      <div className={cn('grid gap-2', gridClassName)}>
-        {zones.map((zone) => (
-          <BoardZone
-            key={zone.zoneId}
-            zone={zone}
-            visualMode={getZoneVisualMode(zone.role)}
-          />
-        ))}
-      </div>
+      {handZones.map((zone) => (
+        <div key={zone.zoneId} className="grid gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-semibold uppercase text-slate-300">
+                Hand
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                {formatZoneVisibilityLine(zone)}
+              </p>
+            </div>
+            <Badge variant="outline">{zone.occupantCount}</Badge>
+          </div>
+          <div
+            className={cn(
+              'flex min-h-24 items-end overflow-x-auto px-1 pb-1',
+              zone.pieces.length > 0 ? '-space-x-5' : 'space-x-0',
+            )}
+          >
+            {zone.pieces.length === 0 ? (
+              <div className="grid min-h-20 min-w-28 place-items-center rounded-xl border border-dashed border-white/15 bg-black/20 text-xs text-slate-400">
+                Empty hand
+              </div>
+            ) : (
+              zone.pieces.map((piece, index) => (
+                <div
+                  key={`${piece.refId}:${piece.position}`}
+                  className="min-w-[7.25rem]"
+                  style={{
+                    transform: `translateY(${
+                      Math.abs(index - Math.floor(zone.pieces.length / 2)) * 2
+                    }px)`,
+                  }}
+                >
+                  <BoardPiece
+                    piece={piece}
+                    zone={zone}
+                    interaction={interaction}
+                    presentation="hand"
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ))}
     </section>
   )
 }
 
-function BoardZone({
+function StackRail({
+  ariaLabel,
+  zones,
+  interaction,
+  horizontal = false,
+}: {
+  readonly ariaLabel: string
+  readonly zones: readonly ProjectedMatchBoardZone[]
+  readonly interaction: BoardInteractionContext
+  readonly horizontal?: boolean
+}) {
+  return (
+    <section
+      aria-label={ariaLabel}
+      className={cn(
+        'grid content-start gap-2',
+        horizontal && 'sm:grid-cols-2 xl:grid-cols-4',
+      )}
+    >
+      {zones.length === 0 ? (
+        <div className="hidden xl:block" aria-hidden="true" />
+      ) : (
+        zones.map((zone) => (
+          <StackZone key={zone.zoneId} zone={zone} interaction={interaction} />
+        ))
+      )}
+    </section>
+  )
+}
+
+function StackZone({
   zone,
-  visualMode,
+  interaction,
 }: {
   readonly zone: ProjectedMatchBoardZone
-  readonly visualMode: ZoneVisualMode
+  readonly interaction: BoardInteractionContext
 }) {
-  const summaryStyle = isSummaryStyleZone(zone)
+  const zoneTargetState = getZoneTargetState(zone, interaction)
+  const canSelect =
+    (zoneTargetState === 'available' || zoneTargetState === 'selected') &&
+    interaction.onToggleZoneTarget !== undefined
+  const topPieces = zone.pieces.slice(0, 2)
 
   return (
     <section
       aria-label={`${zone.label} zone`}
+      data-zone-role={zone.role}
+      data-target-state={zoneTargetState}
       className={cn(
-        'grid min-h-24 gap-2 rounded-md border border-border/55 bg-card/65 p-2',
-        visualMode === 'battlefield' && 'min-h-36',
-        visualMode === 'hand' && 'min-h-28',
-        summaryStyle && 'bg-muted/20',
+        'relative overflow-hidden rounded-xl border border-white/12 bg-black/30 p-2 shadow-[inset_0_0_22px_rgba(15,23,42,0.55)]',
+        zone.role === 'damage' && 'border-rose-200/35 bg-rose-400/8',
+        zone.role === 'deck' && 'border-cyan-200/25 bg-cyan-300/8',
+        zone.role === 'drop' && 'border-slate-200/25 bg-slate-300/8',
+        zoneTargetState === 'available' &&
+          'border-emerald-300/75 bg-emerald-400/12 ring-2 ring-emerald-300/30',
+        zoneTargetState === 'selected' &&
+          'border-emerald-200 bg-emerald-400/18 ring-2 ring-emerald-200/50',
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="truncate text-xs font-semibold uppercase text-muted-foreground">
+          <h4 className="truncate text-[11px] font-semibold uppercase text-slate-300">
             {zone.label}
           </h4>
-          <p className="text-[11px] text-muted-foreground">
-            {zone.layout.occupancy} | {zone.visibility}
+          <p className="text-[10px] text-slate-500">
+            {formatZoneKind(zone.role)}
           </p>
         </div>
-        <Badge variant={summaryStyle ? 'secondary' : 'outline'}>
+        <Badge variant={zone.occupantCount > 0 ? 'secondary' : 'outline'}>
           {zone.occupantCount}
         </Badge>
       </div>
 
-      {zone.layout.occupancy === 'slotted' && zone.slotIds.length > 0 ? (
-        <SlottedZoneContents zone={zone} />
-      ) : summaryStyle ? (
-        <SummaryZoneContents zone={zone} />
-      ) : visualMode === 'hand' ? (
-        <PieceGrid zone={zone} />
-      ) : (
-        <PieceStack zone={zone} />
-      )}
+      <div className="mt-2 grid min-h-20 gap-1">
+        {zone.pieces.length === 0 ? (
+          <div className="grid min-h-16 place-items-center rounded-lg border border-dashed border-white/12 bg-black/20 text-[11px] text-slate-500">
+            Empty stack
+          </div>
+        ) : (
+          <>
+            {topPieces.map((piece) => (
+              <BoardPiece
+                key={`${piece.refId}:${piece.position}`}
+                piece={piece}
+                zone={zone}
+                interaction={interaction}
+                presentation="stack"
+              />
+            ))}
+            {zone.pieces.length > topPieces.length ? (
+              <div className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300">
+                +{zone.pieces.length - topPieces.length} more
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      {canSelect ? (
+        <button
+          type="button"
+          className="mt-2 w-full rounded-lg border border-emerald-200/40 bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-50 hover:bg-emerald-400/18"
+          onClick={() => interaction.onToggleZoneTarget?.(zone)}
+        >
+          {zoneTargetState === 'selected' ? 'Selected zone' : 'Select zone'}
+        </button>
+      ) : null}
     </section>
   )
 }
 
-function SlottedZoneContents({
-  zone,
+function BattleAxis({
+  projection,
+  battle,
+  interaction,
+  resolvePlayerLabel,
 }: {
-  readonly zone: ProjectedMatchBoardZone
+  readonly projection: MatchBoardProjection
+  readonly battle: VisibleGameState['battle'] | undefined
+  readonly interaction: BoardInteractionContext
+  readonly resolvePlayerLabel: ((playerId: PlayerId) => string) | undefined
 }) {
-  const unassignedPieces = zone.pieces.filter(
-    (piece) =>
-      piece.slotId === undefined || !zone.slotIds.includes(piece.slotId),
-  )
-
-  return (
-    <div className="grid gap-2">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {zone.slotIds.map((slotId) => {
-          const piece = zone.pieces.find((candidate) => {
-            return candidate.slotId === slotId
+  const attackerLabel =
+    battle === undefined
+      ? null
+      : resolveBattlePieceLabel(projection, battle.attacker)
+  const targetLabel =
+    battle === undefined
+      ? null
+      : battle.target.kind === 'player'
+        ? resolveLabel(battle.target.playerId, resolvePlayerLabel)
+        : resolveBattlePieceLabel(projection, {
+            refId: battle.target.pieceId as unknown as string,
+            pieceId: battle.target.pieceId,
           })
 
-          return (
-            <div
-              key={slotId}
-              className="grid min-h-24 gap-1 rounded border border-dashed border-border/70 bg-background/60 p-1.5"
-            >
-              <span className="truncate text-[11px] text-muted-foreground">
-                {slotId}
-              </span>
-              {piece ? (
-                <BoardPiece piece={piece} compact={false} />
-              ) : (
-                <span className="self-center justify-self-center text-xs text-muted-foreground">
-                  Empty slot
-                </span>
+  return (
+    <div
+      aria-label="Battle lane"
+      data-battle-active={battle === undefined ? 'false' : 'true'}
+      className={cn(
+        'relative overflow-hidden rounded-2xl border px-4 py-3 text-sm',
+        battle === undefined
+          ? 'border-white/10 bg-white/[0.03] text-slate-400'
+          : 'border-amber-200/50 bg-amber-300/12 text-white shadow-[0_0_36px_rgba(251,191,36,0.18)]',
+      )}
+    >
+      <div className="pointer-events-none absolute inset-x-8 top-1/2 h-px bg-gradient-to-r from-transparent via-amber-200/60 to-transparent" />
+      <div className="relative flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase text-slate-400">
+            Central battle lane
+          </div>
+          <div className="font-semibold">
+            {battle === undefined
+              ? 'Idle board'
+              : `${attackerLabel ?? 'Attacker'} -> ${targetLabel ?? 'Target'}`}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {battle === undefined ? (
+            <Badge variant="outline">No attack declared</Badge>
+          ) : (
+            <>
+              <Badge variant="warning">
+                {formatBattleStatus(battle.status)}
+              </Badge>
+              {interaction.battle?.boosterRefId === undefined ? null : (
+                <Badge variant="secondary">Boost linked</Badge>
               )}
-            </div>
-          )
-        })}
-      </div>
-
-      {unassignedPieces.length > 0 ? (
-        <div className="grid gap-1">
-          {unassignedPieces.map((piece) => (
-            <BoardPiece
-              key={`${piece.refId}:${piece.position}`}
-              piece={piece}
-              compact
-            />
-          ))}
+              {battle.status === 'guard_requested' ? (
+                <Badge variant="success">Guard window</Badge>
+              ) : null}
+            </>
+          )}
         </div>
-      ) : null}
-    </div>
-  )
-}
-
-function SummaryZoneContents({
-  zone,
-}: {
-  readonly zone: ProjectedMatchBoardZone
-}) {
-  if (zone.pieces.length === 0) {
-    return (
-      <div className="grid min-h-12 place-items-center rounded border border-dashed border-border/65 bg-background/45 text-xs text-muted-foreground">
-        Empty zone
       </div>
-    )
-  }
-
-  const visiblePieces = zone.pieces.slice(0, 4)
-  const remainingCount = zone.pieces.length - visiblePieces.length
-
-  return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-2 rounded border border-border/45 bg-background/45 px-2 py-1 text-[11px] text-muted-foreground">
-        <span>Pile</span>
-        <span>{zone.occupantCount} cards</span>
-      </div>
-      {visiblePieces.map((piece) => (
-        <BoardPiece
-          key={`${piece.refId}:${piece.position}`}
-          piece={piece}
-          compact
-        />
-      ))}
-      {remainingCount > 0 ? (
-        <div className="rounded border border-dashed border-border/65 bg-background/45 px-2 py-1 text-xs text-muted-foreground">
-          {remainingCount} more
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function PieceGrid({ zone }: { readonly zone: ProjectedMatchBoardZone }) {
-  if (zone.pieces.length === 0) {
-    return (
-      <div className="grid min-h-16 place-items-center rounded border border-dashed border-border/65 bg-background/45 text-xs text-muted-foreground">
-        Empty zone
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-1">
-      {zone.pieces.map((piece) => (
-        <BoardPiece
-          key={`${piece.refId}:${piece.position}`}
-          piece={piece}
-          compact
-        />
-      ))}
-    </div>
-  )
-}
-
-function PieceStack({ zone }: { readonly zone: ProjectedMatchBoardZone }) {
-  if (zone.pieces.length === 0) {
-    return (
-      <div className="grid min-h-14 place-items-center rounded border border-dashed border-border/65 bg-background/45 text-xs text-muted-foreground">
-        Empty zone
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid gap-1">
-      {zone.pieces.map((piece) => (
-        <BoardPiece
-          key={`${piece.refId}:${piece.position}`}
-          piece={piece}
-          compact={false}
-        />
-      ))}
     </div>
   )
 }
 
 function BoardPiece({
   piece,
-  compact = false,
+  zone,
+  interaction,
+  presentation,
 }: {
   readonly piece: ProjectedMatchBoardPiece
-  readonly compact?: boolean
+  readonly zone: ProjectedMatchBoardZone
+  readonly interaction: BoardInteractionContext
+  readonly presentation: 'circle' | 'hand' | 'stack'
 }) {
   const identityVisible = piece.visibility === 'visible'
-  const pieceLabel = identityVisible
+  const card = identityVisible ? piece.card : undefined
+  const rawLabel = identityVisible
     ? (piece.cardDefinitionId ?? piece.pieceId ?? piece.refId)
     : 'Hidden card'
+  const pieceLabel = identityVisible
+    ? (card?.name ?? formatCardLabel(rawLabel))
+    : 'Hidden card'
+  const targetState = getPieceTargetState(piece, zone, interaction)
+  const battleRole = getPieceBattleRole(piece, interaction.battle)
+  const selectable =
+    (targetState === 'available' || targetState === 'selected') &&
+    interaction.onTogglePieceTarget !== undefined
+  const compact = presentation !== 'circle'
+  const inspectPinned = interaction.pinnedPieceRefId === piece.refId
+  const renderer = card?.imageUrl ? 'image' : 'fallback'
 
   return (
-    <article
-      aria-label={`${pieceLabel}`}
+    <button
+      type="button"
+      onClick={() => {
+        if (selectable) {
+          interaction.onTogglePieceTarget?.(piece)
+        }
+        interaction.onPinPiece?.(piece)
+      }}
+      onMouseEnter={() => interaction.onPreviewPiece?.(piece)}
+      onMouseLeave={() => interaction.onClearPreviewPiece?.(piece)}
+      onFocus={() => interaction.onPreviewPiece?.(piece)}
+      onBlur={() => interaction.onClearPreviewPiece?.(piece)}
+      aria-label={
+        targetState === 'available'
+          ? `${pieceLabel} - legal target`
+          : targetState === 'selected'
+            ? `${pieceLabel} - selected target`
+            : battleRole === null
+              ? `${pieceLabel}`
+              : `${pieceLabel} - ${battleRole}`
+      }
+      title={identityVisible ? pieceLabel : undefined}
+      data-card-identity={identityVisible ? rawLabel : undefined}
+      data-card-name={identityVisible ? pieceLabel : undefined}
+      data-card-renderer={renderer}
+      data-card-visibility={piece.visibility}
+      data-target-state={targetState}
+      data-battle-role={battleRole ?? undefined}
       className={cn(
-        'grid min-h-16 gap-2 rounded border border-border/65 bg-background-elevated/75 p-2 text-xs shadow-sm',
-        compact && 'min-h-10 gap-1 p-1.5',
-        piece.orientation === 'rest' && 'border-accent/70 bg-accent/10',
-        piece.flags.length > 0 && 'ring-1 ring-accent/35',
+        'relative grid overflow-visible rounded-xl border bg-transparent text-left shadow-lg transition',
+        compact ? 'min-h-[5.75rem] text-[11px]' : 'min-h-[8.75rem] text-xs',
+        identityVisible ? 'border-white/18' : 'border-cyan-100/20',
+        piece.orientation === 'rest' && 'rotate-90 border-amber-200/70',
+        piece.flags.length > 0 && 'ring-1 ring-amber-300/40',
+        'cursor-pointer hover:-translate-y-1 hover:shadow-cyan-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/75',
+        targetState === 'available' &&
+          'border-emerald-200 ring-2 ring-emerald-300/45',
+        targetState === 'selected' &&
+          'border-emerald-100 ring-2 ring-emerald-100/70',
+        targetState === 'unavailable' && 'opacity-35 saturate-50',
+        battleRole === 'attacker' && 'border-rose-200 ring-2 ring-rose-300/45',
+        battleRole === 'target' && 'border-amber-100 ring-2 ring-amber-200/55',
+        battleRole === 'booster' && 'border-cyan-100 ring-2 ring-cyan-200/45',
+        battleRole === 'guardian' &&
+          'border-violet-100 ring-2 ring-violet-200/45',
+        inspectPinned && 'ring-2 ring-fuchsia-200/75',
       )}
     >
-      <div className="break-words font-medium leading-snug">{pieceLabel}</div>
-      {piece.orientation || piece.flags.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
+      <PlayableCardFace
+        piece={piece}
+        card={card}
+        label={pieceLabel}
+        zoneLabel={zone.label}
+        compact={compact}
+      />
+
+      {piece.orientation ||
+      piece.flags.length > 0 ||
+      piece.powerModifier !== undefined ||
+      piece.criticalModifier !== undefined ||
+      battleRole !== null ||
+      targetState === 'available' ||
+      targetState === 'selected' ? (
+        <div className="relative flex flex-wrap gap-1 self-end">
+          {targetState === 'available' ? (
+            <Badge variant="success">Legal target</Badge>
+          ) : null}
+          {targetState === 'selected' ? (
+            <Badge variant="success">Selected</Badge>
+          ) : null}
+          {battleRole === null ? null : (
+            <Badge variant={battleRole === 'target' ? 'warning' : 'secondary'}>
+              {formatStateLabel(battleRole)}
+            </Badge>
+          )}
           {piece.orientation ? (
             <Badge
               variant={piece.orientation === 'rest' ? 'warning' : 'secondary'}
@@ -409,41 +1002,611 @@ function BoardPiece({
               {formatStateLabel(flag)}
             </Badge>
           ))}
+          {piece.powerModifier !== undefined && piece.powerModifier !== 0 ? (
+            <Badge variant={piece.powerModifier > 0 ? 'success' : 'warning'}>
+              {formatSigned(piece.powerModifier)} power
+            </Badge>
+          ) : null}
+          {piece.criticalModifier !== undefined &&
+          piece.criticalModifier !== 0 ? (
+            <Badge variant={piece.criticalModifier > 0 ? 'success' : 'warning'}>
+              {formatSigned(piece.criticalModifier)} critical
+            </Badge>
+          ) : null}
         </div>
       ) : null}
-    </article>
+    </button>
   )
 }
 
-function getZoneVisualMode(role: MatchBoardZoneRole): ZoneVisualMode {
+function PlayableCardFace({
+  piece,
+  card,
+  label,
+  zoneLabel,
+  compact,
+}: {
+  readonly piece: ProjectedMatchBoardPiece
+  readonly card: ProjectedMatchBoardPiece['card']
+  readonly label: string
+  readonly zoneLabel: string
+  readonly compact: boolean
+}) {
+  if (piece.visibility !== 'visible') {
+    return (
+      <>
+        <span className="sr-only">Hidden card</span>
+        <div
+          aria-hidden="true"
+          className={cn(
+            'relative grid aspect-[63/88] w-full min-w-20 overflow-hidden rounded-xl border border-cyan-100/25 bg-[radial-gradient(circle_at_50%_22%,rgba(34,211,238,0.32),rgba(15,23,42,0.95)_48%,rgba(2,6,23,1))] p-2 text-cyan-100 shadow-[inset_0_0_28px_rgba(34,211,238,0.18)]',
+            compact ? 'max-w-[7.25rem]' : 'max-w-[8.5rem]',
+          )}
+        >
+          <div className="absolute inset-2 rounded-lg border border-cyan-100/20" />
+          <div className="absolute inset-5 rounded-full border border-cyan-100/25" />
+          <div className="relative grid place-items-center text-center text-[10px] font-semibold uppercase">
+            Vanguard
+            <span className="mt-1 block text-[9px] text-cyan-100/70">
+              Card back
+            </span>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  const cardType = card?.cardType ?? 'unit'
+  const trigger = card?.triggerType
+  const keywords = card?.keywords ?? []
+  const effectRefs = card?.effectRefs ?? []
+  const hasRulesLine = keywords.length > 0 || effectRefs.length > 0
+
+  return (
+    <div
+      className={cn(
+        'relative grid aspect-[63/88] w-full min-w-20 overflow-hidden rounded-xl border border-white/18 bg-gradient-to-b from-slate-100 via-slate-200 to-slate-950 p-1.5 text-slate-950 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]',
+        compact ? 'max-w-[7.25rem]' : 'max-w-[8.5rem]',
+      )}
+    >
+      <div className="rounded-md border border-slate-950/70 bg-slate-950 px-1.5 py-1 text-[10px] font-bold leading-tight text-white">
+        <span className="line-clamp-2">{label}</span>
+      </div>
+      <div
+        className={cn(
+          'relative my-1 overflow-hidden rounded-md border border-slate-950/45 bg-[radial-gradient(circle_at_50%_30%,rgba(125,211,252,0.86),rgba(15,23,42,0.86)_58%,rgba(2,6,23,1))]',
+          compact ? 'min-h-9' : 'min-h-14',
+        )}
+        role="img"
+        aria-label={`${label} card art fallback`}
+        style={
+          card?.imageUrl
+            ? {
+                backgroundImage: `linear-gradient(rgba(2,6,23,0.08),rgba(2,6,23,0.12)), url("${card.imageUrl}")`,
+                backgroundPosition: 'center',
+                backgroundSize: 'cover',
+              }
+            : undefined
+        }
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.2),transparent_42%,rgba(255,255,255,0.08)_72%,transparent)]" />
+        <div className="absolute bottom-1 left-1 rounded bg-black/65 px-1 text-[9px] font-semibold uppercase text-white">
+          {formatStateLabel(cardType)}
+        </div>
+        {trigger === null || trigger === undefined ? null : (
+          <div className="absolute right-1 top-1 rounded bg-amber-300 px-1 text-[9px] font-bold uppercase text-slate-950">
+            {formatStateLabel(trigger)}
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-1 text-center text-[9px] font-bold">
+        <MiniStat label="G" value={card?.grade ?? '-'} />
+        <MiniStat label="P" value={formatShortNumber(card?.power)} />
+        <MiniStat label="C" value={card?.critical ?? '-'} />
+      </div>
+      <div className="mt-1 min-h-6 rounded border border-slate-950/35 bg-white/82 px-1 py-0.5 text-[9px] leading-tight text-slate-800">
+        {hasRulesLine ? (
+          <span className="line-clamp-2">
+            {[...keywords, ...effectRefs]
+              .slice(0, 2)
+              .map(formatStateLabel)
+              .join(' | ')}
+          </span>
+        ) : (
+          <span className="text-slate-500">
+            {card?.nation ? formatStateLabel(card.nation) : zoneLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({
+  label,
+  value,
+}: {
+  readonly label: string
+  readonly value: string | number
+}) {
+  return (
+    <span className="rounded bg-slate-950 px-1 py-0.5 text-white">
+      {label} {value}
+    </span>
+  )
+}
+
+function CardInspectPanel({
+  piece,
+  pinned,
+  onClose,
+}: {
+  readonly piece: ProjectedMatchBoardPiece
+  readonly pinned: boolean
+  readonly onClose: () => void
+}) {
+  const visible = piece.visibility === 'visible'
+  const card = visible ? piece.card : undefined
+  const rawLabel = visible
+    ? (piece.cardDefinitionId ?? piece.pieceId ?? piece.refId)
+    : 'Hidden card'
+  const label = visible
+    ? (card?.name ?? formatCardLabel(rawLabel))
+    : 'Hidden card'
+
+  return (
+    <aside
+      aria-label="Card inspect"
+      data-card-inspect={pinned ? 'pinned' : 'preview'}
+      className="absolute right-4 top-24 z-30 grid w-[min(24rem,calc(100%-2rem))] gap-3 rounded-2xl border border-cyan-100/35 bg-slate-950/96 p-4 text-slate-50 shadow-[0_24px_80px_-34px_rgba(34,211,238,0.8)] backdrop-blur"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase text-cyan-200">
+            {pinned ? 'Pinned card inspect' : 'Card preview'}
+          </div>
+          <h3 className="text-lg font-semibold leading-tight">{label}</h3>
+        </div>
+        {pinned ? (
+          <button
+            type="button"
+            className="rounded-lg border border-white/15 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+        <PlayableCardFace
+          piece={piece}
+          card={card}
+          label={label}
+          zoneLabel="Inspect"
+          compact={false}
+        />
+        <div className="grid content-start gap-3 text-sm">
+          {visible ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <InspectStat label="Grade" value={card?.grade ?? '-'} />
+                <InspectStat label="Power" value={formatNumber(card?.power)} />
+                <InspectStat
+                  label="Shield"
+                  value={formatNumber(card?.shield)}
+                />
+                <InspectStat label="Critical" value={card?.critical ?? '-'} />
+              </div>
+              <div className="grid gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <InspectLine
+                  label="Type"
+                  value={formatStateLabel(card?.cardType ?? 'card')}
+                />
+                <InspectLine
+                  label="Nation"
+                  value={
+                    card?.nation ? formatStateLabel(card.nation) : 'Unknown'
+                  }
+                />
+                <InspectLine
+                  label="Clan"
+                  value={card?.clan ? formatStateLabel(card.clan) : 'None'}
+                />
+                <InspectLine
+                  label="Trigger"
+                  value={
+                    card?.triggerType
+                      ? formatStateLabel(card.triggerType)
+                      : 'None'
+                  }
+                />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <div className="text-xs font-semibold uppercase text-slate-400">
+                  Text / Effects
+                </div>
+                <div className="mt-2 grid gap-1 text-sm text-slate-100">
+                  {card?.keywords.length ? (
+                    <p>
+                      Keywords: {card.keywords.map(formatStateLabel).join(', ')}
+                    </p>
+                  ) : null}
+                  {card?.effectRefs.length ? (
+                    <p>
+                      Effect refs:{' '}
+                      {card.effectRefs.map((effectRef) => (
+                        <code key={effectRef} className="mr-1 text-cyan-100">
+                          {effectRef}
+                        </code>
+                      ))}
+                    </p>
+                  ) : null}
+                  {!card?.keywords.length && !card?.effectRefs.length ? (
+                    <p className="text-slate-400">
+                      No printed effect reference is published for this visible
+                      card yet.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-slate-300">
+              This card is hidden by the participant-safe projection. The client
+              shows a card back and does not reveal name, stats, or effect text.
+            </p>
+          )}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function InspectStat({
+  label,
+  value,
+}: {
+  readonly label: string
+  readonly value: string | number
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-slate-400">
+        {label}
+      </div>
+      <div className="text-sm font-semibold text-white">{value}</div>
+    </div>
+  )
+}
+
+function InspectLine({
+  label,
+  value,
+}: {
+  readonly label: string
+  readonly value: string
+}) {
+  return (
+    <div className="flex justify-between gap-3 text-sm">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-100">{value}</span>
+    </div>
+  )
+}
+
+function findZoneByRole(
+  side: MatchBoardSideProjection,
+  role: MatchBoardZoneRole,
+) {
+  return side.zones.find((zone) => zone.role === role)
+}
+
+function getStackZones(
+  side: MatchBoardSideProjection,
+  roles: readonly MatchBoardZoneRole[],
+) {
+  return side.zones
+    .filter((zone) => roles.includes(zone.role))
+    .sort((left, right) => {
+      const leftIndex = roles.indexOf(left.role)
+      const rightIndex = roles.indexOf(right.role)
+
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex
+      }
+
+      return left.label.localeCompare(right.label)
+    })
+}
+
+function findSlotId(
+  zone: ProjectedMatchBoardZone,
+  slotKey: CircleSlotKey,
+): string | undefined {
+  return zone.slotIds.find((slotId) => {
+    return slotId.toLowerCase().includes(slotKey)
+  }) as string | undefined
+}
+
+function findPieceForSlot(
+  zone: ProjectedMatchBoardZone | undefined,
+  slotKey: CircleSlotKey,
+) {
+  if (zone === undefined) {
+    return undefined
+  }
+
+  const slotId = findSlotId(zone, slotKey)
+
+  if (slotId === undefined) {
+    return undefined
+  }
+
+  return zone.pieces.find((piece) => piece.slotId === slotId)
+}
+
+function formatSlotLabel(slot: CircleSlotKey) {
+  return slot
+    .split('-')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatZoneKind(role: MatchBoardZoneRole) {
   switch (role) {
     case 'vanguard':
+      return 'central unit'
     case 'rear_guard':
-      return 'battlefield'
+      return 'rear-guard circles'
     case 'hand':
-      return 'hand'
+      return 'private hand'
     case 'deck':
+      return 'main deck'
     case 'ride_deck':
+      return 'ride line'
     case 'g_deck':
-      return 'library'
+      return 'extra deck'
     case 'damage':
+      return 'damage track'
     case 'soul':
-      return 'resource'
+      return 'soul stack'
     case 'drop':
+      return 'discard pile'
     case 'bind':
-      return 'discard'
+      return 'bound cards'
+    case 'order':
+      return 'order area'
+    case 'prison':
+      return 'prison area'
+    case 'guardian':
+      return 'guard circle'
+    case 'energy':
+      return 'energy area'
     case 'other':
-      return 'other'
+      return 'auxiliary'
   }
 }
 
-function isSummaryStyleZone(zone: ProjectedMatchBoardZone) {
-  return (
-    zone.role === 'deck' ||
-    zone.role === 'ride_deck' ||
-    zone.role === 'g_deck' ||
-    zone.visibility === 'hidden'
+function formatZoneVisibilityLine(zone: ProjectedMatchBoardZone) {
+  const access = zone.visibility === 'public' ? 'Table zone' : 'Private zone'
+
+  switch (zone.contentsVisibility) {
+    case 'full':
+      return `${access} | cards visible`
+    case 'masked':
+      return `${access} | card backs shown`
+  }
+}
+
+function createRequestTargetContext(
+  request: VisibleGameChoiceRequest | undefined,
+): RequestTargetContext | null {
+  if (request === undefined || request.visibilityToViewer !== 'full') {
+    return null
+  }
+
+  const pieceRefs = [
+    ...(request.eligiblePieces ?? []),
+    ...(request.powerEligiblePieces ?? []),
+    ...(request.criticalEligiblePieces ?? []),
+    ...(request.standEligiblePieces ?? []),
+    ...(request.healEligiblePieces ?? []),
+    ...(request.handPieces ?? []),
+    ...(request.interceptPieces ?? []),
+  ]
+  const pieceRefIds = new Set(pieceRefs.map((piece) => piece.refId))
+  const pieceIds = new Set(
+    pieceRefs
+      .map((piece) => piece.pieceId)
+      .filter((pieceId): pieceId is NonNullable<typeof pieceId> => {
+        return pieceId !== undefined
+      })
+      .map((pieceId) => pieceId as string),
   )
+
+  for (const target of request.eligibleTargets ?? []) {
+    if (target.kind === 'piece') {
+      pieceIds.add(target.pieceId as string)
+    }
+  }
+
+  const zoneIds = new Set<string>()
+
+  for (const zone of request.eligibleZones ?? []) {
+    zoneIds.add(zone.zoneId as string)
+  }
+
+  for (const zoneId of [
+    request.handZoneId,
+    request.deckZoneId,
+    request.guardZoneId,
+  ]) {
+    if (zoneId !== undefined) {
+      zoneIds.add(zoneId as string)
+    }
+  }
+
+  return {
+    pieceRefIds,
+    pieceIds,
+    zoneIds,
+    hasPieceTargets: pieceRefIds.size > 0 || pieceIds.size > 0,
+    hasZoneTargets: zoneIds.size > 0,
+  }
+}
+
+function createBattleVisualContext(
+  battle: VisibleGameState['battle'] | undefined,
+): BattleVisualContext | null {
+  if (battle === undefined) {
+    return null
+  }
+
+  return {
+    attackerRefId: battle.attacker.refId,
+    ...(battle.attacker.pieceId === undefined
+      ? {}
+      : { attackerPieceId: battle.attacker.pieceId as string }),
+    ...(battle.target.kind === 'piece'
+      ? { targetPieceId: battle.target.pieceId as string }
+      : {}),
+    ...(battle.boostingPiece === undefined
+      ? {}
+      : {
+          boosterRefId: battle.boostingPiece.refId,
+          ...(battle.boostingPiece.pieceId === undefined
+            ? {}
+            : { boosterPieceId: battle.boostingPiece.pieceId as string }),
+        }),
+    guardianRefIds: new Set(battle.guardPieces.map((piece) => piece.refId)),
+    guardianPieceIds: new Set(
+      battle.guardPieces
+        .map((piece) => piece.pieceId)
+        .filter((pieceId): pieceId is NonNullable<typeof pieceId> => {
+          return pieceId !== undefined
+        })
+        .map((pieceId) => pieceId as string),
+    ),
+  }
+}
+
+function getZoneTargetState(
+  zone: ProjectedMatchBoardZone,
+  interaction: BoardInteractionContext,
+): TargetVisualState {
+  const targets = interaction.requestTargets
+
+  if (targets === null || !targets.hasZoneTargets) {
+    return 'none'
+  }
+
+  const zoneId = zone.zoneId as string
+
+  if (!targets.zoneIds.has(zoneId)) {
+    return 'none'
+  }
+
+  return interaction.selectedZoneIds.has(zoneId) ? 'selected' : 'available'
+}
+
+function getPieceTargetState(
+  piece: ProjectedMatchBoardPiece,
+  zone: ProjectedMatchBoardZone,
+  interaction: BoardInteractionContext,
+): TargetVisualState {
+  const targets = interaction.requestTargets
+
+  if (targets === null || !targets.hasPieceTargets) {
+    return 'none'
+  }
+
+  const isEligible =
+    targets.pieceRefIds.has(piece.refId) ||
+    (piece.pieceId !== undefined &&
+      targets.pieceIds.has(piece.pieceId as string))
+
+  if (isEligible) {
+    return interaction.selectedPieceRefIds.has(piece.refId)
+      ? 'selected'
+      : 'available'
+  }
+
+  if (
+    piece.visibility === 'visible' &&
+    (targets.zoneIds.size === 0 || targets.zoneIds.has(zone.zoneId as string))
+  ) {
+    return 'unavailable'
+  }
+
+  return 'none'
+}
+
+function getPieceBattleRole(
+  piece: ProjectedMatchBoardPiece,
+  battle: BattleVisualContext | null,
+): 'attacker' | 'target' | 'booster' | 'guardian' | null {
+  if (battle === null) {
+    return null
+  }
+
+  const pieceId = piece.pieceId as string | undefined
+
+  if (
+    piece.refId === battle.attackerRefId ||
+    (pieceId !== undefined && pieceId === battle.attackerPieceId)
+  ) {
+    return 'attacker'
+  }
+
+  if (pieceId !== undefined && pieceId === battle.targetPieceId) {
+    return 'target'
+  }
+
+  if (
+    piece.refId === battle.boosterRefId ||
+    (pieceId !== undefined && pieceId === battle.boosterPieceId)
+  ) {
+    return 'booster'
+  }
+
+  if (
+    battle.guardianRefIds.has(piece.refId) ||
+    (pieceId !== undefined && battle.guardianPieceIds.has(pieceId))
+  ) {
+    return 'guardian'
+  }
+
+  return null
+}
+
+function resolveBattlePieceLabel(
+  projection: MatchBoardProjection,
+  pieceRef: {
+    readonly refId: string
+    readonly pieceId?: ProjectedMatchBoardPiece['pieceId']
+  },
+) {
+  const piece = [
+    ...(projection.currentSide?.zones ?? []),
+    ...projection.opponentSides.flatMap((side) => side.zones),
+  ]
+    .flatMap((zone) => zone.pieces)
+    .find((candidate) => {
+      return (
+        candidate.refId === pieceRef.refId ||
+        (pieceRef.pieceId !== undefined &&
+          candidate.pieceId === pieceRef.pieceId)
+      )
+    })
+
+  if (piece === undefined) {
+    return 'Unit'
+  }
+
+  return piece.visibility === 'visible'
+    ? formatCardLabel(piece.cardDefinitionId ?? piece.pieceId ?? piece.refId)
+    : 'Hidden unit'
 }
 
 function resolveLabel(
@@ -453,10 +1616,91 @@ function resolveLabel(
   return resolvePlayerLabel?.(playerId) ?? playerId
 }
 
+function formatPlaymatRequestPrompt(request: VisibleGameChoiceRequest) {
+  if (request.visibilityToViewer === 'redacted') {
+    return 'Opponent is resolving a private choice.'
+  }
+
+  switch (request.type) {
+    case 'mulligan.select_cards':
+      return 'Choose cards from hand to return, or keep your hand.'
+    case 'choose.pieces':
+    case 'choose.target':
+      return 'Choose highlighted units on the playmat.'
+    case 'choose.zone':
+      return 'Choose one of the highlighted zones.'
+    case 'choose.option':
+      return 'Choose an available option.'
+    case 'battle.guard_select':
+      return 'Choose guardians or pass guard.'
+    case 'confirm.boolean':
+      return 'Confirm the current game choice.'
+    case 'trigger.resolve':
+      return 'Assign trigger effects to highlighted units.'
+    default:
+      return formatRequestType(request.type)
+  }
+}
+
+function formatBattleStatus(status: string) {
+  switch (status) {
+    case 'attack_declared':
+      return 'Attack declared'
+    case 'boost_declared':
+      return 'Boost linked'
+    case 'guard_requested':
+      return 'Waiting for guard'
+    case 'guard_resolved':
+      return 'Guard resolved'
+    case 'drive_checked':
+      return 'Drive check'
+    case 'combat_resolved':
+      return 'Combat resolved'
+    case 'damage_checked':
+      return 'Damage checked'
+    default:
+      return formatStateLabel(status)
+  }
+}
+
+function formatRequestType(type: string) {
+  return type.split('.').map(formatStateLabel).join(' ')
+}
+
 function formatStateLabel(value: string) {
   return value
     .split(/[_:.]/)
     .filter((part) => part.length > 0)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function formatCardLabel(value: string) {
+  const lastSegment = value.split(':').at(-1) ?? value
+
+  return lastSegment
+    .split(/[-_.]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatNumber(value: number | undefined) {
+  return value === undefined ? '-' : value.toLocaleString('en-US')
+}
+
+function formatShortNumber(value: number | undefined) {
+  if (value === undefined) {
+    return '-'
+  }
+
+  if (value >= 1000) {
+    return `${Math.round(value / 1000)}k`
+  }
+
+  return String(value)
+}
+
+function formatSigned(value: number) {
+  return value > 0 ? `+${value}` : value.toString()
 }

@@ -2,6 +2,7 @@ export { isPlayerGameAction, isSystemGameAction } from './action'
 export type {
   ActionActor,
   ActionType,
+  ActivateCardEffectAction,
   AdvancePhaseAction,
   AdvanceStepAction,
   AutomaticFlowScope,

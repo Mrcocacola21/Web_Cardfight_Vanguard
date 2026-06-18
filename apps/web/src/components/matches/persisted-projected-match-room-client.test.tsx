@@ -435,11 +435,14 @@ describe('PersistedProjectedMatchRoomClient', () => {
     await waitFor(() =>
       expect(screen.getByText('Submission Failed')).toBeVisible(),
     )
-    expectTextVisible('pending_request')
+    expectTextVisible('Pending Request')
     expect(screen.getByText('Blocked')).toBeVisible()
     expect(
-      screen.getByText(/mulligan\.select_cards for Aichi Sendou/),
-    ).toBeVisible()
+      screen.getAllByText(/choose cards to return for mulligan/i).length,
+    ).toBeGreaterThan(0)
+    expect(
+      screen.queryByText(/mulligan\.select_cards for Aichi Sendou/),
+    ).toBeNull()
     expect(screen.queryByText('Optimistic Pending')).toBeNull()
   })
 
@@ -556,7 +559,8 @@ describe('PersistedProjectedMatchRoomClient', () => {
     )
 
     await waitFor(() => expectRoomRevisionVisible(accepted.room.revision))
-    expect(screen.getByText('Seat 0 | Ready')).toBeVisible()
+    expect(screen.getByText('Seat 0')).toBeVisible()
+    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0)
 
     const opponentSide = screen.getByRole('region', { name: 'Opponent side' })
 
@@ -669,7 +673,8 @@ describe('PersistedProjectedMatchRoomClient', () => {
     fireEvent.focus(window)
 
     await waitFor(() => expectRoomRevisionVisible(secondAdvance.room.revision))
-    expect(screen.getByText('Seat 1 | Ready')).toBeVisible()
+    expect(screen.getByText('Seat 1')).toBeVisible()
+    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0)
   })
 
   it('recovers pending request and deadline state from the persisted participant snapshot', async () => {
@@ -704,8 +709,8 @@ describe('PersistedProjectedMatchRoomClient', () => {
 
     await waitFor(() => expectRoomRevisionVisible(pending.room.revision))
     expect(
-      screen.getByText(/mulligan\.select_cards for Aichi Sendou/),
-    ).toBeVisible()
+      screen.getAllByText(/choose cards to return for mulligan/i).length,
+    ).toBeGreaterThan(0)
     expect(
       screen.getByText(new RegExp(deadlineAt ?? 'missing-deadline')),
     ).toBeVisible()

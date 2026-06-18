@@ -13,8 +13,11 @@ rules runtime, authoritative match-session boundary, hidden-information
 projection, session serialization/history, DB-backed persisted match-session
 storage, an authenticated server-route command baseline, and a persisted
 projection-backed match play route with bounded authenticated polling sync for
-match rooms plus bounded live friends-dashboard refresh. Full realtime
-multiplayer fanout and reconnect/recovery are still in progress.
+match rooms plus bounded live friends-dashboard refresh. Pre-Phase 21 work adds
+a bounded six-deck Standard QA slice, local/dev catalog + deck bootstrap, a
+deck-backed invite/lobby path into persisted rooms, and a playmat-oriented
+projected match UI. Full realtime fanout, production reconnect/recovery, and
+exact competitive coverage for every Standard card remain in progress.
 
 ## Prerequisites
 
@@ -198,6 +201,11 @@ Current practical coverage is strongest around:
 - deck validation core, format-aware baseline rules, and integration tests
 - gameplay engine actions/transitions/effects/format adapters
 - match room/session lifecycle and local playable match UI flow
+- bounded Pre-Phase 21 Standard slice fixtures, effects, activated-effect
+  transitions, deck bootstrap, and full-match integration checkpoints
+- deck-to-match and invite/lobby use cases for persisted projected rooms
+- playmat-style projected match rendering, hidden-information checks, and card
+  inspection surfaces
 - match-session projection, serialization/history, DB-backed persisted session
   storage, authenticated server-route transport, and timer/timeout contracts
 - projected persisted match room route and participant-safe multiplayer client
@@ -223,15 +231,25 @@ suite is stronger for persistence invariants than for end-to-end UI behavior.
 
 This README reflects the current repository state, not the final product.
 
-Current Phase 20 posture: **GO WITH CONDITIONS**. The project is no longer only
-a local gameplay prototype: rules/session/projection foundations are strong,
-canonical match room truth can be persisted and restored, participant commands
-have an authenticated server route baseline, and `/matches/play/[roomId]`
-loads persisted room truth before rendering a participant-safe projection. The
-first bounded 20.1 match-room sync loop now runs through authenticated polling
-and projected snapshot replacement. The 20.2 social realtime scope is limited
-to owner-safe `/friends` dashboard snapshots. Fanout, reconnect/recovery,
-presence, optimistic reconciliation, and production multiplayer UX are not done.
+Current Phase 20 posture remains **GO WITH CONDITIONS**. The project is no
+longer only a local gameplay prototype: rules/session/projection foundations
+are strong, canonical match room truth can be persisted and restored,
+participant commands have an authenticated server route baseline, and
+`/matches/play/[roomId]` loads persisted room truth before rendering a
+participant-safe projection. The first bounded 20.1 match-room sync loop runs
+through authenticated polling and projected snapshot replacement. The 20.2
+social realtime scope is limited to owner-safe `/friends` dashboard snapshots.
+
+Pre-Phase 21 status: a bounded Standard product slice now exists for local QA.
+It covers six fixed decks (Reguregnus, Heartluru, Youthberk, Prison, Vyrgilla,
+and Kairi), creates local/dev QA catalog rows and saved decks, lets users invite
+another visible profile into a lobby, choose saved Standard decks, ready up,
+start a persisted authoritative room, and play through the projected match UI.
+This is still a curated QA slice, not a claim that the exact competitive
+DeckLog lists and every card-specific branch are complete.
+
+Fanout, reconnect/recovery, presence, optimistic reconciliation, production
+invite notifications, and production multiplayer UX are not done.
 
 Available now:
 
@@ -299,6 +317,8 @@ Available now:
   - add/remove/quantity controls
   - draft state + autosave
   - metadata editing
+  - local/dev QA bootstrap for the six Pre-Phase 21 Standard slice decks when
+    `ENABLE_STANDARD_SLICE_QA_BOOTSTRAP=true`
 - deck persistence infrastructure:
   - atomic create/save through `user_data.save_deck_aggregate(...)`
   - dense deck summary/detail reads through DB-backed aggregate RPCs
@@ -342,6 +362,22 @@ Available now:
     damage, soul, drop, and bind
   - available action panel backed by room/engine validation probes
   - pending request handling, local event log, and closed-room feedback
+- Pre-Phase 21 Standard product slice:
+  - canonical six-deck target roster documented under `docs/rules`
+  - bounded Standard slice card definitions and runtime handlers in
+    `packages/rules-core`
+  - activated effect transition path and card-specific QA slice coverage
+  - deck-backed match bootstrap in `packages/match-session`
+  - local/dev QA deck creation from `/decks`
+  - manual test guide at `docs/qa/manual-standard-slice-test-guide.md`
+- match product flow:
+  - direct deck-to-match route at `/matches/start?deckId=...`
+  - primary human invite path at `/matches/lobby`
+  - accepted lobby deck selection, ready state, and persisted room start
+  - deck list/detail CTAs that send users into the match flow without manual
+    room ids
+  - playmat-oriented projected match board with visible card faces, hidden card
+    backs, battle/request emphasis, and card inspection
 - match-session runtime hardening for realtime prep:
   - room-owned canonical engine state and participant-to-player bindings
   - player-visible projections that mask private hands, decks, hidden requests,
@@ -382,9 +418,9 @@ Available now:
 
 Not implemented yet:
 
-- notifications, recommendations, and richer social graph/product workflows
-- realtime user search, public profile pages, profile/privacy editor state, and
-  presence
+- notifications, recommendations, invite delivery, and richer social
+  graph/product workflows
+- realtime user search, profile/privacy editor state, and presence
 - public/shared match history workflows and richer match-detail editing flows
 - production websocket / Supabase Realtime fanout, presence, and subscription
   transport
@@ -392,10 +428,10 @@ Not implemented yet:
 - optimistic client reconciliation against authoritative match-session state
 - duplicate command idempotency, distributed room locking, and production
   multiplayer scaling/observability
-- full Vanguard gameplay coverage, card-specific effect library, and polished
-  product-facing match UX
-- richer gameplay room access workflows beyond the current server-owned
-  canonical table posture
+- full Vanguard gameplay coverage, exact competitive text for every Standard
+  slice branch, official image ingestion, and a complete card-specific effect
+  library
+- matchmaking queues, rematches, spectators, chat, tournaments, and bot/solo AI
 - advanced sharing/visibility authorization beyond the current baseline model
 
 Developer-only importer support includes the local JSON entrypoint and the

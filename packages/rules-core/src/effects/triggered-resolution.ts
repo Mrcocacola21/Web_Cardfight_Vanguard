@@ -208,6 +208,14 @@ function collectEventTriggeredEffectCandidatesFromSources(
       pushUniqueCandidate(candidates, seen, candidate)
     }
 
+    for (const candidate of collectCardBoundEffectCandidates(
+      state,
+      triggerSource,
+      environment,
+    )) {
+      pushUniqueCandidate(candidates, seen, candidate)
+    }
+
     for (const candidate of collectKeywordEffectCandidates(
       state,
       triggerSource,
@@ -271,6 +279,57 @@ function collectDirectEffectCandidates(
         ...(sourcePieceId === undefined ? {} : { sourcePieceId }),
       }
     })
+}
+
+function collectCardBoundEffectCandidates(
+  state: GameState,
+  triggerSource: {
+    readonly event: GameEvent
+    readonly timingWindow: TransitionTimingWindow
+  },
+  environment: EventTriggeredResolutionEnvironment,
+): readonly TriggeredEffectCandidate[] {
+  const stateIndex = buildGameStateIndex(state)
+
+  return resolveTriggerSourcePieceIds(triggerSource.event).flatMap(
+    (sourcePieceId) => {
+      const sourcePiece = findPieceById(stateIndex, sourcePieceId)
+
+      if (sourcePiece?.effectDefinitionIds === undefined) {
+        return []
+      }
+
+      return sourcePiece.effectDefinitionIds
+        .map((effectDefinitionId) =>
+          environment.effectRegistry.getDefinition(effectDefinitionId),
+        )
+        .filter(
+          (definition): definition is EffectDefinition =>
+            definition !== undefined,
+        )
+        .filter((definition) =>
+          isCurrentlyResolvableTriggeredEffect(definition),
+        )
+        .filter((definition) =>
+          effectDefinitionAppliesToState(definition, state),
+        )
+        .filter(
+          (definition) =>
+            effectDefinitionMatchesEvent(definition, triggerSource.event) &&
+            effectDefinitionMatchesTimingWindow(
+              definition,
+              triggerSource.timingWindow,
+            ),
+        )
+        .map((effectDefinition) => ({
+          sourceKind: 'direct' as const,
+          triggerEvent: triggerSource.event,
+          timingWindow: triggerSource.timingWindow,
+          effectDefinition,
+          sourcePieceId,
+        }))
+    },
+  )
 }
 
 function collectKeywordEffectCandidates(

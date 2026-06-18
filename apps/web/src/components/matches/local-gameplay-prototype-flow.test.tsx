@@ -19,7 +19,7 @@ describe('Local gameplay prototype flow', () => {
       screen.getByRole('region', { name: 'Available actions' }),
     ).toBeVisible()
     expect(screen.getByRole('region', { name: 'Event log' })).toBeVisible()
-    expect(screen.getByText('No engine events yet.')).toBeVisible()
+    expect(screen.getByText('No table events yet.')).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: /ready aichi/i }))
     fireEvent.click(screen.getByRole('button', { name: /ready kai/i }))
@@ -38,13 +38,15 @@ describe('Local gameplay prototype flow', () => {
     expect(
       screen.getByRole('region', { name: 'Blocked actions' }),
     ).toBeVisible()
-    expect(screen.getAllByText('pending_request').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pending Request').length).toBeGreaterThan(0)
 
     fireEvent.click(
       screen.getByRole('button', { name: /mulligan first hand card/i }),
     )
 
-    expect(screen.getByText('No engine request is pending.')).toBeVisible()
+    expect(
+      screen.getByText('Choose one of your available actions.'),
+    ).toBeVisible()
     expect(screen.getByText('Aichi Sendou drew 1 cards.')).toBeVisible()
     expect(screen.getByText('Aichi Sendou completed mulligan.')).toBeVisible()
 
@@ -59,20 +61,14 @@ describe('Local gameplay prototype flow', () => {
       screen.getByRole('button', { name: /call first hand card/i }),
     )
 
-    expect(
-      screen.getByText('Phase advanced from pregame to stand.'),
-    ).toBeVisible()
-    expect(screen.getByText('Phase advanced from stand to draw.')).toBeVisible()
-    expect(screen.getByText('Phase advanced from draw to ride.')).toBeVisible()
     expect(screen.getByText('Phase advanced from ride to main.')).toBeVisible()
+    expect(
+      screen.queryByText('Phase advanced from pregame to stand.'),
+    ).not.toBeInTheDocument()
     expect(screen.getByText(/rode onto the vanguard circle\./)).toBeVisible()
     expect(screen.getByText(/was called to rear-guard\./)).toBeVisible()
-    expect(
-      screen.getAllByText('local-catalog:keter:wayward-boost').length,
-    ).toBeGreaterThan(0)
-    expect(
-      screen.getAllByText('local-catalog:keter:main-g1-a').length,
-    ).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Wayward Boost/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Main Grade 1 A/i).length).toBeGreaterThan(0)
     expect(screen.getByText('Accepted')).toBeVisible()
   }, 20_000)
 

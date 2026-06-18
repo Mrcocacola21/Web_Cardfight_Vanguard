@@ -3,6 +3,7 @@ import type { TriggerType } from '@web-vg/shared'
 import type {
   ActionId,
   BattleId,
+  EffectContinuationId,
   EventId,
   PieceId,
   PlayerId,
@@ -34,6 +35,7 @@ export type RequestOptionKey = string & {}
 export interface RequestContext {
   readonly sourceActionId?: ActionId
   readonly sourceEventId?: EventId
+  readonly effectContinuationId?: EffectContinuationId
   readonly relatedPieceIds?: readonly PieceId[]
   readonly relatedZoneIds?: readonly ZoneId[]
 }

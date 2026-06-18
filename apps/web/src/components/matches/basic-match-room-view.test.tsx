@@ -18,12 +18,14 @@ describe('BasicMatchRoomView', () => {
   })
 
   it('renders live room and engine state from the match room aggregate', () => {
-    render(<BasicMatchRoomView roomId="local-room-1" />)
+    const { container } = render(<BasicMatchRoomView roomId="local-room-1" />)
 
-    expect(screen.getByRole('heading', { name: 'Match Room' })).toBeVisible()
-    expect(screen.getByText('local-room-1')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Vanguard Playmat' }),
+    ).toBeVisible()
     expect(screen.getByText('Room r1')).toBeVisible()
     expect(screen.getByText('Engine r0')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Match context' })).toBeVisible()
     expect(screen.getAllByText('Aichi Sendou').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Toshiki Kai').length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Match board' })).toBeVisible()
@@ -31,13 +33,14 @@ describe('BasicMatchRoomView', () => {
       screen.getByRole('region', { name: 'Current player side' }),
     ).toBeVisible()
     expect(screen.getByRole('region', { name: 'Opponent side' })).toBeVisible()
+    expect(screen.getAllByText(/Starting Sage/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Wayward Boost/i)).toBeVisible()
+    expect(screen.getAllByText(/Main Grade 1 A/i).length).toBeGreaterThan(0)
     expect(
-      screen.getAllByText('local-catalog:keter:starting-sage').length,
-    ).toBeGreaterThan(0)
-    expect(screen.getByText('local-catalog:keter:wayward-boost')).toBeVisible()
-    expect(
-      screen.getAllByText('local-catalog:keter:main-g1-a').length,
-    ).toBeGreaterThan(0)
+      container.querySelector(
+        '[data-card-identity="local-catalog:keter:starting-sage"]',
+      ),
+    ).not.toBeNull()
     expect(
       screen.getByRole('region', { name: 'Available actions' }),
     ).toBeVisible()
@@ -45,9 +48,11 @@ describe('BasicMatchRoomView', () => {
     expect(screen.getByText('Unavailable Now')).toBeVisible()
     expect(screen.getByText('Start match')).toBeVisible()
     expect(screen.getByRole('region', { name: 'Event log' })).toBeVisible()
-    expect(screen.getByText('No engine events yet.')).toBeVisible()
-    expect(screen.getByText('No engine request is pending.')).toBeVisible()
-    expect(screen.getByText('No command submitted yet.')).toBeVisible()
+    expect(screen.getByText('No table events yet.')).toBeVisible()
+    expect(
+      screen.getByText('Choose one of your available actions.'),
+    ).toBeVisible()
+    expect(screen.getByText('No action result yet.')).toBeVisible()
   })
 
   it('submits available actions through the match room boundary', () => {
@@ -131,17 +136,23 @@ describe('BasicMatchRoomView', () => {
     fireEvent.click(screen.getByRole('button', { name: /begin mulligan/i }))
 
     expect(
-      screen.getAllByText(/mulligan\.select_cards/).length,
+      screen.getAllByText(/choose cards to return for mulligan/i).length,
     ).toBeGreaterThan(0)
-    expect(screen.getByText('Eligible pieces')).toBeVisible()
+    expect(
+      screen.getAllByRole('button', { name: /legal target/i }).length,
+    ).toBeGreaterThan(0)
     expect(
       screen.getByRole('button', { name: /keep current hand/i }),
     ).toBeEnabled()
     expect(
       screen.getByRole('region', { name: 'Blocked actions' }),
     ).toBeVisible()
-    expect(screen.getAllByText('pending_request').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Blocking:/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pending Request').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(
+        'Finish the active choice before taking another action.',
+      ).length,
+    ).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: /keep current hand/i }))
 
@@ -153,7 +164,9 @@ describe('BasicMatchRoomView', () => {
         'Aichi Sendou resolved mulligan.select_cards with answer.mulligan.',
       ),
     ).toBeVisible()
-    expect(screen.getByText('No engine request is pending.')).toBeVisible()
+    expect(
+      screen.getByText('Choose one of your available actions.'),
+    ).toBeVisible()
   })
 
   it('renders a closed no-action state after the match completes', () => {

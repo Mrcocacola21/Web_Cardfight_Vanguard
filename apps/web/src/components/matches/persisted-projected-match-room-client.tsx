@@ -15,6 +15,7 @@ import type {
   ServerRouteRealtimeCommandResponse,
   ServerRouteRealtimeSnapshotResponse,
 } from '@web-vg/match-session'
+import type { EngineCommand } from '@web-vg/rules-core'
 
 import {
   buildProjectedMatchBrowserCommandActions,
@@ -27,6 +28,7 @@ import {
 import {
   ProjectedMatchRoomView,
   type ProjectedMatchClientAuthorityState,
+  type ProjectedMatchChoiceSubmission,
   type ProjectedMatchCommandFeedback,
   type ProjectedMatchRoomSyncStatus,
 } from './projected-match-room-view'
@@ -269,27 +271,27 @@ export function PersistedProjectedMatchRoomClient({
     }
   }, [pollIntervalMs, recoverFromServer])
 
-  async function submitAction(action: MatchClientActionView) {
-    if (
-      action.command === undefined ||
-      submittingActionId !== null ||
-      submitInFlightRef.current
-    ) {
+  async function submitCommandPayload(input: {
+    readonly actionId: string
+    readonly actionLabel: string
+    readonly payload: EngineCommand
+  }) {
+    if (submittingActionId !== null || submitInFlightRef.current) {
       return
     }
 
-    const commandId = createCommandId(room, action)
+    const commandId = createCommandId(room, input.actionId)
     const optimisticCommand: OptimisticCommandMarker = {
       commandId,
-      actionId: action.id,
-      actionLabel: action.label,
+      actionId: input.actionId,
+      actionLabel: input.actionLabel,
       expectedRoomRevision: room.roomRevision,
       expectedEngineRevision: room.engineRevision,
     }
 
     submitInFlightRef.current = true
     optimisticCommandRef.current = optimisticCommand
-    setSubmittingActionId(action.id)
+    setSubmittingActionId(input.actionId)
     setClientAuthorityState(createOptimisticPendingState(optimisticCommand))
     setSyncStatus({
       status: 'submitting',
@@ -306,7 +308,7 @@ export function PersistedProjectedMatchRoomClient({
         body: JSON.stringify({
           commandId,
           expectedRoomRevision: optimisticCommand.expectedRoomRevision,
-          payload: action.command.payload,
+          payload: input.payload,
         }),
       })
       const body = await readJsonRecord(response)
@@ -377,6 +379,34 @@ export function PersistedProjectedMatchRoomClient({
     }
   }
 
+  async function submitAction(action: MatchClientActionView) {
+    if (action.command === undefined) {
+      return
+    }
+
+    await submitCommandPayload({
+      actionId: action.id,
+      actionLabel: action.label,
+      payload: action.command.payload,
+    })
+  }
+
+  async function submitChoiceResponse(
+    submission: ProjectedMatchChoiceSubmission,
+  ) {
+    await submitCommandPayload({
+      actionId: `choice.${submission.response.requestId}.${submission.response.type}`,
+      actionLabel: submission.label,
+      payload: {
+        kind: 'choice_response',
+        submission: {
+          expectedRevision: room.engineRevision,
+          response: submission.response,
+        },
+      },
+    })
+  }
+
   return (
     <ProjectedMatchRoomView
       room={room}
@@ -386,6 +416,9 @@ export function PersistedProjectedMatchRoomClient({
       clientAuthorityState={clientAuthorityState}
       actionsDisabled={submittingActionId !== null}
       onSubmitAction={(action) => void submitAction(action)}
+      onSubmitChoiceResponse={(submission) =>
+        void submitChoiceResponse(submission)
+      }
     />
   )
 }
@@ -551,14 +584,14 @@ function createUnknownCommandFeedback(
 
 function createCommandId(
   room: ProjectedMatchRoomClientState,
-  action: MatchClientActionView,
+  actionId: string,
 ): RealtimeClientCommandId {
   const entropy =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-  return `client-command:${room.roomId}:r${room.roomRevision}:${action.id}:${entropy}` as RealtimeClientCommandId
+  return `client-command:${room.roomId}:r${room.roomRevision}:${actionId}:${entropy}` as RealtimeClientCommandId
 }
 
 function createCommandFeedback(

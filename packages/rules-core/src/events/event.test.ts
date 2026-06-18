@@ -88,6 +88,8 @@ type ExpectedEventTypes =
   | 'resource.counter_charged'
   | 'resource.soul_blasted'
   | 'resource.soul_charged'
+  | 'resource.energy_blasted'
+  | 'effect.activated'
   | 'effect.resolved'
   | 'trigger.revealed'
   | 'trigger.resolved'
@@ -230,9 +232,14 @@ describe('@web-vg/rules-core event model', () => {
       | 'resource.counter_charged'
       | 'resource.soul_blasted'
       | 'resource.soul_charged'
+      | 'resource.energy_blasted'
     >()
-    expectTypeOf<EffectEvent['type']>().toEqualTypeOf<'effect.resolved'>()
-    expectTypeOf<EffectEventType>().toEqualTypeOf<'effect.resolved'>()
+    expectTypeOf<EffectEvent['type']>().toEqualTypeOf<
+      'effect.activated' | 'effect.resolved'
+    >()
+    expectTypeOf<EffectEventType>().toEqualTypeOf<
+      'effect.activated' | 'effect.resolved'
+    >()
     expectTypeOf<TriggerEventType>().toEqualTypeOf<
       'trigger.revealed' | 'trigger.resolved'
     >()

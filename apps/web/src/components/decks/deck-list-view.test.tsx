@@ -1,26 +1,34 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const actionMocks = vi.hoisted(() => ({
+  createStandardSliceQaDecksAction: vi.fn(),
   deleteDeckAction: vi.fn(),
   duplicateDeckAction: vi.fn(),
 }))
 
 vi.mock('@/features/decks/server/deck-actions', () => ({
+  createStandardSliceQaDecksAction:
+    actionMocks.createStandardSliceQaDecksAction,
   deleteDeckAction: actionMocks.deleteDeckAction,
   duplicateDeckAction: actionMocks.duplicateDeckAction,
 }))
 
 import { DeckListView } from './deck-list-view'
 
+afterEach(() => {
+  cleanup()
+})
+
 describe('DeckListView', () => {
-  it('renders persisted deck summaries with open, duplicate, and delete actions', () => {
+  it('renders persisted deck summaries with start, open, duplicate, and delete actions', () => {
     render(
       <DeckListView
         query={{
           formatId: 'all',
         }}
         totalDeckCount={1}
+        showStandardSliceQaBootstrap
         profile={{
           id: 'profile-1',
           username: 'azure_pilot',
@@ -72,10 +80,16 @@ describe('DeckListView', () => {
       'href',
       '/decks/deck-1',
     )
+    expect(
+      screen.getByRole('link', { name: /invite to match/i }),
+    ).toHaveAttribute('href', '/matches/lobby')
     expect(screen.getByRole('link', { name: /create deck/i })).toHaveAttribute(
       'href',
       '/decks/create',
     )
+    expect(
+      screen.getByRole('button', { name: /create standard slice qa decks/i }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /duplicate azure standard deck/i }),
     ).toBeInTheDocument()
@@ -107,6 +121,9 @@ describe('DeckListView', () => {
     )
 
     expect(screen.getByText(/no decks yet/i)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /create standard slice qa decks/i }),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /create your first deck/i }),
     ).toHaveAttribute('href', '/decks/create')

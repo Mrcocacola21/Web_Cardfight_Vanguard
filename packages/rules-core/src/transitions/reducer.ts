@@ -45,6 +45,12 @@ import {
 import { applyResolveMandatoryFlowTransition } from './battle-completion'
 import { applyResolveCombatTransition } from './combat-resolution'
 import { applyCallCardTransition, applyRideCardTransition } from './ride-call'
+import { applyPlayCardTransition } from './play-card'
+import {
+  applyActivateCardEffectTransition,
+  applyActivatedEffectChoiceResponseTransition,
+  type ActivatedEffectRuntimeEnvironment,
+} from './activated-effects'
 import {
   applyAdvancePhaseTransition,
   applyEndPhaseTransition,
@@ -68,7 +74,15 @@ import {
 } from './transition'
 import { createPieceMovedEvents, resolveZoneTransfer } from './zone-transfer'
 
-export function reduceGameState(input: TransitionInput): TransitionResult {
+export interface RuntimeTransitionOptions {
+  readonly activatedEffects?: ActivatedEffectRuntimeEnvironment
+}
+
+type ReducerTransitionInput = TransitionInput & RuntimeTransitionOptions
+
+export function reduceGameState(
+  input: ReducerTransitionInput,
+): TransitionResult {
   assertGameStateInvariant(input.currentState)
 
   return input.kind === 'action'
@@ -79,27 +93,31 @@ export function reduceGameState(input: TransitionInput): TransitionResult {
 export function applyGameAction(
   currentState: GameState,
   submission: GameActionSubmission,
+  options: RuntimeTransitionOptions = {},
 ): TransitionResult {
   return reduceGameState({
     kind: 'action',
     currentState,
     submission,
+    ...options,
   })
 }
 
 export function applyGameChoiceResponse(
   currentState: GameState,
   submission: GameChoiceResponseSubmission,
+  options: RuntimeTransitionOptions = {},
 ): TransitionResult {
   return reduceGameState({
     kind: 'choice_response',
     currentState,
     submission,
+    ...options,
   })
 }
 
 function reduceActionTransition(
-  input: ActionTransitionInput,
+  input: ActionTransitionInput & RuntimeTransitionOptions,
 ): TransitionResult {
   const { currentState, submission } = input
   const action = submission.action
@@ -218,6 +236,15 @@ function reduceActionTransition(
         return applyRideCardTransition(transitionId, currentState, action)
       case 'card.call':
         return applyCallCardTransition(transitionId, currentState, action)
+      case 'card.play':
+        return applyPlayCardTransition(transitionId, currentState, action)
+      case 'card.activate_effect':
+        return applyActivateCardEffectTransition(
+          transitionId,
+          currentState,
+          action,
+          input.activatedEffects,
+        )
       case 'battle.declare_attack':
         return applyDeclareAttackTransition(transitionId, currentState, action)
       case 'battle.commit_boost':
@@ -241,7 +268,7 @@ function reduceActionTransition(
 }
 
 function reduceChoiceResponseTransition(
-  input: ChoiceResponseTransitionInput,
+  input: ChoiceResponseTransitionInput & RuntimeTransitionOptions,
 ): TransitionResult {
   const { currentState, submission } = input
   const response = submission.response
@@ -390,6 +417,33 @@ function reduceChoiceResponseTransition(
           ],
         },
       ),
+    })
+  }
+
+  if (blockingRequest.context?.effectContinuationId !== undefined) {
+    const choiceResponseEvent = createChoiceResponseResolvedEvent(
+      transitionId,
+      blockingRequest,
+      response,
+    )
+
+    const resultInput = {
+      transitionId,
+      currentState,
+      request: blockingRequest,
+      response,
+      choiceResponseEvent,
+      remainingRequests: currentState.pendingRequests.slice(1),
+      ...(input.activatedEffects === undefined
+        ? {}
+        : {
+            environment: input.activatedEffects,
+          }),
+    }
+
+    return resolveEventTriggeredEffects({
+      currentState,
+      result: applyActivatedEffectChoiceResponseTransition(resultInput),
     })
   }
 
@@ -885,6 +939,10 @@ function resolveBattleSequenceViolation(
   const battle = currentState.battle
 
   if (battle === undefined) {
+    return undefined
+  }
+
+  if (actionType === 'card.activate_effect') {
     return undefined
   }
 

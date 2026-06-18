@@ -212,6 +212,29 @@ describe('/api/matches/rooms/[roomId]/realtime', () => {
     expect(mocks.submitCommand).not.toHaveBeenCalled()
   })
 
+  it('denies recovery snapshot loads for authenticated non-participants', async () => {
+    mocks.getProfileByAuthUserId.mockResolvedValueOnce({
+      ok: true,
+      data: createProfileRecord('profile-not-in-room'),
+    })
+
+    const response = await GET(
+      new NextRequest(
+        `http://127.0.0.1:3000/api/matches/rooms/${ROOM_ID}/realtime`,
+      ),
+      createRouteContext(),
+    )
+    const json = await readJson(response)
+
+    expect(response.status).toBe(403)
+    expect(json).toMatchObject({
+      status: 'error',
+      code: 'room_access_denied',
+    })
+    expect(mocks.createServerRouteRealtimeTransport).not.toHaveBeenCalled()
+    expect(mocks.loadParticipantSnapshot).not.toHaveBeenCalled()
+  })
+
   it('returns invalid command responses without exposing canonical room state', async () => {
     mocks.submitCommand.mockResolvedValue(
       createInvalidCommandResponse('command-stale', 'stale_room_revision'),

@@ -2,6 +2,7 @@ import {
   STANDARD_FORMAT_ID,
   assertGameStateInvariant,
   buildEngineCardStatsSnapshotFromGameplayCards,
+  type EffectDefinitionId,
   type GameId,
   type GameState,
   type PieceId,
@@ -449,6 +450,7 @@ function createPlayerBootstrapPayload(input: {
   const zones = createPlayerZones({
     runtimeKey,
     playerId: input.player.playerId,
+    formatId: input.formatId,
     deckPieces,
     openingHandPieces,
     rideDeckPieces,
@@ -464,18 +466,42 @@ function createPlayerBootstrapPayload(input: {
         seat: input.player.seat,
         status: 'waiting',
         ownedZoneIds: zones.map((zone) => zone.zoneId),
-        counters: [],
+        counters: createPlayerCounters(input.formatId),
         flags: [],
       },
       zones,
-      pieces: allPieces.map((piece) => ({
-        pieceId: piece.pieceId,
-        kind: 'card',
-        cardDefinitionId: piece.cardDefinitionId,
-        ownerPlayerId: input.player.playerId,
-        controllerPlayerId: input.player.playerId,
-      })),
+      pieces: allPieces.map((piece) =>
+        createRuntimePieceState(
+          piece,
+          input.player.playerId,
+          input.cardDefinitionsById,
+        ),
+      ),
     },
+  }
+}
+
+function createRuntimePieceState(
+  piece: ExpandedDeckPiece,
+  playerId: PlayerId,
+  cardDefinitionsById: ReadonlyMap<string, GameplayCard>,
+): GameState['pieces'][number] {
+  const card = cardDefinitionsById.get(piece.cardDefinitionId as string)
+  const effectDefinitionIds = Array.from(
+    new Set(
+      card?.effectRefs.map(
+        (effectRef) => effectRef.id as unknown as EffectDefinitionId,
+      ) ?? [],
+    ),
+  )
+
+  return {
+    pieceId: piece.pieceId,
+    kind: 'card',
+    cardDefinitionId: piece.cardDefinitionId,
+    ownerPlayerId: playerId,
+    controllerPlayerId: playerId,
+    ...(effectDefinitionIds.length === 0 ? {} : { effectDefinitionIds }),
   }
 }
 
@@ -567,6 +593,7 @@ function sortRideDeckPiecesByGrade(
 function createPlayerZones(input: {
   readonly runtimeKey: string
   readonly playerId: PlayerId
+  readonly formatId: FormatId
   readonly deckPieces: readonly ExpandedDeckPiece[]
   readonly openingHandPieces: readonly ExpandedDeckPiece[]
   readonly rideDeckPieces: readonly ExpandedDeckPiece[]
@@ -620,10 +647,42 @@ function createPlayerZones(input: {
       'guardian_circle',
       [],
     ),
+    ...createStandardVerticalSliceZones(input),
     createOrderedMultiZone(input.runtimeKey, input.playerId, 'damage', []),
     createOrderedMultiZone(input.runtimeKey, input.playerId, 'soul', []),
     createOrderedMultiZone(input.runtimeKey, input.playerId, 'drop', []),
     createOrderedMultiZone(input.runtimeKey, input.playerId, 'bind', []),
+  ]
+}
+
+function createStandardVerticalSliceZones(input: {
+  readonly runtimeKey: string
+  readonly playerId: PlayerId
+  readonly formatId: FormatId
+}): readonly GameState['zones'][number][] {
+  if (input.formatId !== STANDARD_FORMAT_ID) {
+    return []
+  }
+
+  return [
+    createOrderedMultiZone(input.runtimeKey, input.playerId, 'order_zone', []),
+    createUnorderedMultiZone(input.runtimeKey, input.playerId, 'prison', []),
+  ]
+}
+
+function createPlayerCounters(
+  formatId: FormatId,
+): GameState['players'][number]['counters'] {
+  if (formatId !== STANDARD_FORMAT_ID) {
+    return []
+  }
+
+  return [
+    {
+      key: 'energy',
+      amount: 0,
+      visibility: 'public',
+    },
   ]
 }
 
@@ -701,7 +760,9 @@ function normalizeZoneKey(kind: GameState['zones'][number]['kind']): string {
       ? 'g-deck'
       : kind === 'guardian_circle'
         ? 'guardian'
-        : kind
+        : kind === 'order_zone'
+          ? 'order-zone'
+          : kind
 }
 
 function normalizeIdFragment(value: string): string {

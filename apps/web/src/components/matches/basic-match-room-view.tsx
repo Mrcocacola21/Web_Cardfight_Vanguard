@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/card'
 import {
   LOCAL_MATCH_PARTICIPANT_ONE_ID,
+  LOCAL_MATCH_PARTICIPANT_TWO_ID,
   LOCAL_MATCH_PLAYER_ONE_ID,
+  LOCAL_MATCH_PLAYER_TWO_ID,
   createLocalActionId,
   createLocalPrototypeMatchRoom,
 } from '@/features/matches/play/local-match-room'
@@ -33,6 +35,7 @@ import {
 
 import {
   ProjectedMatchRoomView,
+  type ProjectedMatchChoiceSubmission,
   type ProjectedMatchCommandFeedback,
 } from './projected-match-room-view'
 
@@ -111,6 +114,25 @@ function BasicMatchRoomSession({ roomId }: BasicMatchRoomViewProps) {
     submitCommand(submission)
   }
 
+  function submitChoiceResponse(submission: ProjectedMatchChoiceSubmission) {
+    submitCommand({
+      source: {
+        kind: 'participant',
+        participantId:
+          submission.response.responderPlayerId === LOCAL_MATCH_PLAYER_TWO_ID
+            ? LOCAL_MATCH_PARTICIPANT_TWO_ID
+            : LOCAL_MATCH_PARTICIPANT_ONE_ID,
+      },
+      command: {
+        kind: 'choice_response',
+        submission: {
+          expectedRevision: room.engineState.revision,
+          response: submission.response,
+        },
+      },
+    })
+  }
+
   function resetRoom() {
     actionSequenceRef.current = 0
     setRoom(createLocalPrototypeMatchRoom(roomId))
@@ -141,6 +163,7 @@ function BasicMatchRoomSession({ roomId }: BasicMatchRoomViewProps) {
       resetLabel="Reset local room"
       onResetRoom={resetRoom}
       onSubmitAction={submitAvailableAction}
+      onSubmitChoiceResponse={submitChoiceResponse}
     />
   )
 }

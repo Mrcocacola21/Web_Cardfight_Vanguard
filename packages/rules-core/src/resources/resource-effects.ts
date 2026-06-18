@@ -164,6 +164,7 @@ function isResourceOperation(
   return (
     operation.kind === 'counter_blast' ||
     operation.kind === 'counter_charge' ||
+    operation.kind === 'energy_blast' ||
     operation.kind === 'soul_blast' ||
     operation.kind === 'soul_charge'
   )
@@ -193,6 +194,13 @@ function applyResourceOperation(
       )
     case 'counter_charge':
       return applyCounterChargeOperation(
+        currentState,
+        playerResolution.player,
+        operation.count,
+        context,
+      )
+    case 'energy_blast':
+      return applyEnergyBlastOperation(
         currentState,
         playerResolution.player,
         operation.count,
@@ -319,6 +327,64 @@ function applyCounterChargeOperation(
         playerId: player.playerId,
         toZoneId: damageZone.zoneId,
         pieceIds: selectedPieceIds,
+        count,
+      }),
+    ],
+  }
+}
+
+function applyEnergyBlastOperation(
+  currentState: GameState,
+  player: PlayerState,
+  count: number,
+  context: ResourceOperationContext,
+): ResourceOperationResult {
+  const energyCounter = player.counters.find(
+    (counter) => counter.key === 'energy',
+  )
+  const currentAmount = energyCounter?.amount ?? 0
+
+  if (currentAmount < count) {
+    return {
+      ok: false,
+      code: 'invalid_action',
+      message: `Energy Blast ${count} requires ${count} energy, but player ${player.playerId} has ${currentAmount}.`,
+    }
+  }
+
+  const nextAmount = currentAmount - count
+
+  return {
+    ok: true,
+    state: {
+      ...currentState,
+      players: currentState.players.map((candidate) =>
+        candidate.playerId === player.playerId
+          ? {
+              ...candidate,
+              counters:
+                energyCounter === undefined
+                  ? candidate.counters
+                  : candidate.counters.map((counter) =>
+                      counter.key === 'energy'
+                        ? {
+                            ...counter,
+                            amount: nextAmount,
+                          }
+                        : counter,
+                    ),
+            }
+          : candidate,
+      ),
+    },
+    events: [
+      createResourceEvent(context, {
+        type: 'resource.energy_blasted',
+        sequence: context.startingSequence,
+        playerId: player.playerId,
+        counterKey: 'energy',
+        previousAmount: currentAmount,
+        nextAmount,
         count,
       }),
     ],
@@ -540,6 +606,15 @@ function createResourceEvent(
         readonly count: number
       }
     | {
+        readonly type: 'resource.energy_blasted'
+        readonly sequence: number
+        readonly playerId: PlayerId
+        readonly counterKey: 'energy'
+        readonly previousAmount: number
+        readonly nextAmount: number
+        readonly count: number
+      }
+    | {
         readonly type: 'resource.soul_blasted' | 'resource.soul_charged'
         readonly sequence: number
         readonly playerId: PlayerId
@@ -560,20 +635,31 @@ function createResourceEvent(
         }),
     origin: createSystemOrigin(),
     playerId: input.playerId,
-    ...(input.type === 'resource.counter_charged'
+    ...(input.type === 'resource.energy_blasted'
       ? {
-          toZoneId: input.toZoneId,
+          counterKey: input.counterKey,
+          previousAmount: input.previousAmount,
+          nextAmount: input.nextAmount,
         }
-      : {
-          fromZoneId: input.fromZoneId,
-        }),
+      : input.type === 'resource.counter_charged'
+        ? {
+            toZoneId: input.toZoneId,
+          }
+        : {
+            fromZoneId: input.fromZoneId,
+          }),
     ...(input.type === 'resource.counter_blasted' ||
-    input.type === 'resource.counter_charged'
+    input.type === 'resource.counter_charged' ||
+    input.type === 'resource.energy_blasted'
       ? {}
       : {
           toZoneId: input.toZoneId,
         }),
-    pieceIds: input.pieceIds,
+    ...(input.type === 'resource.energy_blasted'
+      ? {}
+      : {
+          pieceIds: input.pieceIds,
+        }),
     count: input.count,
   } as ResourceEvent
 }

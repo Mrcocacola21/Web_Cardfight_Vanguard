@@ -56,6 +56,9 @@ stale local component state. If another participant advanced the room while this
 client was disconnected, recovery discards the stale projected state and adopts
 the latest room revision. If a timeout was already resolved and persisted while
 the client was away, recovery shows the persisted post-timeout room snapshot.
+Snapshot loading does not resolve expired deadlines by itself; if no
+server-owned timeout runner has persisted the timeout outcome yet, recovery
+continues to show the authoritative pending request with its expired deadline.
 
 In-flight commands are treated conservatively. If the POST fails before the
 client receives an authoritative response, the command status is marked unknown,
@@ -65,17 +68,19 @@ what the room actually accepted.
 ## 7. Auth and hidden-information boundaries
 
 Recovery uses the same authenticated route and participant projection as normal
-sync. Non-participants cannot recover into the room, and the payload contains no
-canonical `engineState` or opponent-private hidden data. The same canonical
-revision may still produce different recovery payloads for different
-participants.
+sync. The `GET` snapshot path and `POST` command path share the same auth,
+profile, storage, and room-membership resolver. Non-participants cannot recover
+into the room, and the payload contains no canonical `engineState` or
+opponent-private hidden data. The same canonical revision may still produce
+different recovery payloads for different participants.
 
 ## 8. What is intentionally NOT implemented yet
 
 This step does not implement offline-first play, local canonical replay,
 idempotent command replay, websocket replay windows, cross-device takeover,
-spectator/replay mode, or recovery for the local prototype route. The local
-`/matches/play/local` path remains a separate dev/prototype surface.
+production timeout-runner scheduling, spectator/replay mode, or recovery for the
+local prototype route. The local `/matches/play/local` path remains a separate
+dev/prototype surface.
 
 ## 9. Summary
 

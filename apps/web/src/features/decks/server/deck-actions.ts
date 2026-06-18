@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { createDbClient, createDecksRepository } from '@web-vg/db'
 
 import type { DeckCreateFormState } from '@/features/decks/server/deck-create-form-state'
 import {
@@ -9,7 +10,11 @@ import {
   deleteDeckUseCase,
   duplicateDeckUseCase,
 } from '@/features/decks/application/deck-management-use-cases'
+import { bootstrapStandardSliceQaDecksUseCase } from '@/features/decks/application/standard-slice-qa-bootstrap-use-cases'
 import { createDeckWriteRepository } from '@/features/decks/infrastructure/deck-write-repository'
+import { createStandardSliceQaCatalogRepository } from '@/features/decks/infrastructure/standard-slice-qa-catalog-repository'
+import { isStandardSliceQaBootstrapEnabled } from '@/features/decks/standard-slice-qa-bootstrap-config'
+import { getSupabaseServiceRoleEnv } from '@/lib/supabase/config'
 
 import {
   requireReadyDeckActionContext,
@@ -99,6 +104,54 @@ export async function duplicateDeckAction(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/decks')
+}
+
+export async function createStandardSliceQaDecksAction(): Promise<void> {
+  if (!isStandardSliceQaBootstrapEnabled()) {
+    throw new Error(
+      'The Standard slice QA deck bootstrap is disabled for this environment.',
+    )
+  }
+
+  const deckActionContext = await requireReadyDeckActionContext()
+  const deckWriteRepository = createDeckWriteRepository(
+    deckActionContext.client,
+  )
+  const deckListRepository = createDecksRepository(deckActionContext.client)
+  let adminClient: ReturnType<typeof createDbClient>
+
+  try {
+    adminClient = createDbClient(getSupabaseServiceRoleEnv())
+  } catch {
+    throw new Error(
+      'Configure SUPABASE_SERVICE_ROLE_KEY before creating Standard slice QA decks.',
+    )
+  }
+
+  const result = await bootstrapStandardSliceQaDecksUseCase(
+    {
+      deckRepository: {
+        getOwnerProfileIdByAuthUserId: (authUserId) =>
+          deckWriteRepository.getOwnerProfileIdByAuthUserId(authUserId),
+        async listDecksByOwnerProfileId(ownerProfileId) {
+          return deckListRepository.listDecksByOwner(ownerProfileId)
+        },
+        createDeck: (input) => deckWriteRepository.createDeck(input),
+      },
+      catalogRepository: createStandardSliceQaCatalogRepository(adminClient),
+    },
+    {
+      authUserId: deckActionContext.authUserId,
+    },
+  )
+
+  if (!result.ok) {
+    throw new Error(result.error.message)
+  }
+
+  revalidatePath('/catalog')
+  revalidatePath('/decks')
+  redirect('/decks?format=standard')
 }
 
 function readRequiredFormValue(formData: FormData, key: string): string {

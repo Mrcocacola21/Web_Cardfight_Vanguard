@@ -1,8 +1,10 @@
-import type { Brand, FormatId, Keyword } from '@web-vg/shared'
+import type { Brand, CardType, FormatId, Grade, Keyword } from '@web-vg/shared'
 
 import type { EffectDefinitionId } from '../contracts'
 import { assertRulesInvariant } from '../errors'
 import type { EventType, GameEvent } from '../events'
+import type { ZoneKind } from '../state'
+import type { ZoneTransferReason } from '../transfers'
 import type {
   EffectTimingPoint,
   EffectTimingWindow,
@@ -108,7 +110,10 @@ export interface ApplyPowerModifierOperation {
 }
 
 export type ResourceEffectOperationSelection = 'deterministic_first'
+export type GenericEffectSelectionMode = 'deterministic_first' | 'request'
 export type ResourceEffectOperationRole = 'cost' | 'effect'
+export type EffectPlayerSelector = 'source_controller' | 'opponent'
+export type EffectMoveDestinationPlayerSelector = EffectPlayerSelector | 'owner'
 
 export interface CounterBlastOperation {
   readonly kind: 'counter_blast'
@@ -146,17 +151,112 @@ export interface SoulChargeOperation {
   readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
 }
 
+export interface EnergyBlastOperation {
+  readonly kind: 'energy_blast'
+  readonly count: number
+  readonly player: Extract<DeclarativeEffectSubject, 'source_controller'>
+  readonly role: Extract<ResourceEffectOperationRole, 'cost'>
+  readonly duration: Extract<DeclarativeEffectDuration, 'immediate'>
+}
+
 export type ResourceEffectOperation =
   | CounterBlastOperation
   | CounterChargeOperation
   | SoulBlastOperation
   | SoulChargeOperation
+  | EnergyBlastOperation
+
+export interface EffectZoneSelector {
+  readonly player: EffectPlayerSelector
+  readonly kind: ZoneKind
+}
+
+export interface EffectPieceFilter {
+  readonly cardTypes?: readonly CardType[]
+  readonly grades?: readonly Grade[]
+  readonly controller?: EffectPlayerSelector
+  readonly owner?: EffectPlayerSelector
+}
+
+export interface SearchCardsOperation {
+  readonly kind: 'search'
+  readonly from: EffectZoneSelector
+  readonly to: EffectZoneSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+  readonly reason?: ZoneTransferReason
+}
+
+export interface CallCardsOperation {
+  readonly kind: 'call'
+  readonly from: EffectZoneSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+  readonly destination: 'first_open_rear_guard'
+  readonly reason?: ZoneTransferReason
+}
+
+export interface RetireCardsOperation {
+  readonly kind: 'retire'
+  readonly from: EffectZoneSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+}
+
+export interface BindCardsOperation {
+  readonly kind: 'bind'
+  readonly from: EffectZoneSelector
+  readonly toPlayer: EffectMoveDestinationPlayerSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+}
+
+export interface BounceCardsOperation {
+  readonly kind: 'bounce'
+  readonly from: EffectZoneSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+}
+
+export interface ImprisonCardsOperation {
+  readonly kind: 'imprison'
+  readonly from: EffectZoneSelector
+  readonly selection: GenericEffectSelectionMode
+  readonly minSelections: number
+  readonly maxSelections: number
+  readonly filter?: EffectPieceFilter
+}
+
+export interface MoveSourceToOrderZoneOperation {
+  readonly kind: 'move_source_to_order_zone'
+  readonly mode: 'place'
+}
+
+export type GenericEffectOperation =
+  | SearchCardsOperation
+  | CallCardsOperation
+  | RetireCardsOperation
+  | BindCardsOperation
+  | BounceCardsOperation
+  | ImprisonCardsOperation
+  | MoveSourceToOrderZoneOperation
 
 export type DeclarativeEffectOperation =
   | AdjustCheckCountOperation
   | DrawCardsOperation
   | ApplyPowerModifierOperation
   | ResourceEffectOperation
+  | GenericEffectOperation
 
 export interface TypedEffectExecutionStrategy {
   readonly kind: 'typed_handler'
@@ -515,6 +615,127 @@ function assertDeclarativeOperationInvariant(
         `Effect definition ${definition.id} ${operation.kind} must use deterministic_first selection under the current resource foundation.`,
       )
       return
+    case 'energy_blast':
+      assertRulesInvariant(
+        Number.isSafeInteger(operation.count) && operation.count > 0,
+        `Effect definition ${definition.id} energy_blast count must be a positive safe integer.`,
+      )
+      return
+    case 'search':
+      assertZoneSelectorInvariant(definition, operation.from)
+      assertZoneSelectorInvariant(definition, operation.to)
+      assertSelectionInvariant(definition, operation)
+      assertPieceFilterInvariant(definition, operation.filter)
+      return
+    case 'call':
+      assertZoneSelectorInvariant(definition, operation.from)
+      assertSelectionInvariant(definition, operation)
+      assertPieceFilterInvariant(definition, operation.filter)
+      assertRulesInvariant(
+        operation.destination === 'first_open_rear_guard',
+        `Effect definition ${definition.id} call destination must use first_open_rear_guard under the current runtime foundation.`,
+      )
+      return
+    case 'retire':
+    case 'bounce':
+    case 'imprison':
+      assertZoneSelectorInvariant(definition, operation.from)
+      assertSelectionInvariant(definition, operation)
+      assertPieceFilterInvariant(definition, operation.filter)
+      return
+    case 'bind':
+      assertZoneSelectorInvariant(definition, operation.from)
+      assertRulesInvariant(
+        operation.toPlayer === 'source_controller' ||
+          operation.toPlayer === 'opponent' ||
+          operation.toPlayer === 'owner',
+        `Effect definition ${definition.id} bind toPlayer selector is unsupported.`,
+      )
+      assertSelectionInvariant(definition, operation)
+      assertPieceFilterInvariant(definition, operation.filter)
+      return
+    case 'move_source_to_order_zone':
+      assertRulesInvariant(
+        operation.mode === 'place',
+        `Effect definition ${definition.id} move_source_to_order_zone mode must be place.`,
+      )
+      return
+  }
+}
+
+function assertZoneSelectorInvariant(
+  definition: EffectDefinition,
+  selector: EffectZoneSelector,
+): void {
+  assertRulesInvariant(
+    selector.player === 'source_controller' || selector.player === 'opponent',
+    `Effect definition ${definition.id} has an unsupported zone player selector.`,
+  )
+  assertRulesInvariant(
+    typeof selector.kind === 'string' && selector.kind.length > 0,
+    `Effect definition ${definition.id} must use a non-empty zone kind selector.`,
+  )
+}
+
+function assertSelectionInvariant(
+  definition: EffectDefinition,
+  operation:
+    | SearchCardsOperation
+    | CallCardsOperation
+    | RetireCardsOperation
+    | BindCardsOperation
+    | BounceCardsOperation
+    | ImprisonCardsOperation,
+): void {
+  assertRulesInvariant(
+    operation.selection === 'deterministic_first' ||
+      operation.selection === 'request',
+    `Effect definition ${definition.id} ${operation.kind} uses unsupported selection mode.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(operation.minSelections) &&
+      operation.minSelections >= 0,
+    `Effect definition ${definition.id} ${operation.kind} minSelections must be a non-negative safe integer.`,
+  )
+  assertRulesInvariant(
+    Number.isSafeInteger(operation.maxSelections) &&
+      operation.maxSelections >= 0,
+    `Effect definition ${definition.id} ${operation.kind} maxSelections must be a non-negative safe integer.`,
+  )
+  assertRulesInvariant(
+    operation.maxSelections >= operation.minSelections,
+    `Effect definition ${definition.id} ${operation.kind} maxSelections must not be lower than minSelections.`,
+  )
+}
+
+function assertPieceFilterInvariant(
+  definition: EffectDefinition,
+  filter: EffectPieceFilter | undefined,
+): void {
+  if (filter === undefined) {
+    return
+  }
+
+  if (filter.cardTypes !== undefined) {
+    assertRulesInvariant(
+      filter.cardTypes.length > 0,
+      `Effect definition ${definition.id} piece filter cardTypes must not be empty.`,
+    )
+    assertUniqueValues(
+      filter.cardTypes,
+      `Effect definition ${definition.id} piece filter must not repeat cardTypes.`,
+    )
+  }
+
+  if (filter.grades !== undefined) {
+    assertRulesInvariant(
+      filter.grades.length > 0,
+      `Effect definition ${definition.id} piece filter grades must not be empty.`,
+    )
+    assertUniqueValues(
+      filter.grades.map((grade) => String(grade)),
+      `Effect definition ${definition.id} piece filter must not repeat grades.`,
+    )
   }
 }
 

@@ -1,10 +1,19 @@
 'use client'
 
-import { RotateCcw } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Clock3, RotateCcw, Shield, Swords, Wifi } from 'lucide-react'
 
-import type { PlayerId, VisibleGameChoiceRequest } from '@web-vg/rules-core'
+import type {
+  GameChoiceResponse,
+  PieceId,
+  PlayerId,
+  RequestOptionId,
+  VisibleGameChoiceRequest,
+  VisibleFullGameChoiceRequest,
+  VisibleGameState,
+  ZoneId,
+} from '@web-vg/rules-core'
 
-import { DashboardPageLayout, PageHeader } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,9 +26,12 @@ import {
 import type {
   MatchClientActionView,
   MatchClientActionsProjection,
-  ProjectedMatchPlayerSummary,
   ProjectedMatchRoomClientState,
 } from '@/features/matches/play/projected-client-state'
+import type {
+  ProjectedMatchBoardPiece,
+  ProjectedMatchBoardZone,
+} from '@/features/matches/play/zone-projection'
 
 import { AvailableActionsPanel } from './available-actions-panel'
 import { EventLogPanel } from './event-log-panel'
@@ -117,6 +129,11 @@ export type ProjectedMatchClientAuthorityState =
       readonly message: string
     }
 
+export interface ProjectedMatchChoiceSubmission {
+  readonly label: string
+  readonly response: GameChoiceResponse
+}
+
 interface ProjectedMatchRoomViewProps {
   readonly room: ProjectedMatchRoomClientState
   readonly actions: MatchClientActionsProjection
@@ -127,6 +144,38 @@ interface ProjectedMatchRoomViewProps {
   readonly resetLabel?: string
   readonly onResetRoom?: () => void
   readonly onSubmitAction?: (action: MatchClientActionView) => void
+  readonly onSubmitChoiceResponse?: (
+    submission: ProjectedMatchChoiceSubmission,
+  ) => void
+}
+
+interface RequestSelectionState {
+  readonly pieceRefIds: readonly string[]
+  readonly zoneIds: readonly string[]
+  readonly optionIds: readonly string[]
+  readonly playerIds: readonly string[]
+}
+
+interface TrackedRequestSelectionState extends RequestSelectionState {
+  readonly requestKey: string
+}
+
+type RequestSelectionUpdate =
+  | RequestSelectionState
+  | ((current: RequestSelectionState) => RequestSelectionState)
+
+type FullChoiceRequest = VisibleFullGameChoiceRequest
+
+function createEmptyRequestSelection(
+  requestKey: string,
+): TrackedRequestSelectionState {
+  return {
+    requestKey,
+    pieceRefIds: [],
+    zoneIds: [],
+    optionIds: [],
+    playerIds: [],
+  }
 }
 
 export function ProjectedMatchRoomView({
@@ -139,20 +188,57 @@ export function ProjectedMatchRoomView({
   resetLabel = 'Reset room',
   onResetRoom,
   onSubmitAction,
+  onSubmitChoiceResponse,
 }: ProjectedMatchRoomViewProps) {
   const firstPendingRequest = room.pendingRequests[0]
   const activePlayerLabel = resolvePlayerLabel(room, room.turn.turnPlayerId)
-  const activeDeadlineSummary = createActiveDeadlineSummary(room)
+  const activeRequestKey = firstPendingRequest?.requestId ?? 'none'
+  const [trackedSelection, setTrackedSelection] =
+    useState<TrackedRequestSelectionState>(() =>
+      createEmptyRequestSelection(activeRequestKey),
+    )
+  const selection =
+    trackedSelection.requestKey === activeRequestKey
+      ? trackedSelection
+      : createEmptyRequestSelection(activeRequestKey)
+  const setSelection = (selectionUpdate: RequestSelectionUpdate) => {
+    setTrackedSelection((current) => {
+      const currentSelection =
+        current.requestKey === activeRequestKey
+          ? current
+          : createEmptyRequestSelection(activeRequestKey)
+      const nextSelection =
+        typeof selectionUpdate === 'function'
+          ? selectionUpdate(currentSelection)
+          : selectionUpdate
+
+      return {
+        ...nextSelection,
+        requestKey: activeRequestKey,
+      }
+    })
+  }
+
+  const requestPrompt = firstPendingRequest
+    ? formatRequestPrompt(firstPendingRequest, {
+        responderLabel: resolvePlayerLabel(
+          room,
+          firstPendingRequest.responderPlayerId,
+        ),
+      })
+    : null
 
   return (
-    <DashboardPageLayout
-      containerSize="wide"
-      className="min-h-screen"
-      contentClassName="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]"
-      header={
-        <PageHeader
-          eyebrow={
-            <>
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="pointer-events-none fixed inset-0 opacity-80" aria-hidden>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_16%,rgba(14,165,233,0.22),transparent_34%),radial-gradient(circle_at_50%_78%,rgba(244,63,94,0.14),transparent_32%),linear-gradient(180deg,#020617,#0f172a_48%,#020617)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.06)_1px,transparent_1px)] bg-[size:56px_56px]" />
+      </div>
+
+      <div className="relative mx-auto grid w-full max-w-[95rem] gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid gap-2">
+            <div className="flex flex-wrap gap-2">
               <Badge variant="outline">Live match</Badge>
               <Badge variant={getRoomStatusBadgeVariant(room.status)}>
                 {formatStatusLabel(room.status)}
@@ -163,110 +249,342 @@ export function ProjectedMatchRoomView({
                   {syncStatus.label}
                 </Badge>
               )}
-            </>
-          }
-          title="Match Room"
-          meta={
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>{room.roomId}</span>
-              <span aria-hidden="true">|</span>
-              <span>Room r{room.roomRevision}</span>
-              <span aria-hidden="true">|</span>
-              <span>Engine r{room.engineRevision}</span>
-              <span aria-hidden="true">|</span>
-              <span>{activePlayerLabel}</span>
             </div>
-          }
-          actions={
-            onResetRoom === undefined ? null : (
-              <Button type="button" variant="outline" onClick={onResetRoom}>
-                <RotateCcw className="size-4" />
-                {resetLabel}
-              </Button>
-            )
-          }
-        />
-      }
-    >
-      <div className="grid gap-4">
-        <section className="grid gap-4 md:grid-cols-2">
-          {room.playerSummaries.map((player) => (
-            <PlayerSummaryCard key={player.playerId} player={player} />
-          ))}
-        </section>
+            <div>
+              <h1 className="text-3xl font-semibold tracking-normal text-white">
+                Vanguard Playmat
+              </h1>
+              <p className="text-sm text-slate-300">
+                {`${activePlayerLabel}'s turn in ${formatStatusLabel(room.turn.phase)}.`}
+              </p>
+            </div>
+          </div>
 
-        <MatchBoard
-          projection={room.board}
-          turn={room.turn}
-          zoneCount={room.zoneCount}
-          pieceCount={room.pieceCount}
-          resolvePlayerLabel={(playerId) => resolvePlayerLabel(room, playerId)}
+          {onResetRoom === undefined ? null : (
+            <Button type="button" variant="outline" onClick={onResetRoom}>
+              <RotateCcw className="size-4" />
+              {resetLabel}
+            </Button>
+          )}
+        </header>
+
+        <MatchContextPanel
+          room={room}
+          requestPrompt={requestPrompt}
+          syncStatus={syncStatus}
+          clientAuthorityState={clientAuthorityState}
         />
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <PendingRequestPanel
-            request={firstPendingRequest}
-            playerLabel={
-              firstPendingRequest
-                ? resolvePlayerLabel(
-                    room,
-                    firstPendingRequest.responderPlayerId,
-                  )
-                : null
-            }
-          />
-          <ResultFeedbackPanel feedback={feedback} />
-        </section>
-
-        <EventLogPanel entries={room.eventLogEntries} />
-      </div>
-
-      <aside className="grid content-start gap-4">
-        <AvailableActionsPanel
-          projection={actions}
-          actionsDisabled={actionsDisabled}
-          {...(onSubmitAction === undefined ? {} : { onSubmitAction })}
-        />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Session</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <SummaryRow
-              label="Room status"
-              value={formatStatusLabel(room.status)}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22.5rem]">
+          <div className="grid gap-4">
+            <MatchBoard
+              projection={room.board}
+              turn={room.turn}
+              zoneCount={room.zoneCount}
+              pieceCount={room.pieceCount}
+              selectedPieceRefIds={selection.pieceRefIds}
+              selectedZoneIds={selection.zoneIds}
+              {...(firstPendingRequest === undefined
+                ? {}
+                : { activeRequest: firstPendingRequest })}
+              {...(room.battle === undefined ? {} : { battle: room.battle })}
+              onTogglePieceTarget={(piece) =>
+                setSelection((current) =>
+                  togglePieceSelection(current, firstPendingRequest, piece),
+                )
+              }
+              onToggleZoneTarget={(zone) =>
+                setSelection((current) =>
+                  toggleZoneSelection(current, firstPendingRequest, zone),
+                )
+              }
+              resolvePlayerLabel={(playerId) =>
+                resolvePlayerLabel(room, playerId)
+              }
             />
-            <SummaryRow
-              label="Game status"
-              value={formatStatusLabel(room.gameStatus)}
-            />
-            <SummaryRow
-              label="Projection"
-              value={room.source.replaceAll('_', ' ')}
-            />
-            <SummaryRow label="Server time" value={room.clock.serverNow} />
-            {activeDeadlineSummary === null ? null : (
-              <SummaryRow
-                label="Active deadline"
-                value={activeDeadlineSummary}
+
+            <section className="grid gap-4 lg:grid-cols-2">
+              <RequestChoicePanel
+                room={room}
+                request={firstPendingRequest}
+                selection={selection}
+                actionsDisabled={actionsDisabled}
+                onSelectionChange={setSelection}
+                {...(onSubmitChoiceResponse === undefined
+                  ? {}
+                  : { onSubmitChoiceResponse })}
               />
-            )}
-            {clientAuthorityState === null ? null : (
-              <ClientAuthorityRows state={clientAuthorityState} />
-            )}
-            <SummaryRow
-              label="Pending"
-              value={room.pendingRequests.length.toString()}
+              <ResultFeedbackPanel feedback={feedback} room={room} />
+            </section>
+
+            <EventLogPanel entries={room.eventLogEntries} />
+          </div>
+
+          <aside className="grid content-start gap-4">
+            <BattleContextPanel room={room} />
+
+            <AvailableActionsPanel
+              projection={actions}
+              actionsDisabled={actionsDisabled}
+              {...(onSubmitAction === undefined ? {} : { onSubmitAction })}
             />
-            {syncStatus?.status === 'error' ||
-            syncStatus?.status === 'recovery_failed' ? (
-              <SummaryRow label="Sync issue" value={syncStatus.message} />
-            ) : null}
-          </CardContent>
-        </Card>
-      </aside>
-    </DashboardPageLayout>
+
+            <SyncDetailsPanel
+              room={room}
+              syncStatus={syncStatus}
+              clientAuthorityState={clientAuthorityState}
+            />
+          </aside>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function MatchContextPanel({
+  room,
+  requestPrompt,
+  syncStatus,
+  clientAuthorityState,
+}: {
+  readonly room: ProjectedMatchRoomClientState
+  readonly requestPrompt: string | null
+  readonly syncStatus: ProjectedMatchRoomSyncStatus | null
+  readonly clientAuthorityState: ProjectedMatchClientAuthorityState | null
+}) {
+  const waitingText =
+    requestPrompt ??
+    (room.status === 'completed'
+      ? 'The room is complete.'
+      : room.turn.turnPlayerId === room.viewer.playerId
+        ? 'Choose one of your available actions.'
+        : `Waiting for ${resolvePlayerLabel(room, room.turn.turnPlayerId)}.`)
+  const deadline = createActiveDeadlineSummary(room)
+  const timeoutNotice = createTimeoutNotice(room)
+
+  return (
+    <section
+      role="region"
+      aria-label="Match context"
+      className="rounded-2xl border border-cyan-200/20 bg-black/35 p-3 shadow-[0_18px_60px_-38px_rgba(34,211,238,0.8)] backdrop-blur"
+    >
+      <div className="grid gap-3 md:grid-cols-4">
+        <ContextTile
+          icon={<Swords className="size-4" />}
+          label="Turn"
+          value={resolvePlayerLabel(room, room.turn.turnPlayerId)}
+          detail={`Turn ${room.turn.turnNumber} | ${formatStatusLabel(room.turn.phase)}`}
+        />
+        <ContextTile
+          icon={<Shield className="size-4" />}
+          label="Game is waiting for"
+          value={waitingText}
+          detail={
+            room.battle
+              ? formatBattleStatus(room.battle.status)
+              : 'No active battle'
+          }
+        />
+        <ContextTile
+          icon={<Clock3 className="size-4" />}
+          label="Timer"
+          value={timeoutNotice ?? deadline ?? 'No active deadline'}
+          detail={room.clock.authority}
+        />
+        <ContextTile
+          icon={<Wifi className="size-4" />}
+          label="Connection"
+          value={formatSyncContextValue(syncStatus)}
+          detail={
+            clientAuthorityState === null
+              ? 'Server authoritative'
+              : 'Authoritative projection'
+          }
+        />
+      </div>
+    </section>
+  )
+}
+
+function ContextTile({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  readonly icon: ReactNode
+  readonly label: string
+  readonly value: string
+  readonly detail: string
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-white/10 bg-slate-950/55 p-3">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-400">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="text-sm font-semibold leading-snug text-white">
+        {value}
+      </div>
+      <div className="text-xs text-slate-400">{detail}</div>
+    </div>
+  )
+}
+
+function BattleContextPanel({
+  room,
+}: {
+  readonly room: ProjectedMatchRoomClientState
+}) {
+  const battle = room.battle
+
+  if (battle === undefined) {
+    return (
+      <section
+        role="region"
+        aria-label="Battle context"
+        className="rounded-2xl border border-white/10 bg-black/35 p-4"
+      >
+        <div className="text-xs font-semibold uppercase text-slate-400">
+          Battle
+        </div>
+        <div className="mt-1 text-sm font-semibold text-white">
+          No battle is active.
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section
+      role="region"
+      aria-label="Battle context"
+      className="rounded-2xl border border-amber-200/35 bg-amber-300/10 p-4 shadow-[0_0_34px_rgba(251,191,36,0.14)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase text-amber-200">
+            Battle
+          </div>
+          <div className="mt-1 text-base font-semibold text-white">
+            {formatBattleStatus(battle.status)}
+          </div>
+        </div>
+        <Badge variant="warning">Attack lane</Badge>
+      </div>
+      <div className="mt-3 grid gap-3 text-sm">
+        <SummaryRow
+          label="Attacker"
+          value={`${resolvePlayerLabel(room, battle.attackingPlayerId)}: ${resolvePieceLabel(room, battle.attacker)}`}
+        />
+        <SummaryRow label="Target" value={formatBattleTarget(room, battle)} />
+        <SummaryRow
+          label="Boost"
+          value={
+            battle.boostingPiece === undefined
+              ? 'No booster committed'
+              : resolvePieceLabel(room, battle.boostingPiece)
+          }
+        />
+        <SummaryRow
+          label="Guard"
+          value={
+            battle.guardPieces.length === 0
+              ? battle.status === 'guard_requested'
+                ? 'Guard step is open'
+                : 'No guardians'
+              : `${battle.guardPieces.length} guardian(s)`
+          }
+        />
+        {battle.combat === undefined ? null : (
+          <>
+            <SummaryRow
+              label="Attack"
+              value={`${battle.combat.attackPower} power / ${battle.combat.attackCritical} critical`}
+            />
+            <SummaryRow
+              label="Defense"
+              value={`${battle.combat.totalDefensePower} total defense`}
+            />
+            <SummaryRow
+              label="Outcome"
+              value={formatStatusLabel(battle.combat.result)}
+            />
+          </>
+        )}
+        {battle.lastCheck === undefined ? null : (
+          <SummaryRow
+            label="Check"
+            value={`${formatStatusLabel(battle.lastCheck.kind)} check: ${formatStatusLabel(
+              battle.lastCheck.triggerResolutionState,
+            )}`}
+          />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function SyncDetailsPanel({
+  room,
+  syncStatus,
+  clientAuthorityState,
+}: {
+  readonly room: ProjectedMatchRoomClientState
+  readonly syncStatus: ProjectedMatchRoomSyncStatus | null
+  readonly clientAuthorityState: ProjectedMatchClientAuthorityState | null
+}) {
+  const activeDeadlineSummary = createActiveDeadlineSummary(room, {
+    includeDeadlineAt: true,
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Connection</CardTitle>
+        <CardDescription>
+          Server state is authoritative; this screen renders the participant
+          projection.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm">
+        <SummaryRow
+          label="Room status"
+          value={formatStatusLabel(room.status)}
+        />
+        <SummaryRow
+          label="Game status"
+          value={formatStatusLabel(room.gameStatus)}
+        />
+        <SummaryRow
+          label="Projection"
+          value={room.source.replaceAll('_', ' ')}
+        />
+        <SummaryRow label="Server time" value={room.clock.serverNow} />
+        <SummaryRow
+          label="Room revision"
+          value={`Room r${room.roomRevision}`}
+        />
+        <SummaryRow
+          label="Engine revision"
+          value={`Engine r${room.engineRevision}`}
+        />
+        {activeDeadlineSummary === null ? null : (
+          <SummaryRow label="Active deadline" value={activeDeadlineSummary} />
+        )}
+        {clientAuthorityState === null ? null : (
+          <ClientAuthorityRows state={clientAuthorityState} />
+        )}
+        <SummaryRow
+          label="Pending choices"
+          value={room.pendingRequests.length.toString()}
+        />
+        {syncStatus?.status === 'error' ||
+        syncStatus?.status === 'recovery_failed' ? (
+          <SummaryRow label="Sync issue" value={syncStatus.message} />
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -341,133 +659,351 @@ function ClientAuthorityRows({
   }
 }
 
-function PlayerSummaryCard({
-  player,
-}: {
-  readonly player: ProjectedMatchPlayerSummary
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{player.label}</CardTitle>
-        <CardDescription>
-          Seat {player.seat} | {formatStatusLabel(player.status)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid grid-cols-3 gap-3 text-sm">
-        <SummaryMetric label="Zones" value={player.zoneCount.toString()} />
-        <SummaryMetric label="Pieces" value={player.pieceCount.toString()} />
-        <SummaryMetric label="Flags" value={player.flagCount.toString()} />
-      </CardContent>
-    </Card>
-  )
-}
-
-function PendingRequestPanel({
+function RequestChoicePanel({
+  room,
   request,
-  playerLabel,
+  selection,
+  actionsDisabled,
+  onSelectionChange,
+  onSubmitChoiceResponse,
 }: {
+  readonly room: ProjectedMatchRoomClientState
   readonly request: VisibleGameChoiceRequest | undefined
-  readonly playerLabel: string | null
+  readonly selection: RequestSelectionState
+  readonly actionsDisabled: boolean
+  readonly onSelectionChange: (selection: RequestSelectionState) => void
+  readonly onSubmitChoiceResponse?: (
+    submission: ProjectedMatchChoiceSubmission,
+  ) => void
 }) {
   if (request === undefined) {
     return (
-      <Card>
+      <Card
+        role="region"
+        aria-label="Choice request"
+        className="border-white/10 bg-black/35 text-slate-50"
+      >
         <CardHeader>
-          <CardTitle>Pending Request</CardTitle>
-          <CardDescription>No engine request is pending.</CardDescription>
+          <CardTitle>Current Choice</CardTitle>
+          <CardDescription className="text-slate-400">
+            No choice is waiting.
+          </CardDescription>
         </CardHeader>
       </Card>
     )
   }
 
+  const responderLabel = resolvePlayerLabel(room, request.responderPlayerId)
+  const prompt = formatRequestPrompt(request, { responderLabel })
+  const selectedCount =
+    selection.pieceRefIds.length +
+    selection.zoneIds.length +
+    selection.optionIds.length +
+    selection.playerIds.length
+  const submission = createChoiceSubmission(room, request, selection)
+
   return (
-    <Card>
+    <Card
+      role="region"
+      aria-label="Choice request"
+      className="border-amber-200/35 bg-amber-300/10 text-slate-50 shadow-[0_0_30px_rgba(251,191,36,0.12)]"
+    >
       <CardHeader>
-        <CardTitle>Pending Request</CardTitle>
-        <CardDescription>
-          {request.type} for {playerLabel ?? request.responderPlayerId}
+        <CardTitle>Current Choice</CardTitle>
+        <CardDescription className="text-amber-100/85">
+          {prompt}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">
-        <SummaryRow label="Request id" value={request.requestId} />
-        <SummaryRow label="Purpose" value={request.purpose} />
-        <SummaryRow label="Visibility" value={request.visibility} />
-        <SummaryRow
-          label="Viewer"
-          value={formatStatusLabel(request.visibilityToViewer)}
-        />
-        {'minSelections' in request ? (
-          <SummaryRow
-            label="Selection"
-            value={`${request.minSelections}-${request.maxSelections}`}
-          />
-        ) : null}
-        {'eligiblePieces' in request ? (
-          <SummaryRow
-            label="Eligible pieces"
-            value={(request.eligiblePieces?.length ?? 0).toString()}
-          />
-        ) : null}
-        {'eligibleZones' in request ? (
-          <SummaryRow
-            label="Eligible zones"
-            value={(request.eligibleZones?.length ?? 0).toString()}
-          />
-        ) : null}
-        {'options' in request ? (
-          <SummaryRow
-            label="Options"
-            value={(request.options?.length ?? 0).toString()}
-          />
-        ) : null}
-        {'currentDeckCount' in request ? (
-          <SummaryRow
-            label="Deck count"
-            value={(request.currentDeckCount ?? 0).toString()}
-          />
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="warning">{formatRequestType(request.type)}</Badge>
+          <Badge variant="outline">{formatSelectionRange(request)}</Badge>
+          {request.visibilityToViewer === 'redacted' ? (
+            <Badge variant="secondary">Waiting on opponent</Badge>
+          ) : null}
+        </div>
+
+        {request.visibilityToViewer === 'redacted' ? (
+          <p className="rounded-xl border border-white/10 bg-black/25 p-3 text-slate-300">
+            This choice is private to {responderLabel}. The table will update
+            when they answer.
+          </p>
+        ) : (
+          <>
+            <RequestOptionControls
+              request={request}
+              selection={selection}
+              onSelectionChange={onSelectionChange}
+            />
+            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+              <div className="font-medium">
+                {selectedCount === 0
+                  ? 'No targets selected'
+                  : `${selectedCount} target(s) selected`}
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                Legal cards are highlighted on the table. Use Clear to cancel
+                the current selection.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {request.type === 'confirm.boolean' ? (
+                <>
+                  <Button
+                    type="button"
+                    disabled={
+                      actionsDisabled || onSubmitChoiceResponse === undefined
+                    }
+                    onClick={() =>
+                      onSubmitChoiceResponse?.({
+                        label: 'Accept choice',
+                        response: {
+                          requestId: request.requestId,
+                          responderPlayerId: request.responderPlayerId,
+                          type: 'answer.boolean',
+                          accepted: true,
+                        },
+                      })
+                    }
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      actionsDisabled || onSubmitChoiceResponse === undefined
+                    }
+                    onClick={() =>
+                      onSubmitChoiceResponse?.({
+                        label: 'Decline choice',
+                        response: {
+                          requestId: request.requestId,
+                          responderPlayerId: request.responderPlayerId,
+                          type: 'answer.boolean',
+                          accepted: false,
+                        },
+                      })
+                    }
+                  >
+                    Decline
+                  </Button>
+                </>
+              ) : null}
+              {request.allowPass === true ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    actionsDisabled || onSubmitChoiceResponse === undefined
+                  }
+                  onClick={() =>
+                    onSubmitChoiceResponse?.({
+                      label: `Pass ${formatRequestType(request.type)}`,
+                      response: {
+                        requestId: request.requestId,
+                        responderPlayerId: request.responderPlayerId,
+                        type: 'answer.pass',
+                        reason: 'pass',
+                      },
+                    })
+                  }
+                >
+                  Pass
+                </Button>
+              ) : null}
+              {request.type === 'confirm.boolean' ? null : (
+                <Button
+                  type="button"
+                  disabled={
+                    actionsDisabled ||
+                    onSubmitChoiceResponse === undefined ||
+                    !submission.ok
+                  }
+                  onClick={() => {
+                    if (submission.ok) {
+                      onSubmitChoiceResponse?.(submission.submission)
+                    }
+                  }}
+                >
+                  Confirm choice
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  onSelectionChange({
+                    pieceRefIds: [],
+                    zoneIds: [],
+                    optionIds: [],
+                    playerIds: [],
+                  })
+                }
+              >
+                Clear
+              </Button>
+            </div>
+            {submission.ok ? null : (
+              <p className="text-xs text-slate-400">{submission.message}</p>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
+  )
+}
+
+function RequestOptionControls({
+  request,
+  selection,
+  onSelectionChange,
+}: {
+  readonly request: FullChoiceRequest
+  readonly selection: RequestSelectionState
+  readonly onSelectionChange: (selection: RequestSelectionState) => void
+}) {
+  const playerTargets = (request.eligibleTargets ?? []).filter(
+    (target) => target.kind === 'player',
+  )
+
+  return (
+    <div className="grid gap-2">
+      {request.options === undefined || request.options.length === 0 ? null : (
+        <div className="flex flex-wrap gap-2">
+          {request.options.map((option) => (
+            <Button
+              key={option.optionId}
+              type="button"
+              variant={
+                selection.optionIds.includes(option.optionId)
+                  ? 'default'
+                  : 'outline'
+              }
+              onClick={() =>
+                onSelectionChange(
+                  toggleOptionSelection(selection, request, option.optionId),
+                )
+              }
+            >
+              {formatStatusLabel(option.key)}
+            </Button>
+          ))}
+        </div>
+      )}
+      {request.eligibleZones === undefined ||
+      request.eligibleZones.length === 0 ? null : (
+        <div className="flex flex-wrap gap-2">
+          {request.eligibleZones.map((zone) => (
+            <Button
+              key={zone.zoneId}
+              type="button"
+              variant={
+                selection.zoneIds.includes(zone.zoneId) ? 'default' : 'outline'
+              }
+              onClick={() =>
+                onSelectionChange(
+                  toggleZoneSelectionById(selection, request, zone.zoneId),
+                )
+              }
+            >
+              {zone.zoneId}
+            </Button>
+          ))}
+        </div>
+      )}
+      {playerTargets.length === 0 ? null : (
+        <div className="flex flex-wrap gap-2">
+          {playerTargets.map((target) => (
+            <Button
+              key={target.playerId}
+              type="button"
+              variant={
+                selection.playerIds.includes(target.playerId)
+                  ? 'default'
+                  : 'outline'
+              }
+              onClick={() =>
+                onSelectionChange(
+                  togglePlayerSelection(selection, request, target.playerId),
+                )
+              }
+            >
+              {target.playerId}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
 function ResultFeedbackPanel({
   feedback,
+  room,
 }: {
   readonly feedback: ProjectedMatchCommandFeedback | null
+  readonly room: ProjectedMatchRoomClientState
 }) {
-  if (feedback === null) {
+  const timeoutNotice = createTimeoutNotice(room)
+
+  if (feedback === null && timeoutNotice === null) {
     return (
-      <Card>
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-white/10 bg-black/35 text-slate-50"
+      >
         <CardHeader>
-          <CardTitle>Last Result</CardTitle>
-          <CardDescription>No command submitted yet.</CardDescription>
+          <CardTitle>Action Feedback</CardTitle>
+          <CardDescription className="text-slate-400">
+            No action result yet.
+          </CardDescription>
         </CardHeader>
       </Card>
     )
   }
 
-  if (feedback.status === 'accepted') {
+  if (timeoutNotice !== null && feedback === null) {
     return (
-      <Card>
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-amber-200/35 bg-amber-300/10 text-slate-50"
+      >
         <CardHeader>
-          <CardTitle>Last Result</CardTitle>
+          <CardTitle>Action Feedback</CardTitle>
+          <CardDescription>
+            <Badge variant="warning">Timeout</Badge>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-slate-200">
+          {timeoutNotice}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (feedback?.status === 'accepted') {
+    return (
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-emerald-200/35 bg-emerald-300/10 text-slate-50"
+      >
+        <CardHeader>
+          <CardTitle>Action Feedback</CardTitle>
           <CardDescription>
             <Badge variant="success">Accepted</Badge>
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          <SummaryRow label="Transition" value={feedback.transitionId} />
-          <SummaryRow
-            label="Engine revision"
-            value={feedback.engineRevision.toString()}
-          />
+          <p>The server accepted the action and updated the table.</p>
           <SummaryRow
             label="Events"
             value={
               feedback.eventTypes.length === 0
-                ? 'None'
+                ? 'No visible events'
                 : feedback.eventTypes.join(', ')
             }
           />
@@ -476,73 +1012,507 @@ function ResultFeedbackPanel({
     )
   }
 
-  if (feedback.status === 'blocked') {
+  if (feedback?.status === 'blocked') {
     return (
-      <Card>
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-amber-200/35 bg-amber-300/10 text-slate-50"
+      >
         <CardHeader>
-          <CardTitle>Last Result</CardTitle>
+          <CardTitle>Action Feedback</CardTitle>
           <CardDescription>
             <Badge variant="warning">Blocked</Badge>
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          <SummaryRow label="Code" value={feedback.code} />
-          <SummaryRow label="Message" value={feedback.message} />
-          <SummaryRow
-            label="Blocking"
-            value={feedback.blockingRequestIds.join(', ')}
-          />
+          <p>{feedback.message}</p>
+          {feedback.blockingRequestIds.length === 0 ? null : (
+            <p className="text-slate-300">
+              Finish the active choice before taking another action.
+            </p>
+          )}
+          <SummaryRow label="Reason" value={feedback.code} />
         </CardContent>
       </Card>
     )
   }
 
-  if (feedback.status === 'unknown') {
+  if (feedback?.status === 'unknown') {
     return (
-      <Card>
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-cyan-200/35 bg-cyan-300/10 text-slate-50"
+      >
         <CardHeader>
-          <CardTitle>Last Result</CardTitle>
+          <CardTitle>Action Feedback</CardTitle>
           <CardDescription>
-            <Badge variant="warning">Unknown</Badge>
+            <Badge variant="warning">Recovery</Badge>
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          <SummaryRow label="Code" value={feedback.code} />
-          <SummaryRow label="Message" value={feedback.message} />
+          <p>
+            The action result was unclear, so the client reloaded the latest
+            server table instead of replaying the command.
+          </p>
+          <SummaryRow label="Reason" value={feedback.code} />
+          <SummaryRow label="Detail" value={feedback.message} />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (
+    feedback?.status === 'invalid' &&
+    feedback.code === 'stale_room_revision'
+  ) {
+    return (
+      <Card
+        role="region"
+        aria-label="Action feedback"
+        className="border-amber-200/35 bg-amber-300/10 text-slate-50"
+      >
+        <CardHeader>
+          <CardTitle>Action Feedback</CardTitle>
+          <CardDescription>
+            <Badge variant="warning">Stale</Badge>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          <p>
+            The table changed before that action resolved. Choose again from the
+            refreshed state.
+          </p>
+          <SummaryRow label="Reason" value={feedback.code} />
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <Card>
+    <Card
+      role="region"
+      aria-label="Action feedback"
+      className="border-rose-200/35 bg-rose-300/10 text-slate-50"
+    >
       <CardHeader>
-        <CardTitle>Last Result</CardTitle>
+        <CardTitle>Action Feedback</CardTitle>
         <CardDescription>
           <Badge variant="destructive">Invalid</Badge>
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">
-        <SummaryRow label="Code" value={feedback.code} />
-        <SummaryRow label="Message" value={feedback.message} />
+        <p>{feedback?.message}</p>
+        <SummaryRow label="Reason" value={feedback?.code ?? 'unknown'} />
       </CardContent>
     </Card>
   )
 }
 
+function createChoiceSubmission(
+  room: ProjectedMatchRoomClientState,
+  request: VisibleGameChoiceRequest,
+  selection: RequestSelectionState,
+):
+  | {
+      readonly ok: true
+      readonly submission: ProjectedMatchChoiceSubmission
+    }
+  | {
+      readonly ok: false
+      readonly message: string
+    } {
+  if (request.visibilityToViewer !== 'full') {
+    return {
+      ok: false,
+      message: 'This choice is private to another player.',
+    }
+  }
+
+  const selectedPieceIds: PieceId[] = selection.pieceRefIds
+    .map((refId) => resolveRequestPieceId(request, refId))
+    .filter((pieceId): pieceId is NonNullable<typeof pieceId> => {
+      return pieceId !== undefined
+    })
+  const range = readSelectionRange(request)
+
+  switch (request.type) {
+    case 'choose.pieces': {
+      const countCheck = validateSelectionCount(selectedPieceIds.length, range)
+
+      if (countCheck !== null) {
+        return countCheck
+      }
+
+      return createChoiceSubmissionResult(request, {
+        requestId: request.requestId,
+        responderPlayerId: request.responderPlayerId,
+        type: 'answer.pieces',
+        selectedPieceIds,
+      })
+    }
+    case 'choose.target': {
+      const selectedTargets = [
+        ...selectedPieceIds.map((pieceId) => ({
+          kind: 'piece' as const,
+          pieceId,
+        })),
+        ...selection.playerIds.map((playerId) => ({
+          kind: 'player' as const,
+          playerId: playerId as PlayerId,
+        })),
+      ]
+      const countCheck = validateSelectionCount(selectedTargets.length, range)
+
+      if (countCheck !== null) {
+        return countCheck
+      }
+
+      return createChoiceSubmissionResult(request, {
+        requestId: request.requestId,
+        responderPlayerId: request.responderPlayerId,
+        type: 'answer.target',
+        selectedTargets,
+      })
+    }
+    case 'choose.zone': {
+      const selectedLocations = selection.zoneIds.map((zoneId) => ({
+        zoneId: zoneId as ZoneId,
+      }))
+      const countCheck = validateSelectionCount(selectedLocations.length, range)
+
+      if (countCheck !== null) {
+        return countCheck
+      }
+
+      return createChoiceSubmissionResult(request, {
+        requestId: request.requestId,
+        responderPlayerId: request.responderPlayerId,
+        type: 'answer.zone',
+        selectedLocations,
+      })
+    }
+    case 'choose.option': {
+      const countCheck = validateSelectionCount(
+        selection.optionIds.length,
+        range,
+      )
+
+      if (countCheck !== null) {
+        return countCheck
+      }
+
+      return createChoiceSubmissionResult(request, {
+        requestId: request.requestId,
+        responderPlayerId: request.responderPlayerId,
+        type: 'answer.option',
+        selectedOptionIds: selection.optionIds.map(
+          (optionId) => optionId as RequestOptionId,
+        ),
+      })
+    }
+    case 'battle.guard_select': {
+      const countCheck = validateSelectionCount(selectedPieceIds.length, {
+        min: Math.max(request.minSelections ?? 0, 1),
+        max: request.maxSelections ?? Number.POSITIVE_INFINITY,
+      })
+
+      if (countCheck !== null) {
+        return countCheck
+      }
+
+      return createChoiceSubmissionResult(request, {
+        requestId: request.requestId,
+        responderPlayerId: request.responderPlayerId,
+        type: 'answer.guard',
+        selectedPieceIds,
+      })
+    }
+    case 'trigger.resolve':
+      return createTriggerChoiceSubmission(request, selectedPieceIds)
+    case 'confirm.boolean':
+      return {
+        ok: false,
+        message: 'Use Accept or Decline for this confirmation.',
+      }
+    case 'mulligan.select_cards':
+      return {
+        ok: false,
+        message:
+          'Mulligan submission still requires server-owned deck order; use the available mulligan action when it is offered.',
+      }
+  }
+}
+
+function createTriggerChoiceSubmission(
+  request: FullChoiceRequest,
+  selectedPieceIds: readonly PieceId[],
+) {
+  const powerRequired = request.powerEligiblePieces !== undefined
+  const criticalRequired = request.criticalEligiblePieces !== undefined
+  const standRequired = request.standEligiblePieces !== undefined
+  const healRequired = request.healEligiblePieces !== undefined
+  const requiredBuckets = [
+    powerRequired,
+    criticalRequired,
+    standRequired,
+    healRequired,
+  ].filter(Boolean).length
+
+  if (requiredBuckets !== 1) {
+    return {
+      ok: false as const,
+      message:
+        'This trigger asks for multiple target groups; grouped trigger target controls are not polished in this UI slice yet.',
+    }
+  }
+
+  if (selectedPieceIds.length !== 1) {
+    return {
+      ok: false as const,
+      message: 'Select exactly one trigger target.',
+    }
+  }
+
+  const selectedPieceId = selectedPieceIds[0]
+
+  if (selectedPieceId === undefined) {
+    return {
+      ok: false as const,
+      message: 'Select exactly one trigger target.',
+    }
+  }
+
+  return createChoiceSubmissionResult(request, {
+    requestId: request.requestId,
+    responderPlayerId: request.responderPlayerId,
+    type: 'answer.trigger',
+    ...(powerRequired ? { powerTargetPieceIds: [selectedPieceId] } : {}),
+    ...(criticalRequired ? { criticalTargetPieceId: selectedPieceId } : {}),
+    ...(standRequired ? { standTargetPieceId: selectedPieceId } : {}),
+    ...(healRequired ? { healTargetPieceId: selectedPieceId } : {}),
+  })
+}
+
+function createChoiceSubmissionResult(
+  request: FullChoiceRequest,
+  response: GameChoiceResponse,
+) {
+  return {
+    ok: true as const,
+    submission: {
+      label: `Resolve ${formatRequestType(request.type)}`,
+      response,
+    },
+  }
+}
+
+function resolveRequestPieceId(request: FullChoiceRequest, refId: string) {
+  const pieces = [
+    ...(request.eligiblePieces ?? []),
+    ...(request.powerEligiblePieces ?? []),
+    ...(request.criticalEligiblePieces ?? []),
+    ...(request.standEligiblePieces ?? []),
+    ...(request.healEligiblePieces ?? []),
+    ...(request.handPieces ?? []),
+    ...(request.interceptPieces ?? []),
+  ]
+
+  return pieces.find((piece) => piece.refId === refId)?.pieceId
+}
+
+function togglePieceSelection(
+  current: RequestSelectionState,
+  request: VisibleGameChoiceRequest | undefined,
+  piece: ProjectedMatchBoardPiece,
+): RequestSelectionState {
+  if (request === undefined || request.visibilityToViewer !== 'full') {
+    return current
+  }
+
+  return {
+    ...current,
+    pieceRefIds: toggleBoundedValue(
+      current.pieceRefIds,
+      piece.refId,
+      readSelectionRange(request).max,
+    ),
+  }
+}
+
+function toggleZoneSelection(
+  current: RequestSelectionState,
+  request: VisibleGameChoiceRequest | undefined,
+  zone: ProjectedMatchBoardZone,
+): RequestSelectionState {
+  if (request === undefined || request.visibilityToViewer !== 'full') {
+    return current
+  }
+
+  return toggleZoneSelectionById(current, request, zone.zoneId)
+}
+
+function toggleZoneSelectionById(
+  current: RequestSelectionState,
+  request: FullChoiceRequest,
+  zoneId: string,
+): RequestSelectionState {
+  return {
+    ...current,
+    zoneIds: toggleBoundedValue(
+      current.zoneIds,
+      zoneId,
+      readSelectionRange(request).max,
+    ),
+  }
+}
+
+function toggleOptionSelection(
+  current: RequestSelectionState,
+  request: FullChoiceRequest,
+  optionId: string,
+): RequestSelectionState {
+  return {
+    ...current,
+    optionIds: toggleBoundedValue(
+      current.optionIds,
+      optionId,
+      readSelectionRange(request).max,
+    ),
+  }
+}
+
+function togglePlayerSelection(
+  current: RequestSelectionState,
+  request: FullChoiceRequest,
+  playerId: string,
+): RequestSelectionState {
+  return {
+    ...current,
+    playerIds: toggleBoundedValue(
+      current.playerIds,
+      playerId,
+      readSelectionRange(request).max,
+    ),
+  }
+}
+
+function toggleBoundedValue(
+  values: readonly string[],
+  value: string,
+  max: number,
+): readonly string[] {
+  if (values.includes(value)) {
+    return values.filter((candidate) => candidate !== value)
+  }
+
+  if (max <= 1) {
+    return [value]
+  }
+
+  return [...values, value].slice(0, max)
+}
+
+function validateSelectionCount(
+  count: number,
+  range: { readonly min: number; readonly max: number },
+) {
+  if (count < range.min) {
+    return {
+      ok: false as const,
+      message: `Select at least ${range.min} target(s).`,
+    }
+  }
+
+  if (count > range.max) {
+    return {
+      ok: false as const,
+      message: `Select no more than ${range.max} target(s).`,
+    }
+  }
+
+  return null
+}
+
+function readSelectionRange(request: VisibleGameChoiceRequest) {
+  if (request.visibilityToViewer !== 'full') {
+    return { min: 0, max: 0 }
+  }
+
+  return {
+    min: request.minSelections ?? 0,
+    max: request.maxSelections ?? Number.POSITIVE_INFINITY,
+  }
+}
+
+function formatSelectionRange(request: VisibleGameChoiceRequest) {
+  const range = readSelectionRange(request)
+
+  if (range.max === Number.POSITIVE_INFINITY) {
+    return `Choose ${range.min}+`
+  }
+
+  if (range.min === range.max) {
+    return `Choose ${range.min}`
+  }
+
+  return `Choose ${range.min}-${range.max}`
+}
+
 function createActiveDeadlineSummary(
   room: ProjectedMatchRoomClientState,
+  options?: {
+    readonly includeDeadlineAt?: boolean
+  },
 ): string | null {
   const requestDeadline = room.clock.activeRequest
 
   if (requestDeadline !== undefined) {
-    return `Request ${requestDeadline.requestId} until ${requestDeadline.deadlineAt} (${formatRemainingMs(requestDeadline.remainingMs)} remaining)`
+    const summary = `Choice timer: ${formatRemainingMs(
+      requestDeadline.remainingMs,
+    )} remaining`
+
+    return options?.includeDeadlineAt === true
+      ? `${summary} until ${requestDeadline.deadlineAt}`
+      : summary
   }
 
   const turnDeadline = room.clock.activeTurn
 
   if (turnDeadline !== undefined) {
-    return `Turn ${turnDeadline.turnNumber} until ${turnDeadline.deadlineAt} (${formatRemainingMs(turnDeadline.remainingMs)} remaining)`
+    const summary = `Turn timer: ${formatRemainingMs(
+      turnDeadline.remainingMs,
+    )} remaining`
+
+    return options?.includeDeadlineAt === true
+      ? `${summary} until ${turnDeadline.deadlineAt}`
+      : summary
+  }
+
+  return null
+}
+
+function createTimeoutNotice(
+  room: ProjectedMatchRoomClientState,
+): string | null {
+  if (
+    room.eventLogEntries.some((entry) =>
+      `${entry.summary} ${entry.type}`.toLowerCase().includes('timeout'),
+    )
+  ) {
+    return 'Timeout resolved. The server applied the timer result.'
+  }
+
+  const activeRequest = room.clock.activeRequest
+  const activeTurn = room.clock.activeTurn
+
+  if (activeRequest !== undefined && activeRequest.remainingMs <= 0) {
+    return 'Choice timer expired. Waiting for the server timeout result.'
+  }
+
+  if (activeTurn !== undefined && activeTurn.remainingMs <= 0) {
+    return 'Turn timer expired. Waiting for the server timeout result.'
   }
 
   return null
@@ -560,23 +1530,6 @@ function formatRemainingMs(remainingMs: number): string {
   }
 
   return `${Math.ceil(remainingSeconds / 60)}m`
-}
-
-function SummaryMetric({
-  label,
-  value,
-}: {
-  readonly label: string
-  readonly value: string
-}) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-background-elevated/60 p-3">
-      <div className="text-xs font-medium uppercase text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-2 text-xl font-semibold">{value}</div>
-    </div>
-  )
 }
 
 function SummaryRow({
@@ -606,9 +1559,145 @@ function resolvePlayerLabel(
   )
 }
 
+function resolvePieceLabel(
+  room: ProjectedMatchRoomClientState,
+  piece: { readonly refId: string; readonly pieceId?: string },
+) {
+  for (const side of [
+    ...(room.board.currentSide === undefined ? [] : [room.board.currentSide]),
+    ...room.board.opponentSides,
+  ]) {
+    for (const zone of side.zones) {
+      const foundPiece = zone.pieces.find((candidate) => {
+        return (
+          candidate.refId === piece.refId ||
+          (piece.pieceId !== undefined && candidate.pieceId === piece.pieceId)
+        )
+      })
+
+      if (foundPiece !== undefined) {
+        return (
+          foundPiece.cardDefinitionId ?? foundPiece.pieceId ?? foundPiece.refId
+        )
+      }
+    }
+  }
+
+  return piece.pieceId ?? piece.refId
+}
+
+function formatBattleTarget(
+  room: ProjectedMatchRoomClientState,
+  battle: NonNullable<VisibleGameState['battle']>,
+) {
+  return battle.target.kind === 'player'
+    ? resolvePlayerLabel(room, battle.target.playerId)
+    : resolvePieceLabel(room, {
+        refId: battle.target.pieceId,
+        pieceId: battle.target.pieceId,
+      })
+}
+
+function formatBattleStatus(status: string) {
+  switch (status) {
+    case 'attack_declared':
+      return 'Attack declared'
+    case 'boost_declared':
+      return 'Boost committed'
+    case 'guard_requested':
+      return 'Waiting for guard'
+    case 'guard_resolved':
+      return 'Guard resolved'
+    case 'drive_checked':
+      return 'Drive check'
+    case 'combat_resolved':
+      return 'Combat resolved'
+    case 'damage_checked':
+      return 'Damage check'
+    default:
+      return formatStatusLabel(status)
+  }
+}
+
+function formatSyncContextValue(
+  syncStatus: ProjectedMatchRoomSyncStatus | null,
+) {
+  switch (syncStatus?.status) {
+    case 'recovered':
+      return 'Server state restored'
+    case 'recovery_failed':
+      return 'Recovery needs retry'
+    case 'reconnecting':
+      return 'Reconnecting to server'
+    case 'submitting':
+      return 'Submitting action'
+    case 'syncing':
+      return 'Syncing table'
+    case 'connected':
+    case 'synced':
+      return 'Connected to server'
+    case 'error':
+      return 'Sync issue'
+    case undefined:
+      return 'Projected state'
+  }
+}
+
+function formatRequestPrompt(
+  request: VisibleGameChoiceRequest,
+  options: { readonly responderLabel: string },
+) {
+  if (request.visibilityToViewer === 'redacted') {
+    return `Waiting for ${options.responderLabel} to answer a private choice.`
+  }
+
+  switch (request.type) {
+    case 'mulligan.select_cards':
+      return `${options.responderLabel}: choose cards to return for mulligan, or keep the hand.`
+    case 'battle.guard_select':
+      return `${options.responderLabel}: choose guardians or pass guard.`
+    case 'trigger.resolve':
+      return `${options.responderLabel}: choose the trigger target.`
+    case 'choose.pieces':
+      return `${options.responderLabel}: choose highlighted card(s).`
+    case 'choose.target':
+      return `${options.responderLabel}: choose highlighted target(s).`
+    case 'choose.zone':
+      return `${options.responderLabel}: choose a highlighted zone.`
+    case 'choose.option':
+      return `${options.responderLabel}: choose one of the options.`
+    case 'confirm.boolean':
+      return `${options.responderLabel}: confirm or decline.`
+  }
+}
+
+function formatRequestType(type: string) {
+  switch (type) {
+    case 'mulligan.select_cards':
+      return 'Mulligan'
+    case 'battle.guard_select':
+      return 'Guard'
+    case 'trigger.resolve':
+      return 'Trigger'
+    case 'confirm.boolean':
+      return 'Confirm'
+    case 'choose.pieces':
+      return 'Choose cards'
+    case 'choose.target':
+      return 'Choose targets'
+    case 'choose.zone':
+      return 'Choose zone'
+    case 'choose.option':
+      return 'Choose option'
+    default:
+      return formatStatusLabel(type)
+  }
+}
+
 function formatStatusLabel(status: string) {
   return status
-    .split('_')
+    .split(/[_:.]/)
+    .filter((part) => part.length > 0)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ')
 }

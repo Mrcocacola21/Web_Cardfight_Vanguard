@@ -10,6 +10,7 @@ import {
   type EffectDefinition,
 } from './effect'
 import { createEffectRegistry } from './registry'
+import { STANDARD_SLICE_EFFECT_DEFINITIONS } from './standard-slice'
 
 export const UNIT_ATTACK_AUTO_EFFECT_IDENTITY = createEffectIdentity(
   'core',
@@ -255,6 +256,7 @@ export const CORE_EFFECT_DEFINITIONS: readonly EffectDefinition[] = [
   INTERCEPT_KEYWORD_EFFECT,
   TWIN_DRIVE_KEYWORD_EFFECT,
   PERSONA_RIDE_KEYWORD_EFFECT,
+  ...STANDARD_SLICE_EFFECT_DEFINITIONS,
 ]
 
 export const coreEffectRegistry = createEffectRegistry(CORE_EFFECT_DEFINITIONS)

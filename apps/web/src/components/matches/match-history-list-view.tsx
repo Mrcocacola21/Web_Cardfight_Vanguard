@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Plus } from 'lucide-react'
+import { ArrowRight, Plus, Swords } from 'lucide-react'
 
 import {
   FilterBar,
@@ -104,6 +104,15 @@ export function MatchHistoryListView({
                 })}
               >
                 View stats
+              </Link>
+              <Link
+                href="/matches/lobby"
+                className={buttonVariants({
+                  variant: 'outline',
+                })}
+              >
+                <Swords className="size-4" />
+                Start live match
               </Link>
               <Link
                 href="/matches/new"

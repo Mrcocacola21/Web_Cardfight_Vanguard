@@ -9,7 +9,16 @@ import type {
 import type { CatalogCardEntityRecord } from '@web-vg/db/repositories/catalog'
 import type { DeckDetailRecord } from '@web-vg/db/repositories/decks'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Minus, Plus, Search, Tag, Trash2, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Minus,
+  Plus,
+  Search,
+  Swords,
+  Tag,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 import { SearchBar } from '@/components/data-display'
 import { DeckValidationPanel } from '@/components/decks/deck-validation-panel'
@@ -373,13 +382,28 @@ export function DeckBuilderView({
             </div>
           }
           actions={
-            <Link
-              href="/decks"
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              <ArrowLeft className="size-4" />
-              Back to decks
-            </Link>
+            <>
+              {initialDeck.format.id === 'standard' &&
+              initialDeck.currentVersion ? (
+                <Link
+                  href="/matches/lobby"
+                  className={buttonVariants({
+                    variant: 'default',
+                    size: 'sm',
+                  })}
+                >
+                  <Swords className="size-4" />
+                  Invite to match
+                </Link>
+              ) : null}
+              <Link
+                href="/decks"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                <ArrowLeft className="size-4" />
+                Back to decks
+              </Link>
+            </>
           }
         />
       }

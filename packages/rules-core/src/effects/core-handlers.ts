@@ -15,6 +15,10 @@ import {
   CARDS_DRAWN_FINALIZE_EFFECT,
   PERSONA_RIDE_KEYWORD_EFFECT,
 } from './samples'
+import {
+  STANDARD_SLICE_EFFECT_DEFINITIONS,
+  STANDARD_SLICE_EFFECT_HANDLERS,
+} from './standard-slice'
 import { resolveCheckTriggerRevealEffect } from './trigger-resolution'
 
 const AUTOMATIC_FLOW_SYSTEM = 'automatic-flow' as const
@@ -161,6 +165,7 @@ export const CORE_EFFECT_HANDLERS: readonly EffectHandler[] = [
   checkTriggerRevealHandler,
   cardsDrawnFinalizeHandler,
   personaRideHandler,
+  ...STANDARD_SLICE_EFFECT_HANDLERS,
 ]
 
 export const coreEffectHandlerRegistry =
@@ -171,6 +176,7 @@ coreEffectHandlerRegistry.assertHasHandlersForEffectDefinitions([
   CHECK_TRIGGER_REVEAL_EFFECT,
   CARDS_DRAWN_FINALIZE_EFFECT,
   PERSONA_RIDE_KEYWORD_EFFECT,
+  ...STANDARD_SLICE_EFFECT_DEFINITIONS,
 ])
 
 function createHandlerEventMismatch(

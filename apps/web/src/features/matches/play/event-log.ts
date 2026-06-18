@@ -321,10 +321,14 @@ function formatEventSummary(
       return `${formatPlayer(event.playerId, options)} counter blasted ${event.count}.`
     case 'resource.counter_charged':
       return `${formatPlayer(event.playerId, options)} counter charged ${event.count}.`
+    case 'resource.energy_blasted':
+      return `${formatPlayer(event.playerId, options)} energy blasted ${event.count}.`
     case 'resource.soul_blasted':
       return `${formatPlayer(event.playerId, options)} soul blasted ${event.count}.`
     case 'resource.soul_charged':
       return `${formatPlayer(event.playerId, options)} soul charged ${event.count}.`
+    case 'effect.activated':
+      return `${formatPlayer(event.playerId, options)} activated effect ${event.effectDefinitionId}.`
     case 'effect.resolved':
       return `Effect ${event.effectDefinitionId} resolved.`
     case 'trigger.revealed':
@@ -460,6 +464,22 @@ function buildEventDetails(
           label: 'Damage',
           value: event.damageCount?.toString() ?? 'unknown',
         },
+      ]
+    case 'resource.energy_blasted':
+      return [
+        ...baseDetails,
+        { label: 'Player', value: event.playerId },
+        { label: 'Counter', value: event.counterKey },
+        { label: 'Previous', value: event.previousAmount.toString() },
+        { label: 'Next', value: event.nextAmount.toString() },
+        { label: 'Count', value: event.count.toString() },
+      ]
+    case 'effect.activated':
+      return [
+        ...baseDetails,
+        { label: 'Player', value: event.playerId },
+        { label: 'Piece', value: event.sourcePieceId },
+        { label: 'Effect', value: event.effectDefinitionId },
       ]
     case 'effect.resolved':
       return [

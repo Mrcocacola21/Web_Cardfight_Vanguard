@@ -2,12 +2,14 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
   ActionType,
+  ActivateCardEffectAction,
   AttackTarget,
   DeclareAttackAction,
   GameAction,
   GameActionSubmission,
   MatchAction,
   MovePieceAction,
+  PieceId,
   PlayCardAction,
   PlayerActionActor,
   PlayerGameAction,
@@ -45,6 +47,7 @@ type ExpectedActionTypes =
   | 'card.play'
   | 'card.ride'
   | 'card.call'
+  | 'card.activate_effect'
   | 'battle.declare_attack'
   | 'battle.commit_boost'
   | 'battle.guard'
@@ -143,5 +146,8 @@ describe('@web-vg/rules-core action model', () => {
     expectTypeOf<
       HasKey<PlayCardAction, 'cardPrintingId'>
     >().toEqualTypeOf<false>()
+    expectTypeOf<
+      ActivateCardEffectAction['sourcePieceId']
+    >().toEqualTypeOf<PieceId>()
   })
 })
