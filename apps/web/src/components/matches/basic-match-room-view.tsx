@@ -19,6 +19,7 @@ import {
   createLocalActionId,
   createLocalPrototypeMatchRoom,
 } from '@/features/matches/play/local-match-room'
+import { matchEngineAdapters } from '@/features/matches/engine/match-engine'
 import {
   buildLocalMatchAvailableActions,
   type LocalAvailableActionIntent,
@@ -68,6 +69,7 @@ function BasicMatchRoomSession({ roomId }: BasicMatchRoomViewProps) {
     const projection = matchSession.projectMatchRoomForParticipant(
       room,
       LOCAL_MATCH_PARTICIPANT_ONE_ID,
+      { engineAdapters: matchEngineAdapters },
     )
 
     if (!projection.ok) {
@@ -90,7 +92,9 @@ function BasicMatchRoomSession({ roomId }: BasicMatchRoomViewProps) {
   }
 
   function submitCommand(submission: matchSession.MatchRoomCommandSubmission) {
-    const result = matchSession.submitMatchRoomCommand(room, submission)
+    const result = matchSession.submitMatchRoomCommand(room, submission, {
+      engineAdapters: matchEngineAdapters,
+    })
 
     setLastResult(result)
 

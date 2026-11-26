@@ -42,6 +42,10 @@ vi.mock('@web-vg/match-session', () => ({
   createServerRouteRealtimeTransport: mocks.createServerRouteRealtimeTransport,
 }))
 
+vi.mock('@/features/matches/engine/match-engine', () => ({
+  matchEngineAdapters: ['scripted-engine-adapters'],
+}))
+
 import { GET, POST } from './route'
 
 describe('/api/matches/rooms/[roomId]/realtime', () => {
@@ -144,6 +148,7 @@ describe('/api/matches/rooms/[roomId]/realtime', () => {
     })
     expect(mocks.createServerRouteRealtimeTransport).toHaveBeenCalledWith({
       sessions,
+      engineAdapters: ['scripted-engine-adapters'],
     })
     const submitRequest = requireRecord(
       mocks.submitCommand.mock.calls[0]?.[0] as unknown,

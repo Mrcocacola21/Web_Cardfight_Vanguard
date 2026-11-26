@@ -7,7 +7,14 @@ import {
   type MatchRoomWithEngineState,
   type ProjectedMatchRoomForParticipant,
 } from '@web-vg/match-session'
-import type { EventId, GameEvent, GameState, ZoneId } from '@web-vg/rules-core'
+import type {
+  ActionId,
+  EventId,
+  GameEvent,
+  GameState,
+  PieceId,
+  ZoneId,
+} from '@web-vg/rules-core'
 
 import {
   LOCAL_MATCH_PARTICIPANT_ONE_ID,
@@ -178,6 +185,62 @@ describe('projected match room client state', () => {
     })
     expect(JSON.stringify(actions)).not.toContain('"kind":"system"')
     expect(JSON.stringify(actions)).not.toContain('engineState')
+  })
+
+  it('turns server-checked legal actions into grouped buttons with the exact server command', () => {
+    const room = createLocalPrototypeMatchRoom('projected-client-legal-actions')
+    const projection = projectLocalRoom(room)
+    const attackCommand = {
+      kind: 'action' as const,
+      submission: {
+        expectedRevision: 7,
+        action: {
+          actionId: 'legal:attack:a:b:r7' as ActionId,
+          type: 'battle.declare_attack' as const,
+          actor: {
+            kind: 'player' as const,
+            playerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          },
+          attackerPieceId: 'piece-a' as PieceId,
+          target: { kind: 'piece' as const, pieceId: 'piece-b' as PieceId },
+        },
+      },
+    }
+    const result = buildProjectedMatchRoomClientState({
+      projection: {
+        ...projection,
+        legalActions: [
+          {
+            id: 'attack:a:b',
+            kind: 'attack',
+            label: 'Attack Target with Attacker',
+            command: attackCommand,
+          },
+          {
+            id: 'call:c:slot',
+            kind: 'call',
+            label: 'Call Unit to front left',
+            command: { ...attackCommand },
+          },
+        ],
+      },
+    })
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    const actions = buildProjectedMatchBrowserCommandActions(result.state)
+    const attack = actions.find((action) => action.id === 'legal.attack:a:b')
+    const call = actions.find((action) => action.id === 'legal.call:c:slot')
+
+    expect(attack).toMatchObject({
+      label: 'Attack Target with Attacker',
+      group: 'battle',
+      status: 'available',
+    })
+    expect(attack?.command?.payload).toBe(attackCommand)
+    expect(call?.group).toBe('board')
   })
 
   it('rejects omniscient projections instead of accepting a god-view payload', () => {

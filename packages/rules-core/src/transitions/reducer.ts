@@ -8,7 +8,10 @@ import type {
   MovePieceAction,
 } from '../actions'
 import type { EventId, TransitionId } from '../contracts'
-import { resolveEventTriggeredEffects } from '../effects/triggered-resolution'
+import {
+  resolveEventTriggeredEffects,
+  type EventTriggeredResolutionEnvironment,
+} from '../effects/triggered-resolution'
 import { resolveCheckTriggerChoiceResponse } from '../effects/trigger-resolution'
 import { RulesInvariantError } from '../errors'
 import type { EventOrigin, GameEvent } from '../events'
@@ -76,6 +79,26 @@ import { createPieceMovedEvents, resolveZoneTransfer } from './zone-transfer'
 
 export interface RuntimeTransitionOptions {
   readonly activatedEffects?: ActivatedEffectRuntimeEnvironment
+  /**
+   * Registry used for AUTO abilities triggered by this transition. Defaults to
+   * the built-in core registry; card scripts supply their own.
+   */
+  readonly triggeredEffects?: EventTriggeredResolutionEnvironment
+  /**
+   * CONT layer: recomputes continuous modifiers on the final state of every
+   * applied transition. Card scripts supply it.
+   */
+  readonly continuousEffects?: {
+    apply(state: GameState): GameState
+  }
+}
+
+function withTriggeredEffects(options: RuntimeTransitionOptions): {
+  readonly environment?: EventTriggeredResolutionEnvironment
+} {
+  return options.triggeredEffects === undefined
+    ? {}
+    : { environment: options.triggeredEffects }
 }
 
 type ReducerTransitionInput = TransitionInput & RuntimeTransitionOptions
@@ -85,9 +108,18 @@ export function reduceGameState(
 ): TransitionResult {
   assertGameStateInvariant(input.currentState)
 
-  return input.kind === 'action'
-    ? reduceActionTransition(input)
-    : reduceChoiceResponseTransition(input)
+  const result =
+    input.kind === 'action'
+      ? reduceActionTransition(input)
+      : reduceChoiceResponseTransition(input)
+
+  if (result.status !== 'applied' || input.continuousEffects === undefined) {
+    return result
+  }
+
+  const nextState = input.continuousEffects.apply(result.nextState)
+
+  return nextState === result.nextState ? result : { ...result, nextState }
 }
 
 export function applyGameAction(
@@ -263,6 +295,7 @@ function reduceActionTransition(
 
   return resolveEventTriggeredEffects({
     currentState,
+    ...withTriggeredEffects(input),
     result: baseResult,
   })
 }
@@ -341,6 +374,7 @@ function reduceChoiceResponseTransition(
 
     return resolveEventTriggeredEffects({
       currentState,
+      ...withTriggeredEffects(input),
       result: applyMulliganChoiceResponseTransition(
         transitionId,
         currentState,
@@ -363,6 +397,7 @@ function reduceChoiceResponseTransition(
 
     return resolveEventTriggeredEffects({
       currentState,
+      ...withTriggeredEffects(input),
       result: applyGuardChoiceResponseTransition(
         transitionId,
         currentState,
@@ -402,6 +437,7 @@ function reduceChoiceResponseTransition(
 
     return resolveEventTriggeredEffects({
       currentState,
+      ...withTriggeredEffects(input),
       result: createTransitionResult(
         transitionId,
         advanceGameStateRevision(triggerResolution.state),
@@ -443,6 +479,7 @@ function reduceChoiceResponseTransition(
 
     return resolveEventTriggeredEffects({
       currentState,
+      ...withTriggeredEffects(input),
       result: applyActivatedEffectChoiceResponseTransition(resultInput),
     })
   }
@@ -461,6 +498,7 @@ function reduceChoiceResponseTransition(
 
   return resolveEventTriggeredEffects({
     currentState,
+    ...withTriggeredEffects(input),
     result: createTransitionResult(
       transitionId,
       nextState,

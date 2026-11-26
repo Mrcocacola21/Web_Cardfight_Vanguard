@@ -495,6 +495,10 @@ function createRuntimePieceState(
     ),
   )
 
+  // Keyword mechanics (Twin Drive!!, Boost, Intercept…) are read from the
+  // piece, so the card's printed keywords must be copied onto it.
+  const keywords = card?.keywords ?? []
+
   return {
     pieceId: piece.pieceId,
     kind: 'card',
@@ -502,6 +506,7 @@ function createRuntimePieceState(
     ownerPlayerId: playerId,
     controllerPlayerId: playerId,
     ...(effectDefinitionIds.length === 0 ? {} : { effectDefinitionIds }),
+    ...(keywords.length === 0 ? {} : { keywords }),
   }
 }
 

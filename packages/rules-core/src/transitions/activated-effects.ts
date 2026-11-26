@@ -43,6 +43,7 @@ import {
   type CallCardsOperation,
   type DeclarativeEffectOperation,
   type EffectDefinition,
+  type EffectHandlerKey,
   type EffectHandlerRegistry,
   type EffectPieceFilter,
   type EffectRegistry,
@@ -265,6 +266,16 @@ export function applyActivatedEffectChoiceResponseTransition(input: {
       (candidate) => candidate.continuationId !== continuation.continuationId,
     ),
   }
+
+  if (continuation.script !== undefined) {
+    return resumeHandlerContinuation({
+      ...input,
+      environment,
+      continuation,
+      stateWithoutContinuation,
+    })
+  }
+
   const result = resolveDeclarativeOperations({
     currentState: stateWithoutContinuation,
     context: {
@@ -311,6 +322,80 @@ export function applyActivatedEffectChoiceResponseTransition(input: {
         }),
         ...result.timingWindows,
       ],
+    },
+  )
+}
+
+/**
+ * Continues an effect paused by a resumable handler (card scripts). The
+ * handler validates the response; an invalid answer leaves the request
+ * pending so the player can answer again.
+ */
+function resumeHandlerContinuation(input: {
+  readonly transitionId: TransitionId
+  readonly currentState: GameState
+  readonly request: GameChoiceRequest
+  readonly response: GameChoiceResponse
+  readonly choiceResponseEvent: Extract<
+    GameEvent,
+    { readonly type: 'choice.response_resolved' }
+  >
+  readonly environment: ActivatedEffectRuntimeEnvironment
+  readonly continuation: EffectContinuationState
+  readonly stateWithoutContinuation: GameState
+}): TransitionResult {
+  const handlerKey = input.continuation.script?.handlerKey as
+    | EffectHandlerKey
+    | undefined
+  const handler =
+    handlerKey === undefined
+      ? undefined
+      : input.environment.effectHandlers.getHandler(handlerKey)
+
+  if (handler?.resume === undefined) {
+    return createInvalidTransitionResult(
+      input.transitionId,
+      input.currentState,
+      'invalid_action_reference',
+      `Effect continuation ${input.continuation.continuationId} needs resumable handler ${String(handlerKey)}, which is not registered.`,
+      { inputKind: 'choice_response' },
+    )
+  }
+
+  const responseTimingWindows = createTransitionTimingWindowTriplet(
+    'choice.response',
+    {
+      relatedEventSequence: input.choiceResponseEvent.sequence,
+      requestId: input.request.requestId,
+    },
+  )
+  const result = handler.resume({
+    currentState: input.stateWithoutContinuation,
+    continuation: input.continuation,
+    request: input.request,
+    response: input.response,
+    transitionId: input.transitionId,
+    startingSequence: input.choiceResponseEvent.sequence + 1,
+    startingTimingWindowSequence: responseTimingWindows.length,
+  })
+
+  if (!result.ok) {
+    return createInvalidTransitionResult(
+      input.transitionId,
+      input.currentState,
+      result.code,
+      result.message,
+      { inputKind: 'choice_response' },
+    )
+  }
+
+  return createTransitionResult(
+    input.transitionId,
+    advanceGameStateRevision(result.state),
+    [input.choiceResponseEvent, ...result.events],
+    {
+      inputKind: 'choice_response',
+      timingWindows: [...responseTimingWindows, ...result.timingWindows],
     },
   )
 }

@@ -141,6 +141,45 @@ describe('real deck-to-match bootstrap', () => {
     ).toEqual(['effect:test:grade-3-activated'])
   })
 
+  it('copies printed keywords onto runtime pieces so keyword mechanics apply', () => {
+    const input = createBootstrapInput()
+    const [playerOne, playerTwo] = input.players
+    const twinDriveCard = playerOne!.cardDefinitions[0]!
+    const result = createDeckBackedGameState({
+      ...input,
+      players: [
+        {
+          ...playerOne!,
+          cardDefinitions: playerOne!.cardDefinitions.map((card) =>
+            card.cardId === twinDriveCard.cardId
+              ? { ...card, keywords: ['twin-drive' as never] }
+              : card,
+          ),
+        },
+        playerTwo!,
+      ],
+    })
+
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+
+    const pieces = result.state.pieces.filter(
+      (piece) => piece.ownerPlayerId === PLAYER_1,
+    )
+
+    expect(
+      pieces
+        .filter((piece) => piece.cardDefinitionId === twinDriveCard.cardId)
+        .every((piece) => piece.keywords?.includes('twin-drive' as never)),
+    ).toBe(true)
+    expect(
+      pieces
+        .filter((piece) => piece.cardDefinitionId !== twinDriveCard.cardId)
+        .every((piece) => piece.keywords === undefined),
+    ).toBe(true)
+  })
+
   it('lets the Standard prison zone hold opponent-owned cards without rewriting ownership', () => {
     const result = createDeckBackedGameState(createBootstrapInput())
 

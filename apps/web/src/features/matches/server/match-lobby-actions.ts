@@ -24,14 +24,12 @@ import {
 import { getSupabaseServiceRoleEnv } from '@/lib/supabase/config'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
-import {
-  cryptoRoomIdFactory,
-  validateDeckDetailForMatchRoom,
-} from './deck-to-match-room-actions'
+import { validateDeckDetailForMatchRoom } from './deck-to-match-room-actions'
 import {
   initialMatchLobbyFormState,
   type MatchLobbyFormState,
 } from './match-lobby-form-state'
+import { cryptoRoomIdFactory } from './room-id-factory'
 
 export async function sendMatchLobbyInviteAction(
   _previousState: MatchLobbyFormState,
@@ -252,12 +250,15 @@ export async function startMatchLobbyAction(
     )
   }
 
-  const client = authContext.client
+  // Starting a match reads BOTH players' profiles and decks; the signed-in
+  // user's RLS client cannot see the opponent's private rows. The use case
+  // still authorizes everything: the session user must be a lobby
+  // participant, and each deck must belong to the profile the lobby locked in.
   const result = await startMatchLobbyUseCase(
     {
-      profilesRepository: createProfilesRepository(client),
-      decksRepository: createDecksRepository(client),
-      catalogRepository: createCatalogRepository(client),
+      profilesRepository: createProfilesRepository(serviceClient),
+      decksRepository: createDecksRepository(serviceClient),
+      catalogRepository: createCatalogRepository(serviceClient),
       lobbyRepository: createMatchLobbyRepository(serviceClient),
       validationService: {
         validateDeck: validateDeckDetailForMatchRoom,

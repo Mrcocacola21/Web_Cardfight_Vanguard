@@ -253,6 +253,8 @@ export type {
   EffectHandler,
   EffectHandlerKey,
   EffectHandlerInput,
+  EffectHandlerResumeInput,
+  EffectHandlerResumeResult,
   EffectHandlerResult,
   EffectIdentity,
   EffectKey,
@@ -610,6 +612,7 @@ export type {
   GameState,
   GameStateIndex,
   GameStatus,
+  PendingTriggerState,
   PhaseId,
   PlayerCounterKey,
   PlayerCounterState,
@@ -672,9 +675,11 @@ export {
   TURN_PHASE_RIDE,
   TURN_PHASE_STAND,
   VANGUARD_TURN_PHASES,
+  resolveNextMandatoryBattleAction,
 } from './transitions'
 export type {
   ActionTransitionInput,
+  MandatoryBattleAction,
   AppliedTransitionResult,
   BlockedTransitionCode,
   BlockedTransitionResult,
@@ -693,3 +698,5 @@ export type {
   TransitionResultStatus,
   TransitionTimingWindow,
 } from './transitions'
+
+export * from './scripts'

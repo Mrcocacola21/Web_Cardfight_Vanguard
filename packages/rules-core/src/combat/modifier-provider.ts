@@ -39,35 +39,59 @@ export function resolveCombatPieceModifiers(
   const pieceState = state.pieceStates.find(
     (candidate) => candidate.pieceId === pieceId,
   )
-  const powerModifier = pieceState?.powerModifier ?? 0
-  const criticalModifier = pieceState?.criticalModifier ?? 0
+  const temporaryPower = pieceState?.powerModifier ?? 0
+  const temporaryCritical = pieceState?.criticalModifier ?? 0
+  const continuousPower = pieceState?.continuousPowerModifier ?? 0
+  const continuousCritical = pieceState?.continuousCriticalModifier ?? 0
+  const powerModifier = temporaryPower + continuousPower
+  const criticalModifier = temporaryCritical + continuousCritical
 
   return {
     ok: true,
     modifiers: {
       pieceId,
       powerModifier,
-      powerComponents:
-        powerModifier === 0
+      powerComponents: [
+        ...(temporaryPower === 0
           ? []
           : [
               {
-                source: 'piece_power_modifier',
+                source: 'piece_power_modifier' as const,
                 pieceId,
-                amount: powerModifier,
+                amount: temporaryPower,
               },
-            ],
+            ]),
+        ...(continuousPower === 0
+          ? []
+          : [
+              {
+                source: 'continuous_power_modifier',
+                pieceId,
+                amount: continuousPower,
+              },
+            ]),
+      ],
       criticalModifier,
-      criticalComponents:
-        criticalModifier === 0
+      criticalComponents: [
+        ...(temporaryCritical === 0
           ? []
           : [
               {
-                source: 'piece_critical_modifier',
+                source: 'piece_critical_modifier' as const,
                 pieceId,
-                amount: criticalModifier,
+                amount: temporaryCritical,
               },
-            ],
+            ]),
+        ...(continuousCritical === 0
+          ? []
+          : [
+              {
+                source: 'continuous_critical_modifier',
+                pieceId,
+                amount: continuousCritical,
+              },
+            ]),
+      ],
     },
   }
 }

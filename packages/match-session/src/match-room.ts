@@ -7,6 +7,7 @@ import {
   isPlayerGameAction,
   isSystemGameAction,
   premiumFormatAdapter,
+  resolveNextMandatoryBattleAction,
   standardFormatAdapter,
   vPremiumFormatAdapter,
 } from '@web-vg/rules-core'
@@ -19,6 +20,7 @@ import type {
   GameState,
   InvalidEngineDispatchResult,
   PlayerId,
+  RuntimeTransitionOptions,
 } from '@web-vg/rules-core'
 import type { Brand, DeckId, FormatId, UserId } from '@web-vg/shared'
 
@@ -284,6 +286,46 @@ export const defaultMatchRoomEngineAdapters: readonly MatchRoomEngineAdapter[] =
     },
   ]
 
+/** What a match needs from a card script runtime (`createCardScriptRuntime`). */
+export interface MatchRoomScriptRuntime {
+  readonly transitionOptions: RuntimeTransitionOptions
+  bindCardScripts(state: GameState): GameState
+}
+
+/**
+ * The default adapters (same ids, so existing rooms keep resolving) with card
+ * scripts loaded: every command binds scripted abilities to the room's cards
+ * and runs with the script runtime's AUTO / ACT / CONT environments.
+ */
+export function createScriptedMatchRoomEngineAdapters(
+  runtime: MatchRoomScriptRuntime,
+  baseAdapters: readonly MatchRoomEngineAdapter[] = defaultMatchRoomEngineAdapters,
+): readonly MatchRoomEngineAdapter[] {
+  const formatAdapters = new Map([
+    [STANDARD_FORMAT_ID, standardFormatAdapter],
+    [V_PREMIUM_FORMAT_ID, vPremiumFormatAdapter],
+    [PREMIUM_FORMAT_ID, premiumFormatAdapter],
+  ] as const)
+
+  return baseAdapters.map((adapter) => {
+    const formatAdapter = formatAdapters.get(adapter.formatId)
+
+    return formatAdapter === undefined
+      ? adapter
+      : {
+          adapterId: adapter.adapterId,
+          formatId: adapter.formatId,
+          dispatch(currentState, command) {
+            return formatAdapter.dispatch(
+              runtime.bindCardScripts(currentState),
+              command,
+              runtime.transitionOptions,
+            )
+          },
+        }
+  })
+}
+
 export function resolveDefaultMatchRoomEngineAdapterId(
   formatId: FormatId,
 ): MatchRoomEngineAdapterId | undefined {
@@ -417,6 +459,69 @@ export function abortMatchRoom(
           abortReason: input.reason,
         }),
   }
+}
+
+/** Safety stop; a battle needs at most four automatic steps. */
+const MAX_MANDATORY_FLOW_STEPS = 16
+
+/**
+ * Runs the battle steps no player decides (drive check, combat comparison,
+ * damage check, battle close) as system commands until a player has to act.
+ * Clients may not send system actions, so the match server calls this after
+ * every accepted participant command; without it a battle stops after guard.
+ */
+export function advanceMandatoryMatchRoomFlow(
+  room: AcceptedMatchRoomCommandResult['room'],
+  options: {
+    readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
+    readonly submittedAt?: string
+    readonly clock?: MatchRoomClockSource
+  } = {},
+): {
+  readonly room: AcceptedMatchRoomCommandResult['room']
+  readonly results: readonly AcceptedMatchRoomCommandResult[]
+  readonly stoppedBy?:
+    | InvalidMatchRoomCommandResult
+    | BlockedMatchRoomCommandResult
+} {
+  let current = room
+  const results: AcceptedMatchRoomCommandResult[] = []
+
+  for (let step = 0; step < MAX_MANDATORY_FLOW_STEPS; step += 1) {
+    if (current.status === 'completed') {
+      break
+    }
+
+    const action = resolveNextMandatoryBattleAction(current.engineState)
+
+    if (action === undefined) {
+      break
+    }
+
+    const result = submitMatchRoomCommand(
+      current,
+      {
+        source: { kind: 'system', source: 'match-runtime' },
+        command: {
+          kind: 'action',
+          submission: {
+            expectedRevision: current.engineState.revision,
+            action,
+          },
+        },
+      },
+      options,
+    )
+
+    if (result.status !== 'accepted') {
+      return { room: current, results, stoppedBy: result }
+    }
+
+    results.push(result)
+    current = result.room
+  }
+
+  return { room: current, results }
 }
 
 export function submitMatchRoomCommand(
@@ -902,7 +1007,7 @@ function validateParticipantPlayerReference(
   return { ok: true }
 }
 
-function resolveMatchRoomEngineAdapter(
+export function resolveMatchRoomEngineAdapter(
   room: MatchRoom,
   adapters: readonly MatchRoomEngineAdapter[],
 ): MatchRoomEngineAdapter | undefined {

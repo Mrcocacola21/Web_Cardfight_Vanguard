@@ -51,3 +51,6 @@ export type {
   TransitionResult,
   TransitionResultStatus,
 } from './transition'
+
+export { resolveNextMandatoryBattleAction } from './mandatory-battle-flow'
+export type { MandatoryBattleAction } from './mandatory-battle-flow'

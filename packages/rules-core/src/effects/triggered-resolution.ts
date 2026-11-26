@@ -1,6 +1,6 @@
 import type { PieceId, TransitionId } from '../contracts'
 import type { GameEvent } from '../events'
-import type { GameState } from '../state'
+import type { GameState, PendingTriggerState } from '../state'
 import { buildGameStateIndex, findPieceById } from '../state'
 import type {
   AppliedTransitionResult,
@@ -41,6 +41,17 @@ export interface EventTriggeredResolutionEnvironment {
   readonly effectRegistry: EffectRegistry
   readonly effectHandlers?: EffectHandlerRegistry
   readonly keywordMechanics: KeywordMechanicsRegistry
+  /**
+   * Extra candidates for one event, e.g. abilities of cards that watch events
+   * about other cards ("when another unit is placed"). Card scripts use it.
+   */
+  readonly collectAdditionalCandidates?: (
+    state: GameState,
+    triggerSource: {
+      readonly event: GameEvent
+      readonly timingWindow: TransitionTimingWindow
+    },
+  ) => readonly TriggeredEffectCandidate[]
 }
 
 export type TriggeredEffectCandidate = EffectResolutionQueueItemSeed
@@ -84,13 +95,29 @@ export function resolveEventTriggeredEffects(
     input.result,
     environment,
   )
+  // Triggers that waited behind an earlier player choice resolve first, once
+  // no paused effect is blocking them.
+  const carried = canResumePendingTriggers(input.result.nextState)
+    ? rehydratePendingTriggers(input.result.nextState, environment)
+    : []
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && carried.length === 0) {
     return input.result
   }
 
-  let workingState = input.result.nextState
-  let queue = createEffectResolutionQueue({
+  let workingState: GameState =
+    carried.length === 0
+      ? input.result.nextState
+      : withoutPendingTriggers(input.result.nextState)
+  let queue = carried.reduce(
+    (current, seed) =>
+      enqueueEffectResolutionQueueItems(current, {
+        transitionId: input.result.transitionId,
+        seeds: [seed],
+      }),
+    createEffectResolutionQueue({ transitionId: input.result.transitionId }),
+  )
+  queue = enqueueEffectResolutionQueueItems(queue, {
     transitionId: input.result.transitionId,
     seeds: candidates,
   })
@@ -129,14 +156,12 @@ export function resolveEventTriggeredEffects(
       )
     }
 
+    const headBefore = workingState.pendingRequests[0]?.requestId
     workingState = executionResult.state
     events.push(...executionResult.events)
     timingWindows.push(...executionResult.timingWindows)
 
-    if (
-      workingState.status === 'completed' ||
-      workingState.status === 'awaiting_choice'
-    ) {
+    if (workingState.status === 'completed') {
       break
     }
 
@@ -153,6 +178,16 @@ export function resolveEventTriggeredEffects(
       seeds: nestedCandidates,
       parentItem: queueItem,
     })
+
+    // This effect paused for a choice: keep everything still queued in the
+    // state so it resolves after the player answers (nothing is dropped).
+    if (
+      workingState.status === 'awaiting_choice' &&
+      workingState.pendingRequests[0]?.requestId !== headBefore
+    ) {
+      workingState = storePendingTriggers(workingState, queue.items)
+      break
+    }
   }
 
   if (
@@ -172,6 +207,69 @@ export function resolveEventTriggeredEffects(
       timingWindows,
     },
   )
+}
+
+function canResumePendingTriggers(state: GameState): boolean {
+  if (
+    (state.pendingTriggers ?? []).length === 0 ||
+    state.status === 'completed'
+  ) {
+    return false
+  }
+
+  const head = state.pendingRequests[0]
+
+  return head === undefined || head.context?.effectContinuationId === undefined
+}
+
+function rehydratePendingTriggers(
+  state: GameState,
+  environment: EventTriggeredResolutionEnvironment,
+): readonly EffectResolutionQueueItemSeed[] {
+  return (state.pendingTriggers ?? []).flatMap((pending) => {
+    const effectDefinition = environment.effectRegistry.getDefinition(
+      pending.effectDefinitionId,
+    )
+
+    return effectDefinition === undefined
+      ? []
+      : [
+          {
+            sourceKind: pending.sourceKind,
+            triggerEvent: pending.triggerEvent,
+            timingWindow: pending.timingWindow,
+            effectDefinition,
+            ...(pending.sourcePieceId === undefined
+              ? {}
+              : { sourcePieceId: pending.sourcePieceId }),
+          },
+        ]
+  })
+}
+
+function withoutPendingTriggers(state: GameState): GameState {
+  const { pendingTriggers: _drained, ...rest } = state
+  return rest
+}
+
+function storePendingTriggers(
+  state: GameState,
+  items: readonly EffectResolutionQueueItemSeed[],
+): GameState {
+  const pendingTriggers: readonly PendingTriggerState[] = [
+    ...(state.pendingTriggers ?? []),
+    ...items.map((item) => ({
+      effectDefinitionId: item.effectDefinition.id,
+      sourceKind: item.sourceKind,
+      triggerEvent: item.triggerEvent,
+      timingWindow: item.timingWindow,
+      ...(item.sourcePieceId === undefined
+        ? {}
+        : { sourcePieceId: item.sourcePieceId }),
+    })),
+  ]
+
+  return pendingTriggers.length === 0 ? state : { ...state, pendingTriggers }
 }
 
 export function collectEventTriggeredEffectCandidates(
@@ -221,6 +319,13 @@ function collectEventTriggeredEffectCandidatesFromSources(
       triggerSource,
       environment,
     )) {
+      pushUniqueCandidate(candidates, seen, candidate)
+    }
+
+    for (const candidate of environment.collectAdditionalCandidates?.(
+      state,
+      triggerSource,
+    ) ?? []) {
       pushUniqueCandidate(candidates, seen, candidate)
     }
   }

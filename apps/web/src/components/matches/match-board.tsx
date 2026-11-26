@@ -8,6 +8,10 @@ import type {
 } from '@web-vg/rules-core'
 
 import { Badge } from '@/components/ui/badge'
+import type {
+  BoardActionModel,
+  BoardActionTarget,
+} from '@/features/matches/play/board-actions'
 import {
   type MatchBoardProjection,
   type MatchBoardSideProjection,
@@ -29,7 +33,19 @@ interface MatchBoardProps {
   readonly onTogglePieceTarget?: (piece: ProjectedMatchBoardPiece) => void
   readonly onToggleZoneTarget?: (zone: ProjectedMatchBoardZone) => void
   readonly resolvePlayerLabel?: (playerId: PlayerId) => string
+  /** Click / drag-and-drop play from the server's legal actions. */
+  readonly boardActions?: BoardActionsInteraction
 }
+
+export interface BoardActionsInteraction {
+  readonly model: BoardActionModel
+  readonly onSelectSource: (pieceId: string) => void
+  /** `sourcePieceId` is set for drops; clicks use the selected card. */
+  readonly onTarget: (target: BoardActionTarget, sourcePieceId?: string) => void
+}
+
+const BOARD_DRAG_TYPE = 'application/x-vg-piece'
+type BoardActionRole = 'source' | 'selected' | 'target' | null
 
 type BoardSideOrientation = 'opponent' | 'current'
 type TargetVisualState = 'available' | 'selected' | 'unavailable' | 'none'
@@ -69,6 +85,7 @@ interface BoardInteractionContext {
   readonly onPinPiece?: (piece: ProjectedMatchBoardPiece) => void
   readonly onTogglePieceTarget?: (piece: ProjectedMatchBoardPiece) => void
   readonly onToggleZoneTarget?: (zone: ProjectedMatchBoardZone) => void
+  readonly boardActions?: BoardActionsInteraction
 }
 
 const REAR_GUARD_BACK_SLOTS: readonly CircleSlotKey[] = [
@@ -107,6 +124,7 @@ export function MatchBoard({
   onTogglePieceTarget,
   onToggleZoneTarget,
   resolvePlayerLabel,
+  boardActions,
 }: MatchBoardProps) {
   const currentSide = projection.currentSide
   const [previewPiece, setPreviewPiece] =
@@ -133,6 +151,7 @@ export function MatchBoard({
     },
     ...(onTogglePieceTarget === undefined ? {} : { onTogglePieceTarget }),
     ...(onToggleZoneTarget === undefined ? {} : { onToggleZoneTarget }),
+    ...(boardActions === undefined ? {} : { boardActions }),
   }
 
   return (
@@ -543,6 +562,31 @@ function PlaymatCircle({
 
   return (
     <div
+      onDragOver={(event) => {
+        if (
+          interaction.boardActions !== undefined &&
+          piece === undefined &&
+          slotId !== undefined
+        ) {
+          event.preventDefault()
+        }
+      }}
+      onDrop={(event) => {
+        const sourcePieceId = event.dataTransfer.getData(BOARD_DRAG_TYPE)
+
+        if (
+          interaction.boardActions !== undefined &&
+          piece === undefined &&
+          slotId !== undefined &&
+          sourcePieceId !== ''
+        ) {
+          event.preventDefault()
+          interaction.boardActions.onTarget(
+            { kind: 'slot', slotId },
+            sourcePieceId,
+          )
+        }
+      }}
       data-playmat-circle={circleKind}
       data-slot-id={slotId}
       data-target-state={piece === undefined ? zoneTargetState : undefined}
@@ -572,17 +616,31 @@ function PlaymatCircle({
           ) : null}
         </div>
         {piece === undefined || zone === undefined ? (
-          <EmptyCircle
-            label={label}
-            zone={zone}
-            zoneTargetState={zoneTargetState}
-            canSelectZone={canSelectZone}
-            onSelect={() => {
-              if (zone !== undefined) {
-                interaction.onToggleZoneTarget?.(zone)
+          slotId !== undefined &&
+          interaction.boardActions?.model.targetSlotIds.has(slotId) === true ? (
+            <button
+              type="button"
+              data-board-action="target"
+              className="grid min-h-24 place-items-center rounded-xl border border-sky-200/60 bg-sky-400/12 px-2 text-center text-xs font-semibold text-sky-50 ring-2 ring-sky-300/40 hover:bg-sky-400/20"
+              onClick={() =>
+                interaction.boardActions?.onTarget({ kind: 'slot', slotId })
               }
-            }}
-          />
+            >
+              Call here
+            </button>
+          ) : (
+            <EmptyCircle
+              label={label}
+              zone={zone}
+              zoneTargetState={zoneTargetState}
+              canSelectZone={canSelectZone}
+              onSelect={() => {
+                if (zone !== undefined) {
+                  interaction.onToggleZoneTarget?.(zone)
+                }
+              }}
+            />
+          )
         ) : (
           <BoardPiece
             piece={piece}
@@ -910,6 +968,7 @@ function BoardPiece({
   const selectable =
     (targetState === 'available' || targetState === 'selected') &&
     interaction.onTogglePieceTarget !== undefined
+  const boardRole = getBoardActionRole(piece, interaction.boardActions)
   const compact = presentation !== 'circle'
   const inspectPinned = interaction.pinnedPieceRefId === piece.refId
   const renderer = card?.imageUrl ? 'image' : 'fallback'
@@ -920,21 +979,65 @@ function BoardPiece({
       onClick={() => {
         if (selectable) {
           interaction.onTogglePieceTarget?.(piece)
+        } else if (boardRole === 'target' && piece.pieceId !== undefined) {
+          interaction.boardActions?.onTarget({
+            kind: 'piece',
+            pieceId: piece.pieceId,
+          })
+        } else if (
+          (boardRole === 'source' || boardRole === 'selected') &&
+          piece.pieceId !== undefined
+        ) {
+          interaction.boardActions?.onSelectSource(piece.pieceId)
         }
         interaction.onPinPiece?.(piece)
       }}
+      draggable={boardRole === 'source' || boardRole === 'selected'}
+      onDragStart={(event) => {
+        if (piece.pieceId !== undefined) {
+          event.dataTransfer.setData(BOARD_DRAG_TYPE, piece.pieceId)
+          event.dataTransfer.effectAllowed = 'move'
+          interaction.boardActions?.onSelectSource(piece.pieceId)
+        }
+      }}
+      onDragOver={(event) => {
+        if (interaction.boardActions !== undefined) {
+          event.preventDefault()
+        }
+      }}
+      onDrop={(event) => {
+        const sourcePieceId = event.dataTransfer.getData(BOARD_DRAG_TYPE)
+
+        if (
+          interaction.boardActions !== undefined &&
+          piece.pieceId !== undefined &&
+          sourcePieceId !== '' &&
+          sourcePieceId !== piece.pieceId
+        ) {
+          event.preventDefault()
+          interaction.boardActions.onTarget(
+            { kind: 'piece', pieceId: piece.pieceId },
+            sourcePieceId,
+          )
+        }
+      }}
+      data-board-action={boardRole ?? undefined}
       onMouseEnter={() => interaction.onPreviewPiece?.(piece)}
       onMouseLeave={() => interaction.onClearPreviewPiece?.(piece)}
       onFocus={() => interaction.onPreviewPiece?.(piece)}
       onBlur={() => interaction.onClearPreviewPiece?.(piece)}
       aria-label={
-        targetState === 'available'
-          ? `${pieceLabel} - legal target`
-          : targetState === 'selected'
-            ? `${pieceLabel} - selected target`
-            : battleRole === null
-              ? `${pieceLabel}`
-              : `${pieceLabel} - ${battleRole}`
+        boardRole === 'target'
+          ? `${pieceLabel} - play target`
+          : boardRole === 'selected'
+            ? `${pieceLabel} - selected to play`
+            : targetState === 'available'
+              ? `${pieceLabel} - legal target`
+              : targetState === 'selected'
+                ? `${pieceLabel} - selected target`
+                : battleRole === null
+                  ? `${pieceLabel}`
+                  : `${pieceLabel} - ${battleRole}`
       }
       title={identityVisible ? pieceLabel : undefined}
       data-card-identity={identityVisible ? rawLabel : undefined}
@@ -955,6 +1058,9 @@ function BoardPiece({
         targetState === 'selected' &&
           'border-emerald-100 ring-2 ring-emerald-100/70',
         targetState === 'unavailable' && 'opacity-35 saturate-50',
+        boardRole === 'source' && 'border-sky-200/60',
+        boardRole === 'selected' && 'border-sky-100 ring-2 ring-sky-200/70',
+        boardRole === 'target' && 'border-sky-200 ring-2 ring-sky-300/55',
         battleRole === 'attacker' && 'border-rose-200 ring-2 ring-rose-300/45',
         battleRole === 'target' && 'border-amber-100 ring-2 ring-amber-200/55',
         battleRole === 'booster' && 'border-cyan-100 ring-2 ring-cyan-200/45',
@@ -1293,6 +1399,29 @@ function InspectLine({
       <span className="text-right font-medium text-slate-100">{value}</span>
     </div>
   )
+}
+
+function getBoardActionRole(
+  piece: ProjectedMatchBoardPiece,
+  boardActions: BoardActionsInteraction | undefined,
+): BoardActionRole {
+  const pieceId = piece.pieceId
+
+  if (boardActions === undefined || pieceId === undefined) {
+    return null
+  }
+
+  const { model } = boardActions
+
+  if (model.targetPieceIds.has(pieceId)) {
+    return 'target'
+  }
+
+  if (model.selectedSourcePieceId === pieceId) {
+    return 'selected'
+  }
+
+  return model.sourcePieceIds.has(pieceId) ? 'source' : null
 }
 
 function findZoneByRole(

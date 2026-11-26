@@ -19,6 +19,7 @@ import {
   createInvalidTransitionResult,
   type BlockedTransitionCode,
   type InvalidTransitionCode,
+  type RuntimeTransitionOptions,
   type TransitionResult,
 } from '../transitions'
 
@@ -65,9 +66,11 @@ export interface RulesFormatAdapter {
   readonly constructionBasis: ConstructionBasis
   readonly gameplayMarkers: readonly FormatGameplayMarker[]
   readonly supportedActionTypes: readonly GameActionType[]
+  /** `options` carries runtime environments such as card scripts. */
   dispatch(
     currentState: GameState,
     command: EngineCommand,
+    options?: RuntimeTransitionOptions,
   ): EngineDispatchResult
 }
 
@@ -83,8 +86,8 @@ export function createRulesFormatAdapter(
     constructionBasis: definition.constructionBasis,
     gameplayMarkers: definition.gameplayMarkers,
     supportedActionTypes: definition.supportedActionTypes,
-    dispatch(currentState, command) {
-      return dispatchFormatCommand(definition, currentState, command)
+    dispatch(currentState, command, options) {
+      return dispatchFormatCommand(definition, currentState, command, options)
     },
   }
 }
@@ -93,6 +96,7 @@ export function dispatchFormatCommand(
   definition: FormatAdapterDefinition,
   currentState: GameState,
   command: EngineCommand,
+  options: RuntimeTransitionOptions = {},
 ): EngineDispatchResult {
   const transitionId = createFormatTransitionId(
     definition.formatId,
@@ -169,7 +173,7 @@ export function dispatchFormatCommand(
     return createEngineDispatchResult(handledTransition)
   }
 
-  return dispatchEngineCommand(currentState, command)
+  return dispatchEngineCommand(currentState, command, options)
 }
 
 function createFormatTransitionId(

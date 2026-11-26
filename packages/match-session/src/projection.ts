@@ -13,11 +13,21 @@ import type {
 
 import type {
   MatchRoom,
+  MatchRoomEngineAdapter,
   MatchRoomLifecycleStatus,
   MatchRoomParticipant,
   MatchRoomParticipantId,
 } from './match-room'
-import { findMatchRoomParticipant, hasMatchRoomEngineState } from './match-room'
+import {
+  defaultMatchRoomEngineAdapters,
+  findMatchRoomParticipant,
+  hasMatchRoomEngineState,
+  resolveMatchRoomEngineAdapter,
+} from './match-room'
+import {
+  listParticipantLegalActions,
+  type ParticipantLegalAction,
+} from './legal-actions'
 import { projectMatchRoomClock, type ProjectedMatchRoomClock } from './clock'
 
 export interface ProjectedMatchRoomViewer {
@@ -35,6 +45,8 @@ export interface ProjectedMatchRoomForParticipant {
   readonly clock: ProjectedMatchRoomClock
   readonly visibleState: VisibleGameState
   readonly events: readonly VisibleGameEvent[]
+  /** Engine-checked actions the viewer can take now (ride, call, attack…). */
+  readonly legalActions: readonly ParticipantLegalAction[]
 }
 
 export interface ProjectedMatchRoomForOmniscientViewer {
@@ -85,6 +97,8 @@ export function projectMatchRoomForParticipant(
   options: {
     readonly events?: readonly GameEvent[]
     readonly serverNow?: string
+    /** Same adapters the room runs commands with (e.g. card scripts). */
+    readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
   } = {},
 ): MatchRoomProjectionResult {
   if (!hasMatchRoomEngineState(room)) {
@@ -132,6 +146,19 @@ export function projectMatchRoomForParticipant(
     return visibleEvents
   }
 
+  const adapter = resolveMatchRoomEngineAdapter(
+    room,
+    options.engineAdapters ?? defaultMatchRoomEngineAdapters,
+  )
+  const legalActions =
+    adapter === undefined || room.status === 'completed'
+      ? []
+      : listParticipantLegalActions(
+          room.engineState,
+          participant.enginePlayerId,
+          adapter,
+        )
+
   return {
     ok: true,
     projection: {
@@ -150,6 +177,7 @@ export function projectMatchRoomForParticipant(
       participants: room.participants,
       visibleState: visibleState.state,
       events: visibleEvents.events,
+      legalActions,
     },
   }
 }

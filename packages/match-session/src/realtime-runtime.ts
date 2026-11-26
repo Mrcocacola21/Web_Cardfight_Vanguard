@@ -17,6 +17,7 @@ import type {
   MatchRoomParticipantId,
 } from './match-room'
 import {
+  advanceMandatoryMatchRoomFlow,
   hasMatchRoomEngineState,
   resolveMatchRoomTimeout,
   submitMatchRoomCommand,
@@ -83,6 +84,8 @@ export interface RealtimeClientCommandAcceptedResult {
   readonly participantId: MatchRoomParticipantId
   readonly document: SerializableMatchSessionDocument
   readonly roomResult: AcceptedMatchRoomCommandResult
+  /** Automatic battle steps the server ran after roomResult, in order. */
+  readonly followUpResults: readonly AcceptedMatchRoomCommandResult[]
   readonly acceptedHistory: readonly MatchRoomHistoryEntry[]
   readonly pushes: readonly RealtimeProjectedStatePush[]
 }
@@ -228,13 +231,28 @@ export function submitRealtimeClientCommand(input: {
         blockingRequests: roomResult.blockingRequests,
         pushes: [],
       }
-    case 'accepted':
+    case 'accepted': {
+      // Players never send system actions, so the server finishes the
+      // mandatory battle steps (drive/combat/damage/close) right away.
+      const flow = advanceMandatoryMatchRoomFlow(roomResult.room, {
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
+        submittedAt: receivedAt,
+        ...(input.clock === undefined ? {} : { clock: input.clock }),
+      })
+
       return createRealtimeAcceptedCommandResult({
         document: input.document,
         command: input.command,
         roomResult,
+        followUpResults: flow.results,
         receivedAt,
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
       })
+    }
   }
 }
 
@@ -244,6 +262,7 @@ export function createRealtimeProjectedStatePushes(input: {
   readonly events?: readonly GameEvent[]
   readonly acceptedHistory?: readonly MatchRoomHistoryEntry[]
   readonly serverNow?: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeProjectedStatePushesResult {
   const room = input.document.room
 
@@ -281,6 +300,9 @@ export function createRealtimeProjectedStatePushes(input: {
         ...(input.serverNow === undefined
           ? {}
           : { serverNow: input.serverNow }),
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
       },
     )
 
@@ -314,6 +336,7 @@ export function createRealtimeParticipantSnapshot(input: {
   readonly document: SerializableMatchSessionDocument
   readonly participantId: MatchRoomParticipantId
   readonly serverNow?: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeParticipantSnapshotResult {
   const room = input.document.room
 
@@ -325,11 +348,12 @@ export function createRealtimeParticipantSnapshot(input: {
     }
   }
 
-  const projection = projectMatchRoomForParticipant(
-    room,
-    input.participantId,
-    input.serverNow === undefined ? {} : { serverNow: input.serverNow },
-  )
+  const projection = projectMatchRoomForParticipant(room, input.participantId, {
+    ...(input.serverNow === undefined ? {} : { serverNow: input.serverNow }),
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
+  })
 
   if (!projection.ok) {
     return {
@@ -416,6 +440,9 @@ export function resolveRealtimeMatchRoomTimeout(input: {
     events: timeoutResult.engineResult.events,
     acceptedHistory,
     serverNow: checkedAt,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   if (!pushResult.ok) {
@@ -442,9 +469,11 @@ function createRealtimeAcceptedCommandResult(input: {
   readonly document: SerializableMatchSessionDocument
   readonly command: RealtimeClientCommand
   readonly roomResult: AcceptedMatchRoomCommandResult
+  readonly followUpResults?: readonly AcceptedMatchRoomCommandResult[]
   readonly receivedAt: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeClientCommandResult {
-  const recorded = recordMatchRoomCommandResult({
+  let recorded = recordMatchRoomCommandResult({
     document: input.document,
     result: input.roomResult,
     recordedAt: input.receivedAt,
@@ -459,15 +488,38 @@ function createRealtimeAcceptedCommandResult(input: {
     })
   }
 
+  // Automatic follow-up steps are recorded as their own history entries.
+  for (const followUp of input.followUpResults ?? []) {
+    const next = recordMatchRoomCommandResult({
+      document: recorded.document,
+      result: followUp,
+      recordedAt: input.receivedAt,
+    })
+
+    if (!next.ok) {
+      break
+    }
+
+    recorded = next
+  }
+
   const acceptedHistory = recorded.document.history.slice(
     input.document.history.length,
   )
   const pushResult = createRealtimeProjectedStatePushes({
     document: recorded.document,
     reason: 'command_accepted',
-    events: input.roomResult.engineResult.events,
+    events: [
+      ...input.roomResult.engineResult.events,
+      ...(input.followUpResults ?? []).flatMap(
+        (followUp) => followUp.engineResult.events,
+      ),
+    ],
     acceptedHistory,
     serverNow: input.receivedAt,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   if (!pushResult.ok) {
@@ -486,6 +538,7 @@ function createRealtimeAcceptedCommandResult(input: {
     participantId: input.command.participantId,
     document: recorded.document,
     roomResult: input.roomResult,
+    followUpResults: input.followUpResults ?? [],
     acceptedHistory,
     pushes: pushResult.pushes,
   }

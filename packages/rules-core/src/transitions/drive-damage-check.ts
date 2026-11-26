@@ -198,13 +198,22 @@ export function applyDriveCheckTransition(
     )
   }
 
-  const drawResult = drawTopPiecesBetweenZones(
-    currentState,
-    action.fromZoneId,
-    action.toZoneId,
-    effectResolution.count,
-    'drive_check',
-  )
+  // Drive -N can bring the check to zero: the step happens, no card moves.
+  const drawResult =
+    effectResolution.count === 0
+      ? {
+          ok: true as const,
+          zones: currentState.zones,
+          pieceStates: currentState.pieceStates,
+          movedPieces: [],
+        }
+      : drawTopPiecesBetweenZones(
+          currentState,
+          action.fromZoneId,
+          action.toZoneId,
+          effectResolution.count,
+          'drive_check',
+        )
 
   if (!drawResult.ok) {
     return createInvalidTransitionResult(
@@ -305,6 +314,15 @@ export function applyDamageCheckTransition(
   }
 
   const expectedDamageCheckCount = battle.combat.damageCheckCount
+
+  if (expectedDamageCheckCount === 0) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Battle ${battle.battleId} has no damage check: a hit rear-guard is retired when the battle completes.`,
+    )
+  }
 
   if (
     !Number.isSafeInteger(action.count) ||

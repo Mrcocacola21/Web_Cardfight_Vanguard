@@ -1,7 +1,5 @@
 'use server'
 
-import { randomUUID } from 'node:crypto'
-
 import {
   createCatalogRepository,
   createDbClient,
@@ -12,12 +10,7 @@ import {
 import type { CatalogCardEntityRecord } from '@web-vg/db/repositories/catalog'
 import type { DeckDetailRecord } from '@web-vg/db/repositories/decks'
 import { createPersistedMatchSessionAdapter } from '@web-vg/match-session'
-import type {
-  MatchDeckValidationProof,
-  MatchRoomId,
-  MatchRoomParticipantId,
-} from '@web-vg/match-session'
-import type { ActionId, PlayerId } from '@web-vg/rules-core'
+import type { MatchDeckValidationProof } from '@web-vg/match-session'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -28,12 +21,12 @@ import { getCurrentAuthState } from '@/features/auth/server/auth-session'
 import {
   createDeckToMatchRoomUseCase,
   type DeckToMatchRoomErrorCode,
-  type DeckToMatchRoomIdFactory,
 } from '@/features/matches/application/deck-to-match-room-use-cases'
 import { getSupabaseServiceRoleEnv } from '@/lib/supabase/config'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 import type { DeckToMatchRoomFormState } from './deck-to-match-room-form-state'
+import { cryptoRoomIdFactory } from './room-id-factory'
 
 export async function createDeckToMatchRoomAction(
   _previousState: DeckToMatchRoomFormState,
@@ -143,21 +136,6 @@ export async function validateDeckDetailForMatchRoom(input: {
     errorCount: validation.summary.errorCount,
     issueCodes: validation.issues.map((issue) => issue.code),
   }
-}
-
-export const cryptoRoomIdFactory: DeckToMatchRoomIdFactory = {
-  createRoomId() {
-    return randomUUID() as MatchRoomId
-  },
-  createParticipantId(input) {
-    return `${input.roomId}:participant:${input.seat + 1}` as MatchRoomParticipantId
-  },
-  createPlayerId(input) {
-    return `${input.roomId}:player:${input.seat + 1}` as PlayerId
-  },
-  createActionId(input) {
-    return `${input.roomId}:action:${input.label}:${input.revision}` as ActionId
-  },
 }
 
 function readFormString(formData: FormData, key: string): string {

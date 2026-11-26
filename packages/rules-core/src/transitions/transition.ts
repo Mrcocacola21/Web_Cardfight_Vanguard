@@ -10,6 +10,7 @@ export type TransitionResultStatus = 'applied' | 'invalid' | 'blocked'
 export type EffectTimingWindow = 'before' | 'on' | 'after'
 export type EffectTimingPoint =
   | 'card.ride'
+  | 'card.call'
   | 'card.play'
   | 'zone.transfer'
   | 'effect.activation'

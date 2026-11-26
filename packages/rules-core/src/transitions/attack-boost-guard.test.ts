@@ -343,8 +343,9 @@ function addWrongColumnBooster(state: GameState): GameState {
 
 describe('@web-vg/rules-core attack / boost / guard foundation', () => {
   it("rejects attacks on the first player's first turn with a structured reason", () => {
+    // match.start opens turn 0: the first player's first turn.
     const state = makeBattleReadyState({
-      turnNumber: 1,
+      turnNumber: 0,
     })
     const result = declareAttack(state)
     const invalidResult = expectInvalid(result)

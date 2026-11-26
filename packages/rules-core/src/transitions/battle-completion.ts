@@ -5,6 +5,7 @@ import type { BattleDamageState, GameState, ZoneState } from '../state'
 import {
   buildGameStateIndex,
   findOwnedZoneByKind,
+  findPieceLocation,
   findPlayerById,
   findZoneById,
 } from '../state'
@@ -20,7 +21,10 @@ import {
   movePiecesByIdBetweenZones,
   type PieceZoneMovement,
 } from './ordered-zone-operations'
-import { createPieceMovedEvents } from './zone-transfer'
+import {
+  createPieceMovedEvents,
+  resolveZoneTransferSequence,
+} from './zone-transfer'
 
 export function applyResolveMandatoryFlowTransition(
   transitionId: TransitionId,
@@ -68,12 +72,16 @@ export function applyResolveMandatoryFlowTransition(
     )
   }
 
-  if (battle.status === 'combat_resolved' && battle.combat?.result !== 'miss') {
+  if (
+    battle.status === 'combat_resolved' &&
+    battle.combat?.result !== 'miss' &&
+    battle.combat?.damageCheckCount !== 0
+  ) {
     return createInvalidTransitionResult(
       transitionId,
       currentState,
       'invalid_action',
-      `Action ${action.type} can skip damage check only after battle ${battle.battleId} has an explicit miss result.`,
+      `Action ${action.type} can skip damage check only after battle ${battle.battleId} has a miss or a rear-guard hit.`,
     )
   }
 
@@ -97,11 +105,23 @@ export function applyResolveMandatoryFlowTransition(
     )
   }
 
-  const stateAfterCleanup: GameState = {
+  const stateAfterGuardCleanup: GameState = {
     ...currentState,
     zones: cleanupResult.zones,
     pieceStates: cleanupResult.pieceStates,
   }
+  const retireResult = retireHitRearGuard(stateAfterGuardCleanup, battle)
+
+  if (!retireResult.ok) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      retireResult.code,
+      retireResult.message,
+    )
+  }
+
+  const stateAfterCleanup = retireResult.state
   const { battle: _completedBattle, ...stateWithoutBattle } = stateAfterCleanup
   const lethalDamage = resolveLethalDamage(battle)
   const nextState = advanceGameStateRevision(
@@ -147,8 +167,24 @@ export function applyResolveMandatoryFlowTransition(
           cleanupResult.cleanupToZoneId,
           cleanupMovedEvents.length,
         )
+  const retiredMovedEvents = createPieceMovedEvents(
+    transitionId,
+    retireResult.movedPieces,
+    {
+      kind: 'system',
+      system: action.actor.system,
+    },
+    {
+      sourceActionId: action.actionId,
+      startingSequence:
+        cleanupMovedEvents.length +
+        (guardiansCleanedUpEvent === undefined ? 0 : 1),
+    },
+  )
   const battleCompletedSequence =
-    cleanupMovedEvents.length + (guardiansCleanedUpEvent === undefined ? 0 : 1)
+    cleanupMovedEvents.length +
+    (guardiansCleanedUpEvent === undefined ? 0 : 1) +
+    retiredMovedEvents.length
   const battleCompletedEvent: GameEvent = {
     eventId: createBattleCompletionEventId(
       transitionId,
@@ -163,6 +199,13 @@ export function applyResolveMandatoryFlowTransition(
     },
     battleId: battle.battleId,
     reason: resolveBattleCompletionReason(battle),
+    ...(retireResult.movedPieces.length === 0
+      ? {}
+      : {
+          retiredPieceIds: retireResult.movedPieces.map(
+            (movement) => movement.pieceId,
+          ),
+        }),
     attackingPlayerId: battle.attackingPlayerId,
     defendingPlayerId: battle.defendingPlayerId,
     attackerPieceId: battle.attackerPieceId,
@@ -224,6 +267,7 @@ export function applyResolveMandatoryFlowTransition(
   const events: readonly GameEvent[] = [
     ...cleanupMovedEvents,
     ...(guardiansCleanedUpEvent === undefined ? [] : [guardiansCleanedUpEvent]),
+    ...retiredMovedEvents,
     battleCompletedEvent,
     ...defeatEvents,
   ]
@@ -278,7 +322,9 @@ function resolveBattleCompletionReason(
   battle: NonNullable<GameState['battle']>,
 ): Extract<GameEvent, { readonly type: 'battle.completed' }>['reason'] {
   if (battle.status === 'combat_resolved') {
-    return 'attack_missed'
+    return battle.combat?.result === 'hit'
+      ? 'rear_guard_retired'
+      : 'attack_missed'
   }
 
   return battle.damage?.outcome === 'lethal'
@@ -330,6 +376,69 @@ function createDefeatEvents(
       winnerPlayerId: battle.attackingPlayerId,
     },
   ]
+}
+
+/**
+ * A rear-guard hit by the attack is retired to its owner's drop when the
+ * battle closes. Goes through zone transfers, so REPLACE rules ("if this
+ * unit would be retired…") apply. Does nothing if the target already left.
+ */
+function retireHitRearGuard(
+  state: GameState,
+  battle: NonNullable<GameState['battle']>,
+):
+  | {
+      readonly ok: true
+      readonly state: GameState
+      readonly movedPieces: readonly PieceZoneMovement[]
+    }
+  | {
+      readonly ok: false
+      readonly code: 'invalid_action' | 'invalid_action_reference'
+      readonly message: string
+    } {
+  if (
+    battle.status !== 'combat_resolved' ||
+    battle.combat?.result !== 'hit' ||
+    battle.target.kind !== 'piece'
+  ) {
+    return { ok: true, state, movedPieces: [] }
+  }
+
+  const stateIndex = buildGameStateIndex(state)
+  const location = findPieceLocation(stateIndex, battle.target.pieceId)
+  const ownerId = location?.piece.ownerPlayerId
+  const drop =
+    ownerId === undefined
+      ? undefined
+      : findOwnedZoneByKind(stateIndex, ownerId, 'drop')
+
+  if (location?.zone.kind !== 'rear_guard_circle' || drop === undefined) {
+    return { ok: true, state, movedPieces: [] }
+  }
+
+  const transfer = resolveZoneTransferSequence(state, [
+    {
+      pieceId: battle.target.pieceId,
+      from: { zoneId: location.zone.zoneId },
+      to: { zoneId: drop.zoneId },
+      reason: 'retire',
+    },
+  ])
+
+  if (!transfer.ok) {
+    return transfer
+  }
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      zones: transfer.zones,
+      pieceStates: transfer.pieceStates,
+    },
+    movedPieces: transfer.transfers,
+  }
 }
 
 export function resolveBattleCleanup(

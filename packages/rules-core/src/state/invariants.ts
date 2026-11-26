@@ -953,8 +953,10 @@ function assertBattleCombatStateInvariant(
     `Battle ${battleId} combat result must match attack and defense totals.`,
   )
   assertRulesInvariant(
+    // A hit on a rear-guard has no damage check (it is retired instead).
     combat.result === 'hit'
-      ? combat.damageCheckCount === combat.attackCritical
+      ? combat.damageCheckCount === combat.attackCritical ||
+          combat.damageCheckCount === 0
       : combat.damageCheckCount === 0,
     `Battle ${battleId} damage check count must be derived from combat result and attack critical.`,
   )

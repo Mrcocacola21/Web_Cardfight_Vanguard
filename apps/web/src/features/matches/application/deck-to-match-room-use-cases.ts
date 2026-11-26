@@ -38,6 +38,8 @@ import type {
   UserId,
 } from '@web-vg/shared'
 
+import { matchEngineAdapters } from '@/features/matches/engine/match-engine'
+
 type RepositoryResult<TData> =
   | {
       readonly ok: true
@@ -794,6 +796,7 @@ function startInitializedRoom(input: {
       },
     },
     {
+      engineAdapters: matchEngineAdapters,
       submittedAt: input.recordedAt,
     },
   )
@@ -839,6 +842,7 @@ function startInitializedRoom(input: {
       },
     },
     {
+      engineAdapters: matchEngineAdapters,
       submittedAt: input.recordedAt,
     },
   )
@@ -884,6 +888,7 @@ function startInitializedRoom(input: {
       },
     },
     {
+      engineAdapters: matchEngineAdapters,
       submittedAt: input.recordedAt,
     },
   )
