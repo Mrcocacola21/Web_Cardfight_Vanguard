@@ -675,9 +675,11 @@ export {
   TURN_PHASE_RIDE,
   TURN_PHASE_STAND,
   VANGUARD_TURN_PHASES,
+  resolveNextMandatoryBattleAction,
 } from './transitions'
 export type {
   ActionTransitionInput,
+  MandatoryBattleAction,
   AppliedTransitionResult,
   BlockedTransitionCode,
   BlockedTransitionResult,

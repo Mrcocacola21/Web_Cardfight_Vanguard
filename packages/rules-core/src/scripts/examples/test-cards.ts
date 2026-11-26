@@ -193,6 +193,21 @@ export const TEST_CARD_SCRIPTS = [
   },
   {
     format: 'vg-card-script/1',
+    cardId: 'test-phoenix-ward',
+    name: 'Phoenix Ward',
+    abilities: [
+      {
+        id: 'rebirth',
+        type: 'REPLACE',
+        zones: ['rear_guard_circle'],
+        replaces: 'retire',
+        instead: 'soul',
+        text: '[CONT](RC): If this unit would be retired, put it into your soul instead.',
+      },
+    ],
+  },
+  {
+    format: 'vg-card-script/1',
     cardId: 'test-war-standard',
     name: 'War Standard',
     abilities: [

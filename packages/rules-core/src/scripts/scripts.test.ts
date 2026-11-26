@@ -21,6 +21,7 @@ import {
   createCardScriptRuntime,
   FACE_DOWN_DAMAGE_FLAG,
   resolveCombatPieceModifiers,
+  resolveNextMandatoryBattleAction,
   validateCardScript,
 } from '../index'
 
@@ -31,8 +32,14 @@ const P2 = 'p2' as PlayerId
 
 const piece = (id: string) => id as PieceId
 const zone = (player: PlayerId, kind: string) => `${player}-${kind}` as ZoneId
+/** Board slots need front/back + left/center/right in their id. */
+const SLOT_NAMES: Readonly<Record<string, string>> = {
+  left: 'front-left',
+  right: 'front-right',
+  back: 'back-center',
+}
 const slot = (player: PlayerId, name: string) =>
-  `${player}-rc-${name}` as ZoneSlotId
+  `${player}-rc-${SLOT_NAMES[name] ?? name}` as ZoneSlotId
 
 const SOVEREIGN = piece('p1-sovereign')
 const SQUIRE = piece('p1-squire')
@@ -44,6 +51,7 @@ const DAMAGE = [piece('p1-dmg-1'), piece('p1-dmg-2'), piece('p1-dmg-3')]
 const DECK = [piece('p1-deck-1'), piece('p1-deck-2'), piece('p1-deck-3')]
 const FOE_VANGUARD = piece('p2-vanguard')
 const FOE_REAR = piece('p2-rear')
+const FOE_DECK = piece('p2-deck-1')
 
 /** Deterministic random source so shuffles are reproducible in tests. */
 function seededRandom(seed: number): () => number {
@@ -473,6 +481,55 @@ describe('CONT and REPLACE abilities', () => {
   })
 })
 
+describe('rear-guard hits', () => {
+  it('retires a hit rear-guard when the battle closes, without a damage check', () => {
+    const result = attackWithoutGuard(
+      battleState({ damage: DAMAGE.slice(0, 2) }),
+      FOE_REAR,
+    )
+
+    expect(result.battle).toBeUndefined()
+    expect(zoneOf(result, FOE_REAR)).toBe(zone(P2, 'drop'))
+    expect(zonePieceIds(result, zone(P2, 'damage'))).toEqual([])
+  })
+
+  it('applies REPLACE to a rear-guard retired by a hit', () => {
+    const result = attackWithoutGuard(
+      battleState({
+        damage: DAMAGE.slice(0, 2),
+        foeRearCard: 'test-phoenix-ward',
+      }),
+      FOE_REAR,
+    )
+
+    expect(zoneOf(result, FOE_REAR)).toBe(zone(P2, 'soul'))
+  })
+
+  it('counts CONT power in combat: a boosted defender survives', () => {
+    // Iron Bastion: +5000 during its opponent's turn, 15000 vs 10000.
+    const result = attackWithoutGuard(
+      battleState({
+        damage: DAMAGE.slice(0, 2),
+        foeRearCard: 'test-iron-bastion',
+      }),
+      FOE_REAR,
+    )
+
+    expect(result.battle).toBeUndefined()
+    expect(zoneOf(result, FOE_REAR)).toBe(zone(P2, 'rear_guard_circle'))
+  })
+
+  it('still sends a vanguard hit to damage check', () => {
+    const result = attackWithoutGuard(
+      battleState({ damage: DAMAGE.slice(0, 2) }),
+      FOE_VANGUARD,
+    )
+
+    expect(result.battle).toBeUndefined()
+    expect(zonePieceIds(result, zone(P2, 'damage'))).toHaveLength(1)
+  })
+})
+
 describe('validation of the extended format', () => {
   it('rejects misuse of CONT, REPLACE, among and subject filters', () => {
     const result = validateCardScript({
@@ -609,14 +666,44 @@ function activate(sourcePieceId: PieceId, cardId: string) {
   }
 }
 
-function declareAttack() {
+function declareAttack(target: PieceId = FOE_VANGUARD) {
   return {
     actionId: nextActionId(),
     type: 'battle.declare_attack',
     actor: { kind: 'player', playerId: P1 },
     attackerPieceId: SOVEREIGN,
-    target: { kind: 'piece', pieceId: FOE_VANGUARD },
+    target: { kind: 'piece', pieceId: target },
   }
+}
+
+/** Attack, no guard, then let the automatic battle steps run. */
+function attackWithoutGuard(state: GameState, target: PieceId): GameState {
+  let current = act(state, declareAttack(target))
+  current = act(current, {
+    actionId: nextActionId(),
+    type: 'battle.guard',
+    actor: { kind: 'player', playerId: P2 },
+    againstAttackerPieceId: SOVEREIGN,
+  })
+  current = answer(current, { type: 'answer.pass', reason: 'pass' })
+
+  return runMandatoryFlow(current)
+}
+
+function runMandatoryFlow(state: GameState): GameState {
+  let current = state
+
+  for (let step = 0; step < 10; step += 1) {
+    const action = resolveNextMandatoryBattleAction(current)
+
+    if (action === undefined) {
+      return current
+    }
+
+    current = act(current, action as unknown as Record<string, unknown>)
+  }
+
+  throw new Error('Battle did not finish in 10 automatic steps.')
 }
 
 function zoneOf(state: GameState, pieceId: PieceId): ZoneId | undefined {
@@ -728,6 +815,7 @@ function baseState(
     ]),
     [FOE_VANGUARD, 'filler-grade-3', P2, 3],
     [FOE_REAR, options.foeRearCard ?? 'filler-grade-1', P2, 1],
+    [FOE_DECK, 'filler-grade-0', P2, 0],
   ]
   const usedCards = cards.filter(
     ([id]) =>
@@ -775,6 +863,7 @@ function baseState(
         ],
       }),
       ...playerZones(P2, {
+        deck: [FOE_DECK],
         vanguard_circle: [FOE_VANGUARD],
         rear_guard_circle: [[FOE_REAR, 'left']],
       }),
@@ -817,6 +906,7 @@ const ZONE_KINDS = [
   'bind',
   'vanguard_circle',
   'rear_guard_circle',
+  'guardian_circle',
 ] as const
 
 function playerZones(
@@ -828,6 +918,7 @@ function playerZones(
     readonly soul?: readonly PieceId[]
     readonly damage?: readonly PieceId[]
     readonly bind?: readonly PieceId[]
+    readonly guardian_circle?: readonly PieceId[]
     readonly vanguard_circle?: readonly PieceId[]
     readonly rear_guard_circle?: readonly (readonly [PieceId, string])[]
   },

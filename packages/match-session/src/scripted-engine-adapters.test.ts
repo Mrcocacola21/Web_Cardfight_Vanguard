@@ -28,6 +28,14 @@ import type {
   MatchRoomId,
   MatchRoomParticipantId,
 } from './match-room'
+import {
+  submitRealtimeClientCommand,
+  type RealtimeClientCommand,
+} from './realtime-runtime'
+import {
+  createSerializableMatchSessionDocument,
+  type SerializableMatchSessionDocument,
+} from './session-persistence'
 
 const P1 = 'engine-player-1' as PlayerId
 const P2 = 'engine-player-2' as PlayerId
@@ -116,6 +124,127 @@ describe('match rooms with card scripts', () => {
   })
 })
 
+describe('server-driven battle flow', () => {
+  it('finishes the battle after the last player choice and retires a hit rear-guard', () => {
+    let document = makeDocument(makeRoom({ phase: 'battle' }))
+    const attacker = 'p1-vanguard' as PieceId
+    const target = 'p2-rear' as PieceId
+
+    document = realtime(document, PARTICIPANT_1, {
+      kind: 'action',
+      submission: {
+        expectedRevision: engineRevision(document),
+        action: {
+          actionId: 'action-attack' as ActionId,
+          type: 'battle.declare_attack',
+          actor: { kind: 'player', playerId: P1 },
+          attackerPieceId: attacker,
+          target: { kind: 'piece', pieceId: target },
+        },
+      },
+    }).document
+    document = realtime(document, PARTICIPANT_2, {
+      kind: 'action',
+      submission: {
+        expectedRevision: engineRevision(document),
+        action: {
+          actionId: 'action-guard' as ActionId,
+          type: 'battle.guard',
+          actor: { kind: 'player', playerId: P2 },
+          againstAttackerPieceId: attacker,
+        },
+      },
+    }).document
+
+    const guardRequest = roomState(document).pendingRequests[0]!
+    const passed = realtime(document, PARTICIPANT_2, {
+      kind: 'choice_response',
+      submission: {
+        expectedRevision: engineRevision(document),
+        response: {
+          requestId: guardRequest.requestId,
+          responderPlayerId: P2,
+          type: 'answer.pass',
+          reason: 'pass',
+        },
+      },
+    })
+    const finalState = roomState(passed.document)
+
+    // The player's pass, then drive check, combat and battle close are
+    // recorded in history as the server's own steps.
+    const recordedTypes = (
+      passed.status === 'accepted' ? passed.acceptedHistory : []
+    ).flatMap((entry) =>
+      entry.event.kind === 'engine_event' ? [entry.event.event.type] : [],
+    )
+    expect(recordedTypes).toEqual(
+      expect.arrayContaining([
+        'battle.drive_checked',
+        'battle.attack_hit',
+        'battle.completed',
+      ]),
+    )
+    expect(finalState.battle).toBeUndefined()
+    expect(zoneOf(finalState, target)).toBe(zone(P2, 'drop'))
+    expect(zoneOf(finalState, DECK_TOP)).toBe(zone(P1, 'hand'))
+  })
+})
+
+function makeDocument(room: MatchRoom): SerializableMatchSessionDocument {
+  const created = createSerializableMatchSessionDocument({ room })
+
+  if (!created.ok) {
+    throw new Error(created.message)
+  }
+
+  return created.document
+}
+
+function roomState(document: SerializableMatchSessionDocument): GameState {
+  const state = document.room.engineState
+
+  if (state === undefined) {
+    throw new Error('Room has no engine state.')
+  }
+
+  return state
+}
+
+function engineRevision(document: SerializableMatchSessionDocument): number {
+  return roomState(document).revision
+}
+
+let realtimeCommandCounter = 0
+
+function realtime(
+  document: SerializableMatchSessionDocument,
+  participantId: MatchRoomParticipantId,
+  payload: RealtimeClientCommand['payload'],
+) {
+  realtimeCommandCounter += 1
+  const result = submitRealtimeClientCommand({
+    document,
+    command: {
+      commandId:
+        `command-${realtimeCommandCounter}` as RealtimeClientCommand['commandId'],
+      roomId: document.room.roomId,
+      participantId,
+      payload,
+    },
+    engineAdapters: scriptedAdapters,
+    receivedAt: '2026-11-26T09:03:00.000Z',
+  })
+
+  if (result.status !== 'accepted') {
+    throw new Error(
+      `${result.status}: ${'message' in result ? result.message : ''}`,
+    )
+  }
+
+  return result
+}
+
 function submit(
   room: MatchRoom,
   input: {
@@ -163,7 +292,7 @@ function callSquire(room: MatchRoom & { readonly engineState: GameState }) {
           from: { zoneId: zone(P1, 'hand') },
           to: {
             zoneId: zone(P1, 'rear_guard_circle'),
-            slotId: `${P1}-rc-left` as ZoneSlotId,
+            slotId: `${P1}-rc-front-left` as ZoneSlotId,
           },
         },
       },
@@ -202,7 +331,9 @@ function zoneOf(state: GameState, pieceId: PieceId): ZoneId | undefined {
   )?.zoneId
 }
 
-function makeRoom(): MatchRoom & { readonly engineState: GameState } {
+function makeRoom(
+  options: { readonly phase?: string } = {},
+): MatchRoom & { readonly engineState: GameState } {
   const created = createMatchRoom({
     roomId: 'room-scripted' as MatchRoomId,
     formatId: STANDARD_FORMAT_ID,
@@ -225,7 +356,7 @@ function makeRoom(): MatchRoom & { readonly engineState: GameState } {
   })
 
   const initialized = initializeMatchRoom(created, {
-    initialState: makeState(),
+    initialState: makeState(options),
     initializedAt: '2026-11-26T09:01:00.000Z',
     playerBindings: [
       { participantId: PARTICIPANT_1, playerId: P1 },
@@ -255,7 +386,7 @@ function makeRoom(): MatchRoom & { readonly engineState: GameState } {
 }
 
 /** Note: pieces carry no effect ids; the scripted adapters bind them. */
-function makeState(): GameState {
+function makeState(options: { readonly phase?: string } = {}): GameState {
   const kinds = [
     'deck',
     'hand',
@@ -264,6 +395,7 @@ function makeState(): GameState {
     'damage',
     'vanguard_circle',
     'rear_guard_circle',
+    'guardian_circle',
   ]
   const contents: Record<string, Record<string, readonly PieceId[]>> = {
     [P1]: {
@@ -272,7 +404,10 @@ function makeState(): GameState {
       damage: DAMAGE,
       vanguard_circle: ['p1-vanguard' as PieceId],
     },
-    [P2]: { vanguard_circle: ['p2-vanguard' as PieceId] },
+    [P2]: {
+      deck: ['p2-deck-1' as PieceId],
+      vanguard_circle: ['p2-vanguard' as PieceId],
+    },
   }
   const pieces: [string, string, PlayerId, number][] = [
     ['p1-vanguard', 'filler-grade-3', P1, 3],
@@ -281,6 +416,8 @@ function makeState(): GameState {
     [DAMAGE[0]!, 'filler-grade-0', P1, 0],
     [DAMAGE[1]!, 'filler-grade-0', P1, 0],
     ['p2-vanguard', 'filler-grade-3', P2, 3],
+    ['p2-deck-1', 'filler-grade-0', P2, 0],
+    ['p2-rear', 'filler-grade-1', P2, 1],
   ]
   const grades = new Map(pieces.map(([, cardId, , grade]) => [cardId, grade]))
 
@@ -293,7 +430,7 @@ function makeState(): GameState {
       turnNumber: 3,
       turnPlayerId: P1,
       priorityPlayerId: P1,
-      phase: 'main' as GameState['turn']['phase'],
+      phase: (options.phase ?? 'main') as GameState['turn']['phase'],
     },
     players: [P1, P2].map((playerId, seat) => ({
       playerId,
@@ -318,7 +455,7 @@ function makeState(): GameState {
             ? {
                 ordering: 'unordered' as const,
                 occupancy: 'slotted' as const,
-                slotIds: ['left', 'right'].map(
+                slotIds: ['front-left', 'front-right'].map(
                   (name) => `${playerId}-rc-${name}` as ZoneSlotId,
                 ),
               }
@@ -332,9 +469,17 @@ function makeState(): GameState {
                     ? ('single' as const)
                     : ('multi' as const),
               },
-        occupants: (contents[playerId]?.[kind] ?? []).map((pieceId) => ({
-          pieceId,
-        })),
+        occupants:
+          playerId === P2 && kind === 'rear_guard_circle'
+            ? [
+                {
+                  pieceId: 'p2-rear' as PieceId,
+                  slotId: `${P2}-rc-front-left` as ZoneSlotId,
+                },
+              ]
+            : (contents[playerId]?.[kind] ?? []).map((pieceId) => ({
+                pieceId,
+              })),
       })),
     ),
     pieces: pieces.map(([pieceId, cardId, owner]) => ({

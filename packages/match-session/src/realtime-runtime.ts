@@ -17,6 +17,7 @@ import type {
   MatchRoomParticipantId,
 } from './match-room'
 import {
+  advanceMandatoryMatchRoomFlow,
   hasMatchRoomEngineState,
   resolveMatchRoomTimeout,
   submitMatchRoomCommand,
@@ -228,13 +229,25 @@ export function submitRealtimeClientCommand(input: {
         blockingRequests: roomResult.blockingRequests,
         pushes: [],
       }
-    case 'accepted':
+    case 'accepted': {
+      // Players never send system actions, so the server finishes the
+      // mandatory battle steps (drive/combat/damage/close) right away.
+      const flow = advanceMandatoryMatchRoomFlow(roomResult.room, {
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
+        submittedAt: receivedAt,
+        ...(input.clock === undefined ? {} : { clock: input.clock }),
+      })
+
       return createRealtimeAcceptedCommandResult({
         document: input.document,
         command: input.command,
         roomResult,
+        followUpResults: flow.results,
         receivedAt,
       })
+    }
   }
 }
 
@@ -442,9 +455,10 @@ function createRealtimeAcceptedCommandResult(input: {
   readonly document: SerializableMatchSessionDocument
   readonly command: RealtimeClientCommand
   readonly roomResult: AcceptedMatchRoomCommandResult
+  readonly followUpResults?: readonly AcceptedMatchRoomCommandResult[]
   readonly receivedAt: string
 }): RealtimeClientCommandResult {
-  const recorded = recordMatchRoomCommandResult({
+  let recorded = recordMatchRoomCommandResult({
     document: input.document,
     result: input.roomResult,
     recordedAt: input.receivedAt,
@@ -459,13 +473,33 @@ function createRealtimeAcceptedCommandResult(input: {
     })
   }
 
+  // Automatic follow-up steps are recorded as their own history entries.
+  for (const followUp of input.followUpResults ?? []) {
+    const next = recordMatchRoomCommandResult({
+      document: recorded.document,
+      result: followUp,
+      recordedAt: input.receivedAt,
+    })
+
+    if (!next.ok) {
+      break
+    }
+
+    recorded = next
+  }
+
   const acceptedHistory = recorded.document.history.slice(
     input.document.history.length,
   )
   const pushResult = createRealtimeProjectedStatePushes({
     document: recorded.document,
     reason: 'command_accepted',
-    events: input.roomResult.engineResult.events,
+    events: [
+      ...input.roomResult.engineResult.events,
+      ...(input.followUpResults ?? []).flatMap(
+        (followUp) => followUp.engineResult.events,
+      ),
+    ],
     acceptedHistory,
     serverNow: input.receivedAt,
   })

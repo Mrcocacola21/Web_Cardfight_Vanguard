@@ -70,6 +70,7 @@ export type BattleCompletionReason =
   | 'damage_defeat'
   | 'deck_out'
   | 'attack_missed'
+  | 'rear_guard_retired'
   | (string & {})
 export type ChoiceResponseOutcome =
   | 'selection_made'
@@ -457,6 +458,8 @@ export interface BattleCompletedEvent extends EventBase<
   readonly cleanupMovedPieceIds: readonly PieceId[]
   readonly cleanupFromZoneId?: ZoneId
   readonly cleanupToZoneId?: ZoneId
+  /** Rear-guards retired because the attack hit them. */
+  readonly retiredPieceIds?: readonly PieceId[]
 }
 
 export interface BattleGuardiansCleanedUpEvent extends EventBase<

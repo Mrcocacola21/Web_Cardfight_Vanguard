@@ -306,6 +306,15 @@ export function applyDamageCheckTransition(
 
   const expectedDamageCheckCount = battle.combat.damageCheckCount
 
+  if (expectedDamageCheckCount === 0) {
+    return createInvalidTransitionResult(
+      transitionId,
+      currentState,
+      'invalid_action',
+      `Battle ${battle.battleId} has no damage check: a hit rear-guard is retired when the battle completes.`,
+    )
+  }
+
   if (
     !Number.isSafeInteger(action.count) ||
     action.count !== expectedDamageCheckCount

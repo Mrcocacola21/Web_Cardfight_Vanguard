@@ -308,7 +308,9 @@ function formatEventSummary(
     case 'battle.guardians_cleaned_up':
       return `${event.guardPieceIds.length} guardians cleaned up.`
     case 'battle.completed':
-      return `Battle ${event.battleId} completed by ${event.reason}.`
+      return event.reason === 'rear_guard_retired'
+        ? `Battle ${event.battleId} completed: the attacked rear-guard was hit and retired.`
+        : `Battle ${event.battleId} completed by ${event.reason}.`
     case 'player.counter_changed':
       return `${formatPlayer(event.playerId, options)} ${event.counterKey} changed from ${event.previousAmount} to ${event.nextAmount}.`
     case 'player.flag_changed':

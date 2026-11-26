@@ -235,6 +235,19 @@ Search the deck, then shuffle:
   a `card.call` timing window; before this, "when placed on (RC)" abilities
   never triggered from a normal call.
 
+### Battle flow on the server
+
+- Clients may not send system actions. After every accepted participant
+  command the realtime runtime runs the battle steps nobody decides
+  (`advanceMandatoryMatchRoomFlow` → `resolveNextMandatoryBattleAction`):
+  drive check (vanguard attacker), combat comparison, damage check, battle
+  close. Each runs as a recorded system command and stops as soon as a player
+  must answer something (e.g. a trigger choice).
+- A **rear-guard hit** has no damage check. It is retired to its owner's drop
+  when the battle closes (`battle.completed` reason `rear_guard_retired`,
+  `retiredPieceIds`). The retire goes through zone transfers, so REPLACE
+  abilities apply, and CONT power counts in the combat comparison.
+
 ## 6. Choices and safety
 
 - Answers are checked twice: by the reducer (request type, eligible ids) and by
@@ -258,6 +271,7 @@ Search the deck, then shuffle:
   deck-out loss.
 - A paused script resumes by program counter. A match must keep the same
   script version from start to finish; scripts should be versioned per match.
-- **Engine rules gap, outside scripts:** a rear-guard hit by an attack is not
-  retired by the battle flow today. REPLACE "if retired" works for every path
-  that retires (scripts, declarative effects), but battle hits do not retire yet.
+- The multiplayer match UI still offers no ride / call / attack / boost /
+  ACT buttons (only ready, end turn, concede and answering requests), so a
+  battle cannot be started from the browser yet. The engine and server
+  support these actions; the client controls are missing.

@@ -135,6 +135,7 @@ export {
   MATCH_ROOM_V_PREMIUM_ENGINE_ADAPTER_ID,
   MatchRoomInvariantError,
   abortMatchRoom,
+  advanceMandatoryMatchRoomFlow,
   createMatchRoom,
   createScriptedMatchRoomEngineAdapters,
   defaultMatchRoomEngineAdapters,

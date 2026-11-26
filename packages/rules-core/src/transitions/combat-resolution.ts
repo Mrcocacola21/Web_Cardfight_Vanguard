@@ -250,6 +250,11 @@ export function resolveBattleCombatMath(
     return shield
   }
 
+  // A hit rear-guard is retired at battle close; only vanguard hits deal damage.
+  const targetIsRearGuard =
+    battle.target.kind === 'piece' &&
+    findPieceLocation(stateIndex, battle.target.pieceId)?.zone.kind ===
+      'rear_guard_circle'
   const attackPower = attackerPower.total + boosterPower.total
   const defensePower = defenderPower.total
   const totalDefensePower = defensePower + shield.total
@@ -270,7 +275,8 @@ export function resolveBattleCombatMath(
       shieldPower: shield.total,
       shieldComponents: shield.components,
       totalDefensePower,
-      damageCheckCount: result === 'hit' ? attackerCritical.total : 0,
+      damageCheckCount:
+        result === 'hit' && !targetIsRearGuard ? attackerCritical.total : 0,
       result,
     },
   }
