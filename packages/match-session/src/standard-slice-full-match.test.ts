@@ -193,7 +193,8 @@ describe('Standard vertical-slice full-match integration', () => {
       'effect',
     )
     state = moveTopDeckCardsToDamage(state, PLAYER_1, 1)
-    state = moveTopDeckCardsToDamage(state, PLAYER_2, 4)
+    // 5 damage: one unboosted hit is lethal even without drive triggers.
+    state = moveTopDeckCardsToDamage(state, PLAYER_2, 5)
 
     const orderActivation = expectApplied(
       applyGameAction(state, {
@@ -276,16 +277,15 @@ describe('Standard vertical-slice full-match integration', () => {
     state = passGuard(state)
     state = driveCheck(state)
 
-    const triggerRequest = requireRequest(state, 'trigger.resolve')
+    // The battle-replace ride gives "drive -2": no card is drive checked.
+    expect(state.battle?.lastCheck?.revealedCards).toEqual([])
+    expect(state.pendingRequests).toEqual([])
 
-    expect(triggerRequest.triggerType).toBe('critical')
-
-    state = answerTrigger(state)
     state = resolveCombat(state)
 
     expect(state.battle?.combat).toMatchObject({
       result: 'hit',
-      damageCheckCount: 2,
+      damageCheckCount: 1,
     })
 
     state = damageCheck(state)

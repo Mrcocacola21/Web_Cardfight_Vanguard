@@ -649,7 +649,11 @@ function materializeCard(
     basePower: blueprint.basePower,
     baseCritical: blueprint.baseCritical,
     baseShield: blueprint.baseShield,
-    keywords: [],
+    // Grade 3 units print Twin Drive!!; the engine reads it as a keyword.
+    keywords:
+      blueprint.cardType === 'normal-unit' && blueprint.grade >= 3
+        ? ['twin-drive']
+        : [],
     effectRefs: blueprint.effectRefs,
     collectorNumber: `${String(deck.deckNo).padStart(2, '0')}-${String(ordinal).padStart(3, '0')}`,
     rarity: blueprint.rarity,

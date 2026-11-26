@@ -35,6 +35,7 @@ import {
   type DeclarativeEffectOperation,
   type EffectDefinition,
 } from './effect'
+import { applyRuleDriveModifiers } from './drive-modifiers'
 import { type EffectRegistry } from './registry'
 import { coreEffectRegistry } from './samples'
 
@@ -115,7 +116,11 @@ export function resolveDriveCheckCountEffects(
   }
 
   return {
-    count,
+    count: applyRuleDriveModifiers({
+      state: input.currentState,
+      attackerPieceId: input.battle.attackerPieceId,
+      count,
+    }),
     events,
   }
 }

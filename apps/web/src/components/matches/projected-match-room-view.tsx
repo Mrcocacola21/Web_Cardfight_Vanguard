@@ -33,6 +33,11 @@ import type {
   ProjectedMatchBoardPiece,
   ProjectedMatchBoardZone,
 } from '@/features/matches/play/zone-projection'
+import {
+  buildBoardActionModel,
+  resolveBoardAction,
+  type BoardActionTarget,
+} from '@/features/matches/play/board-actions'
 
 import { AvailableActionsPanel } from './available-actions-panel'
 import { EventLogPanel } from './event-log-panel'
@@ -193,6 +198,56 @@ export function ProjectedMatchRoomView({
 }: ProjectedMatchRoomViewProps) {
   const firstPendingRequest = room.pendingRequests[0]
   const activePlayerLabel = resolvePlayerLabel(room, room.turn.turnPlayerId)
+  // Board play selection, reset whenever the engine state moves on.
+  const [boardSelection, setBoardSelection] = useState<{
+    readonly revision: number
+    readonly pieceId: string | null
+  }>({ revision: room.engineRevision, pieceId: null })
+  const selectedBoardPieceId =
+    boardSelection.revision === room.engineRevision
+      ? boardSelection.pieceId
+      : null
+  const legalActions = room.legalActions ?? []
+  const attackerPieceId = room.battle?.attacker.pieceId as string | undefined
+  const boardModel = buildBoardActionModel({
+    legalActions,
+    board: room.board,
+    ...(attackerPieceId === undefined ? {} : { attackerPieceId }),
+    selectedSourcePieceId: selectedBoardPieceId,
+  })
+  const submitLegalAction = (legalId: string) => {
+    const view = actions.availableActions.find(
+      (candidate) => candidate.id === `legal.${legalId}`,
+    )
+
+    if (view !== undefined && !actionsDisabled) {
+      onSubmitAction?.(view)
+    }
+
+    setBoardSelection({ revision: room.engineRevision, pieceId: null })
+  }
+  const handleBoardTarget = (
+    target: BoardActionTarget,
+    sourcePieceId?: string,
+  ) => {
+    const source = sourcePieceId ?? selectedBoardPieceId
+
+    if (source === null) {
+      return
+    }
+
+    const legal = resolveBoardAction({
+      legalActions,
+      board: room.board,
+      ...(attackerPieceId === undefined ? {} : { attackerPieceId }),
+      sourcePieceId: source,
+      target,
+    })
+
+    if (legal !== undefined) {
+      submitLegalAction(legal.id)
+    }
+  }
   const activeRequestKey = firstPendingRequest?.requestId ?? 'none'
   const [trackedSelection, setTrackedSelection] =
     useState<TrackedRequestSelectionState>(() =>
@@ -302,7 +357,61 @@ export function ProjectedMatchRoomView({
               resolvePlayerLabel={(playerId) =>
                 resolvePlayerLabel(room, playerId)
               }
+              {...(legalActions.length === 0
+                ? {}
+                : {
+                    boardActions: {
+                      model: boardModel,
+                      onSelectSource: (pieceId: string) =>
+                        setBoardSelection((current) => ({
+                          revision: room.engineRevision,
+                          pieceId:
+                            current.revision === room.engineRevision &&
+                            current.pieceId === pieceId
+                              ? null
+                              : pieceId,
+                        })),
+                      onTarget: handleBoardTarget,
+                    },
+                  })}
             />
+
+            {boardModel.selectedActions.length === 0 ? null : (
+              <section
+                aria-label="Selected card actions"
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200/30 bg-sky-400/10 p-3 text-sm text-sky-50"
+              >
+                <span className="mr-1 text-xs text-sky-100/80">
+                  Click a highlighted circle or card, drag the card there, or
+                  pick an action:
+                </span>
+                {boardModel.selectedActions.map((legal) => (
+                  <Button
+                    key={legal.id}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={actionsDisabled || onSubmitAction === undefined}
+                    onClick={() => submitLegalAction(legal.id)}
+                  >
+                    {legal.label}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setBoardSelection({
+                      revision: room.engineRevision,
+                      pieceId: null,
+                    })
+                  }
+                >
+                  Cancel
+                </Button>
+              </section>
+            )}
 
             <section className="grid gap-4 lg:grid-cols-2">
               <RequestChoicePanel

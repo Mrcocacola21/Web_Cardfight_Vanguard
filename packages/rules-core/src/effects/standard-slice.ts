@@ -9,6 +9,7 @@ import type {
 } from '../contracts'
 import type { EffectResolvedEvent, GameEvent } from '../events'
 import { resolveResourceEffectDefinition } from '../resources'
+import { DRIVE_MINUS_TWO_FLAG as DRIVE_MINUS_TWO_FLAG_KEY } from './drive-modifiers'
 import type {
   GamePieceState,
   GamePieceStatusState,
@@ -53,7 +54,8 @@ const STANDARD_FORMAT_ID = 'standard' as FormatId
 const POWER_SMALL = 5000
 const POWER_LARGE = 10000
 const CRITICAL_ONE = 1
-const DRIVE_MINUS_TWO_FLAG = 'standard-slice.drive-minus-two.until-end-of-turn'
+// Read by the drive check count (effects/drive-modifiers.ts).
+const DRIVE_MINUS_TWO_FLAG = DRIVE_MINUS_TWO_FLAG_KEY
 
 export const REGUREGNUS_CALL_OF_DEEP_LANDS_EFFECT_IDENTITY =
   createEffectIdentity('standard-slice', 'reguregnus.call-of-deep-lands')

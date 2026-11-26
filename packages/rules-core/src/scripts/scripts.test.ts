@@ -530,6 +530,43 @@ describe('rear-guard hits', () => {
   })
 })
 
+describe('drive check count', () => {
+  const drivenCards = (state: GameState) =>
+    DECK.length - zonePieceIds(state, zone(P1, 'deck')).length
+
+  it('checks one card without Twin Drive!!', () => {
+    const result = attackWithoutGuard(
+      battleState({ damage: DAMAGE.slice(0, 2) }),
+      FOE_VANGUARD,
+    )
+    expect(drivenCards(result)).toBe(1)
+  })
+
+  it('checks two cards with the twin-drive keyword', () => {
+    const result = attackWithoutGuard(
+      battleState({
+        damage: DAMAGE.slice(0, 2),
+        vanguardKeywords: ['twin-drive'],
+      }),
+      FOE_VANGUARD,
+    )
+    expect(drivenCards(result)).toBe(2)
+  })
+
+  it('applies drive -2 and still finishes the battle with zero checks', () => {
+    const result = attackWithoutGuard(
+      battleState({
+        damage: DAMAGE.slice(0, 2),
+        vanguardKeywords: ['twin-drive'],
+        vanguardFlags: ['standard-slice.drive-minus-two.until-end-of-turn'],
+      }),
+      FOE_VANGUARD,
+    )
+    expect(drivenCards(result)).toBe(0)
+    expect(result.battle).toBeUndefined()
+  })
+})
+
 describe('validation of the extended format', () => {
   it('rejects misuse of CONT, REPLACE, among and subject filters', () => {
     const result = validateCardScript({
@@ -776,6 +813,8 @@ function baseState(
     readonly hand?: readonly (readonly [PieceId, string])[]
     readonly vanguardCard?: string
     readonly foeRearCard?: string
+    readonly vanguardKeywords?: readonly string[]
+    readonly vanguardFlags?: readonly string[]
   } = {},
 ): GameState {
   const damage = options.damage ?? DAMAGE
@@ -876,6 +915,9 @@ function baseState(
         cardDefinitionId: cardId as CardId,
         ownerPlayerId: owner,
         controllerPlayerId: owner,
+        ...(pieceId === SOVEREIGN && options.vanguardKeywords !== undefined
+          ? { keywords: options.vanguardKeywords as never }
+          : {}),
       })),
     cardStats: buildEngineCardStatsSnapshot(
       Array.from(grades, ([cardId, grade]) => ({
@@ -889,7 +931,16 @@ function baseState(
         keywords: [],
       })),
     ),
-    pieceStates: [],
+    pieceStates:
+      options.vanguardFlags === undefined
+        ? []
+        : [
+            {
+              pieceId: SOVEREIGN,
+              orientation: 'stand',
+              flags: options.vanguardFlags as never,
+            },
+          ],
     flags: [],
     pendingRequests: [],
   }

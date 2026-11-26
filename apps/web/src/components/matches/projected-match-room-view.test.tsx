@@ -17,6 +17,7 @@ import {
   type MatchRoomWithEngineState,
 } from '@web-vg/match-session'
 import type {
+  ActionId,
   BattleId,
   GameState,
   RequestId,
@@ -36,6 +37,7 @@ import {
   createStartMatchCommand,
 } from '@/features/matches/play/local-match-room'
 import {
+  buildProjectedMatchBrowserCommandActions,
   buildProjectedMatchRoomClientState,
   createProjectedMatchActionsProjection,
 } from '@/features/matches/play/projected-client-state'
@@ -239,6 +241,164 @@ describe('ProjectedMatchRoomView', () => {
         }) as unknown,
       }),
     ])
+  })
+
+  it('plays a card by clicking it and then a highlighted circle, submitting the server command', () => {
+    const base = createProjectedClientRoom()
+    const ownZones = base.board.currentSide?.zones ?? []
+    const source = ownZones
+      .flatMap((zone) => zone.pieces)
+      .find(
+        (piece) =>
+          piece.pieceId !== undefined && piece.visibility === 'visible',
+      )
+    const rearGuard = ownZones.find((zone) => zone.kind === 'rear_guard_circle')
+    const openSlot = rearGuard?.slotIds.find(
+      (slotId) => !rearGuard.pieces.some((piece) => piece.slotId === slotId),
+    )
+
+    if (source?.pieceId === undefined || openSlot === undefined) {
+      throw new Error('Fixture needs a visible own card and an open circle.')
+    }
+
+    const callCommand = {
+      kind: 'action' as const,
+      submission: {
+        expectedRevision: base.engineRevision,
+        action: {
+          actionId: 'legal:call' as ActionId,
+          type: 'card.call' as const,
+          actor: {
+            kind: 'player' as const,
+            playerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          },
+          pieceId: source.pieceId,
+          from: { zoneId: 'hand' as ZoneId },
+          to: { zoneId: rearGuard!.zoneId, slotId: openSlot },
+        },
+      },
+    }
+    const room = {
+      ...base,
+      pendingRequests: [],
+      legalActions: [
+        {
+          id: 'call:test',
+          kind: 'call' as const,
+          label: 'Call test card',
+          pieceId: source.pieceId,
+          slotId: openSlot,
+          command: callCommand,
+        },
+      ],
+    }
+    const submitted: unknown[] = []
+
+    const { container } = render(
+      <ProjectedMatchRoomView
+        room={room}
+        actions={createProjectedMatchActionsProjection(
+          room,
+          buildProjectedMatchBrowserCommandActions(room),
+        )}
+        onSubmitAction={(action) => submitted.push(action.command?.payload)}
+      />,
+    )
+
+    const sourceButton = container.querySelector('[data-board-action="source"]')
+
+    expect(sourceButton).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Call here' })).toBeNull()
+
+    fireEvent.click(sourceButton!)
+
+    // The selected card's actions are listed, and the open circle lights up.
+    expect(
+      screen.getByRole('region', { name: 'Selected card actions' }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Call here' }))
+
+    expect(submitted).toEqual([callCommand])
+  })
+
+  it('plays a card by dragging it onto an open circle', () => {
+    const base = createProjectedClientRoom()
+    const ownZones = base.board.currentSide?.zones ?? []
+    const source = ownZones
+      .flatMap((zone) => zone.pieces)
+      .find(
+        (piece) =>
+          piece.pieceId !== undefined && piece.visibility === 'visible',
+      )
+    const rearGuard = ownZones.find((zone) => zone.kind === 'rear_guard_circle')
+    const openSlot = rearGuard?.slotIds.find(
+      (slotId) => !rearGuard.pieces.some((piece) => piece.slotId === slotId),
+    )
+
+    if (source?.pieceId === undefined || openSlot === undefined) {
+      throw new Error('Fixture needs a visible own card and an open circle.')
+    }
+
+    const callCommand = {
+      kind: 'action' as const,
+      submission: {
+        expectedRevision: base.engineRevision,
+        action: {
+          actionId: 'legal:call-drag' as ActionId,
+          type: 'card.call' as const,
+          actor: {
+            kind: 'player' as const,
+            playerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          },
+          pieceId: source.pieceId,
+          from: { zoneId: 'hand' as ZoneId },
+          to: { zoneId: rearGuard!.zoneId, slotId: openSlot },
+        },
+      },
+    }
+    const room = {
+      ...base,
+      pendingRequests: [],
+      legalActions: [
+        {
+          id: 'call:drag',
+          kind: 'call' as const,
+          label: 'Call test card',
+          pieceId: source.pieceId,
+          slotId: openSlot,
+          command: callCommand,
+        },
+      ],
+    }
+    const submitted: unknown[] = []
+    const { container } = render(
+      <ProjectedMatchRoomView
+        room={room}
+        actions={createProjectedMatchActionsProjection(
+          room,
+          buildProjectedMatchBrowserCommandActions(room),
+        )}
+        onSubmitAction={(action) => submitted.push(action.command?.payload)}
+      />,
+    )
+    const store = new Map<string, string>()
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? '',
+      effectAllowed: 'none',
+    }
+
+    fireEvent.dragStart(
+      container.querySelector('[data-board-action="source"]')!,
+      {
+        dataTransfer,
+      },
+    )
+    fireEvent.drop(container.querySelector(`[data-slot-id="${openSlot}"]`)!, {
+      dataTransfer,
+    })
+
+    expect(submitted).toEqual([callCommand])
   })
 
   it('renders battle context as a visible sequence instead of only log entries', () => {

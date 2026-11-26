@@ -198,13 +198,22 @@ export function applyDriveCheckTransition(
     )
   }
 
-  const drawResult = drawTopPiecesBetweenZones(
-    currentState,
-    action.fromZoneId,
-    action.toZoneId,
-    effectResolution.count,
-    'drive_check',
-  )
+  // Drive -N can bring the check to zero: the step happens, no card moves.
+  const drawResult =
+    effectResolution.count === 0
+      ? {
+          ok: true as const,
+          zones: currentState.zones,
+          pieceStates: currentState.pieceStates,
+          movedPieces: [],
+        }
+      : drawTopPiecesBetweenZones(
+          currentState,
+          action.fromZoneId,
+          action.toZoneId,
+          effectResolution.count,
+          'drive_check',
+        )
 
   if (!drawResult.ok) {
     return createInvalidTransitionResult(
