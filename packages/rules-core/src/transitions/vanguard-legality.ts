@@ -150,15 +150,10 @@ export function resolveFirstTurnAttackLegality(input: {
   readonly currentState: GameState
   readonly actionType: string
 }): VanguardLegalityResult {
-  if (input.currentState.turn.turnNumber < 1) {
-    return {
-      ok: false,
-      code: 'invalid_action_reference',
-      message: `Action ${input.actionType} requires a positive turn number before attack legality can be resolved.`,
-    }
-  }
-
-  if (input.currentState.turn.turnNumber === 1) {
+  // match.start opens turn 0, and the first player plays that turn in full
+  // (stand, draw, ride, main, battle). Turn 0 is therefore the first player's
+  // first turn; the second player's first turn (turn 1) may attack.
+  if (input.currentState.turn.turnNumber <= 0) {
     return {
       ok: false,
       code: VANGUARD_LEGALITY_CODES.attackFirstTurnRestricted,

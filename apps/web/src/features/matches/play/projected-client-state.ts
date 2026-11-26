@@ -287,7 +287,9 @@ export function buildProjectedMatchBrowserCommandActions(
     pendingRequest === undefined &&
     state.gameStatus === 'in_progress' &&
     state.turn.turnPlayerId === viewerPlayerId &&
-    state.battle === undefined
+    state.battle === undefined &&
+    // The engine ends a turn only from the end phase.
+    state.turn.phase === 'end'
   ) {
     actions.push(
       createAvailableCommandAction({
