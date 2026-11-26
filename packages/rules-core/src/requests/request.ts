@@ -47,6 +47,8 @@ interface GameChoiceRequestBase<TType extends GameChoiceRequestType> {
   readonly purpose: RequestPurpose
   readonly visibility: RequestVisibility
   readonly allowPass?: boolean
+  /** Player-facing text explaining the choice (e.g. the ability text). */
+  readonly prompt?: string
   readonly context?: RequestContext
 }
 
@@ -65,6 +67,8 @@ export interface ZoneChoiceOption {
 export interface ChoiceOptionDefinition {
   readonly optionId: RequestOptionId
   readonly key: RequestOptionKey
+  /** Player-facing label; clients fall back to the key. */
+  readonly label?: string
 }
 
 export interface ChoosePiecesRequest extends SelectionChoiceRequestBase<'choose.pieces'> {

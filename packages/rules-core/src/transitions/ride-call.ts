@@ -333,7 +333,12 @@ export function applyCallCardTransition(
     },
   ]
 
-  return createTransitionResult(transitionId, nextState, events)
+  return createTransitionResult(transitionId, nextState, events, {
+    timingWindows: createTransitionTimingWindowTriplet('card.call', {
+      relatedEventSequence: 1,
+      pieceId: action.pieceId,
+    }),
+  })
 }
 
 function preparePlayerBoardCardAction<

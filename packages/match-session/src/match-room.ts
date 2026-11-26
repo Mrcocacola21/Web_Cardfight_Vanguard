@@ -19,6 +19,7 @@ import type {
   GameState,
   InvalidEngineDispatchResult,
   PlayerId,
+  RuntimeTransitionOptions,
 } from '@web-vg/rules-core'
 import type { Brand, DeckId, FormatId, UserId } from '@web-vg/shared'
 
@@ -283,6 +284,46 @@ export const defaultMatchRoomEngineAdapters: readonly MatchRoomEngineAdapter[] =
       },
     },
   ]
+
+/** What a match needs from a card script runtime (`createCardScriptRuntime`). */
+export interface MatchRoomScriptRuntime {
+  readonly transitionOptions: RuntimeTransitionOptions
+  bindCardScripts(state: GameState): GameState
+}
+
+/**
+ * The default adapters (same ids, so existing rooms keep resolving) with card
+ * scripts loaded: every command binds scripted abilities to the room's cards
+ * and runs with the script runtime's AUTO / ACT / CONT environments.
+ */
+export function createScriptedMatchRoomEngineAdapters(
+  runtime: MatchRoomScriptRuntime,
+  baseAdapters: readonly MatchRoomEngineAdapter[] = defaultMatchRoomEngineAdapters,
+): readonly MatchRoomEngineAdapter[] {
+  const formatAdapters = new Map([
+    [STANDARD_FORMAT_ID, standardFormatAdapter],
+    [V_PREMIUM_FORMAT_ID, vPremiumFormatAdapter],
+    [PREMIUM_FORMAT_ID, premiumFormatAdapter],
+  ] as const)
+
+  return baseAdapters.map((adapter) => {
+    const formatAdapter = formatAdapters.get(adapter.formatId)
+
+    return formatAdapter === undefined
+      ? adapter
+      : {
+          adapterId: adapter.adapterId,
+          formatId: adapter.formatId,
+          dispatch(currentState, command) {
+            return formatAdapter.dispatch(
+              runtime.bindCardScripts(currentState),
+              command,
+              runtime.transitionOptions,
+            )
+          },
+        }
+  })
+}
 
 export function resolveDefaultMatchRoomEngineAdapterId(
   formatId: FormatId,

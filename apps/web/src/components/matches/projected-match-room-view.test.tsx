@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -10,7 +16,14 @@ import {
   type MatchRoomCommandSubmission,
   type MatchRoomWithEngineState,
 } from '@web-vg/match-session'
-import type { BattleId, GameState } from '@web-vg/rules-core'
+import type {
+  BattleId,
+  GameState,
+  RequestId,
+  RequestOptionId,
+  ZoneId,
+  ZoneSlotId,
+} from '@web-vg/rules-core'
 
 import {
   LOCAL_MATCH_PARTICIPANT_ONE_ID,
@@ -117,6 +130,115 @@ describe('ProjectedMatchRoomView', () => {
     expect(
       container.querySelectorAll('[data-target-state="unavailable"]').length,
     ).toBeGreaterThan(0)
+  })
+
+  it('shows card-script prompts and option labels, and answers with the chosen option', () => {
+    const base = createProjectedClientRoom()
+    const submitted: unknown[] = []
+    const room = {
+      ...base,
+      pendingRequests: [
+        {
+          requestId: 'request-script-mode' as RequestId,
+          type: 'choose.option' as const,
+          responderPlayerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          purpose: 'effect',
+          visibility: 'public',
+          visibilityToViewer: 'full' as const,
+          minSelections: 1,
+          maxSelections: 1,
+          prompt: '[AUTO](VC): When this unit attacks, choose one.',
+          options: [
+            {
+              optionId: 'option:power' as RequestOptionId,
+              key: 'power',
+              label: '+10000 power',
+            },
+            {
+              optionId: 'option:retire' as RequestOptionId,
+              key: 'retire',
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <ProjectedMatchRoomView
+        room={room}
+        actions={createProjectedMatchActionsProjection(room)}
+        onSubmitChoiceResponse={(submission) => submitted.push(submission)}
+      />,
+    )
+
+    expect(
+      screen.getByText('[AUTO](VC): When this unit attacks, choose one.'),
+    ).toBeVisible()
+    // Label when given, key as a fallback.
+    fireEvent.click(screen.getByRole('button', { name: '+10000 power' }))
+    expect(screen.getByRole('button', { name: /retire/i })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm choice' }))
+
+    expect(submitted).toEqual([
+      expect.objectContaining({
+        response: expect.objectContaining({
+          type: 'answer.option',
+          selectedOptionIds: ['option:power'],
+        }) as unknown,
+      }),
+    ])
+  })
+
+  it('offers one button per open circle and answers with the slot', () => {
+    const base = createProjectedClientRoom()
+    const submitted: unknown[] = []
+    const room = {
+      ...base,
+      pendingRequests: [
+        {
+          requestId: 'request-script-circle' as RequestId,
+          type: 'choose.zone' as const,
+          responderPlayerId: LOCAL_MATCH_PLAYER_ONE_ID,
+          purpose: 'effect',
+          visibility: 'public',
+          visibilityToViewer: 'full' as const,
+          minSelections: 1,
+          maxSelections: 1,
+          prompt: 'Choose a rear-guard circle for the called card.',
+          eligibleZones: [
+            {
+              zoneId: 'p1-rear' as ZoneId,
+              availableSlotIds: [
+                'p1-rc-back-left' as ZoneSlotId,
+                'p1-rc-back-right' as ZoneSlotId,
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <ProjectedMatchRoomView
+        room={room}
+        actions={createProjectedMatchActionsProjection(room)}
+        onSubmitChoiceResponse={(submission) => submitted.push(submission)}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back right' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm choice' }))
+
+    expect(submitted).toEqual([
+      expect.objectContaining({
+        response: expect.objectContaining({
+          type: 'answer.zone',
+          selectedLocations: [
+            { zoneId: 'p1-rear', slotId: 'p1-rc-back-right' },
+          ],
+        }) as unknown,
+      }),
+    ])
   })
 
   it('renders battle context as a visible sequence instead of only log entries', () => {

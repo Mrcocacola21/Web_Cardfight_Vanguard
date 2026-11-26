@@ -39,8 +39,9 @@ export type ZoneTransferSequenceResult =
 
 export function resolveZoneTransfer(
   currentState: GameState,
-  transfer: ZoneTransferIntent,
+  requestedTransfer: ZoneTransferIntent,
 ): ZoneTransferResult {
+  const transfer = applyReplacementEffects(currentState, requestedTransfer)
   const relocation = relocatePieceBetweenZones(
     currentState,
     transfer.pieceId,
@@ -88,6 +89,57 @@ export function resolveZoneTransfer(
       reason: transfer.reason,
     },
     flagLifecycle,
+  }
+}
+
+/**
+ * Replacement effects bound to the moving card (`GamePieceState.replacements`)
+ * redirect the transfer before it happens: e.g. "if this unit would be
+ * retired, put it into your soul instead". The reason becomes
+ * `replaced:<original reason>` so retire-watchers do not fire.
+ */
+function applyReplacementEffects(
+  state: GameState,
+  transfer: ZoneTransferIntent,
+): ZoneTransferIntent {
+  const piece = state.pieces.find(
+    (candidate) => candidate.pieceId === transfer.pieceId,
+  )
+
+  if (piece?.replacements === undefined || transfer.reason !== 'retire') {
+    return transfer
+  }
+
+  const fromZone = state.zones.find(
+    (zone) => zone.zoneId === transfer.from.zoneId,
+  )
+  const rule = piece.replacements.find(
+    (candidate) =>
+      candidate.replaces === 'retire' &&
+      (candidate.whileInZoneKinds === undefined ||
+        (fromZone !== undefined &&
+          candidate.whileInZoneKinds.includes(fromZone.kind))),
+  )
+  const ownerId = piece.ownerPlayerId
+  const destination =
+    rule === undefined || ownerId === undefined
+      ? undefined
+      : state.zones.find(
+          (zone) =>
+            zone.ownerPlayerId === ownerId && zone.kind === rule.toZoneKind,
+        )
+
+  if (rule === undefined || destination === undefined) {
+    return transfer
+  }
+
+  return {
+    ...transfer,
+    to:
+      rule.toPosition === 'top'
+        ? { zoneId: destination.zoneId, position: 0 }
+        : { zoneId: destination.zoneId },
+    reason: `replaced:${transfer.reason}`,
   }
 }
 

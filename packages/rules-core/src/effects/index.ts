@@ -167,6 +167,8 @@ export type { EffectRegistryLookupContext } from './registry'
 export type {
   EffectHandler,
   EffectHandlerInput,
+  EffectHandlerResumeInput,
+  EffectHandlerResumeResult,
   EffectHandlerResult,
 } from './handler-registry'
 export type {

@@ -9,6 +9,7 @@ import {
   type BlockedTransitionCode,
   type GameChoiceResponseSubmission,
   type InvalidTransitionCode,
+  type RuntimeTransitionOptions,
   type TransitionTimingWindow,
   type TransitionResult,
 } from '../transitions'
@@ -68,11 +69,12 @@ export interface RulesEngineBoundary {
 export function dispatchEngineCommand(
   currentState: GameState,
   command: EngineCommand,
+  options: RuntimeTransitionOptions = {},
 ): EngineDispatchResult {
   return createEngineDispatchResult(
     command.kind === 'action'
-      ? applyGameAction(currentState, command.submission)
-      : applyGameChoiceResponse(currentState, command.submission),
+      ? applyGameAction(currentState, command.submission, options)
+      : applyGameChoiceResponse(currentState, command.submission, options),
   )
 }
 

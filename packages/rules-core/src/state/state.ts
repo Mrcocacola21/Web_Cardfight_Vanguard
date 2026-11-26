@@ -12,7 +12,9 @@ import type {
   ZoneId,
   ZoneSlotId,
 } from '../contracts'
+import type { GameEvent } from '../events'
 import type { GameChoiceRequest } from '../requests'
+import type { TransitionTimingWindow } from '../transitions/transition'
 import type { AttackTarget } from '../references'
 import type { EngineCardStatsSnapshot } from '../cards/card-stats-contract'
 
@@ -122,6 +124,19 @@ export interface ZoneState {
   readonly occupants: readonly ZoneOccupantState[]
 }
 
+/**
+ * A replacement effect bound to a card instance: when the card would undergo
+ * `replaces`, it goes to its owner's `toZoneKind` instead. Applied by zone
+ * transfers, so it works for every rules path that retires the card.
+ */
+export interface PieceReplacementRule {
+  readonly replaces: 'retire'
+  readonly toZoneKind: ZoneKind
+  readonly toPosition?: 'top'
+  /** Only while the card is in one of these zones (e.g. rear-guard circle). */
+  readonly whileInZoneKinds?: readonly ZoneKind[]
+}
+
 export interface GamePieceState {
   readonly pieceId: PieceId
   readonly kind: GamePieceKind
@@ -130,6 +145,7 @@ export interface GamePieceState {
   readonly keywords?: readonly Keyword[]
   readonly ownerPlayerId?: PlayerId
   readonly controllerPlayerId?: PlayerId
+  readonly replacements?: readonly PieceReplacementRule[]
 }
 
 export interface GamePieceStatusState {
@@ -138,6 +154,9 @@ export interface GamePieceStatusState {
   readonly flags: readonly GamePieceFlagKey[]
   readonly powerModifier?: number
   readonly criticalModifier?: number
+  /** From CONT abilities; recomputed after every transition, never cleared by turn end. */
+  readonly continuousPowerModifier?: number
+  readonly continuousCriticalModifier?: number
 }
 
 export interface RevealedCheckCardState {
@@ -252,6 +271,32 @@ export interface EffectContinuationState {
   readonly actorPlayerId: PlayerId
   readonly operationIndex: number
   readonly operationKinds: readonly string[]
+  /** Present when the paused effect is a card script (`vg-card-script/1`). */
+  readonly script?: ScriptContinuationState
+}
+
+/**
+ * JSON-serializable position of a paused card script: the program counter,
+ * the pieces chosen so far, and step-local progress (e.g. multi-card calls).
+ */
+export interface ScriptContinuationState {
+  readonly handlerKey: string
+  readonly pc: number
+  readonly vars: Readonly<Record<string, readonly PieceId[]>>
+  readonly frame?: Readonly<Record<string, number>>
+  readonly triggerEventSequence?: number
+}
+
+/**
+ * An AUTO ability that was triggered but has not resolved yet because an
+ * earlier ability paused for a player choice. JSON-serializable.
+ */
+export interface PendingTriggerState {
+  readonly effectDefinitionId: EffectDefinitionId
+  readonly sourceKind: 'direct' | 'keyword'
+  readonly sourcePieceId?: PieceId
+  readonly triggerEvent: GameEvent
+  readonly timingWindow: TransitionTimingWindow
 }
 
 export interface GameState {
@@ -268,6 +313,8 @@ export interface GameState {
   readonly flags: readonly GameFlagState[]
   readonly battle?: BattleState
   readonly effectContinuations?: readonly EffectContinuationState[]
+  /** Triggered AUTO abilities waiting for the current choice to finish. */
+  readonly pendingTriggers?: readonly PendingTriggerState[]
   /**
    * Ordered FIFO queue of pending choice requests.
    *

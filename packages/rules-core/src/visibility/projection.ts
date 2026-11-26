@@ -157,6 +157,7 @@ export interface VisibleGameChoiceRequestBase {
 export interface VisibleFullGameChoiceRequest extends VisibleGameChoiceRequestBase {
   readonly visibilityToViewer: 'full'
   readonly allowPass?: boolean
+  readonly prompt?: string
   readonly minSelections?: number
   readonly maxSelections?: number
   readonly eligiblePieces?: readonly VisiblePieceReference[]
@@ -472,13 +473,32 @@ function createVisiblePiece(input: {
       ? {}
       : { orientation: input.pieceStatus.orientation }),
     flags: input.pieceStatus?.flags ?? [],
-    ...(input.pieceStatus?.powerModifier === undefined
-      ? {}
-      : { powerModifier: input.pieceStatus.powerModifier }),
-    ...(input.pieceStatus?.criticalModifier === undefined
-      ? {}
-      : { criticalModifier: input.pieceStatus.criticalModifier }),
+    // Clients see one number: temporary + continuous (CONT) modifiers.
+    ...sumModifier(
+      'powerModifier',
+      input.pieceStatus?.powerModifier,
+      input.pieceStatus?.continuousPowerModifier,
+    ),
+    ...sumModifier(
+      'criticalModifier',
+      input.pieceStatus?.criticalModifier,
+      input.pieceStatus?.continuousCriticalModifier,
+    ),
   }
+}
+
+function sumModifier<TKey extends 'powerModifier' | 'criticalModifier'>(
+  key: TKey,
+  temporary: number | undefined,
+  continuous: number | undefined,
+): Partial<Record<TKey, number>> {
+  if (temporary === undefined && continuous === undefined) {
+    return {}
+  }
+
+  return { [key]: (temporary ?? 0) + (continuous ?? 0) } as Partial<
+    Record<TKey, number>
+  >
 }
 
 function projectBattleState(
@@ -562,6 +582,7 @@ function projectChoiceRequest(
       ...(request.allowPass === undefined
         ? {}
         : { allowPass: request.allowPass }),
+      ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
       ...projectFullChoiceRequestDetails(request, pieceProjectionByCanonicalId),
     }
   }

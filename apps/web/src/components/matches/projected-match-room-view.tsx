@@ -12,6 +12,7 @@ import type {
   VisibleFullGameChoiceRequest,
   VisibleGameState,
   ZoneId,
+  ZoneSlotId,
 } from '@web-vg/rules-core'
 
 import { Badge } from '@/components/ui/badge'
@@ -730,6 +731,11 @@ function RequestChoicePanel({
           </p>
         ) : (
           <>
+            {request.prompt === undefined ? null : (
+              <p className="rounded-xl border border-white/10 bg-black/25 p-3 text-slate-200">
+                {request.prompt}
+              </p>
+            )}
             <RequestOptionControls
               request={request}
               selection={selection}
@@ -886,7 +892,7 @@ function RequestOptionControls({
                 )
               }
             >
-              {formatStatusLabel(option.key)}
+              {option.label ?? formatStatusLabel(option.key)}
             </Button>
           ))}
         </div>
@@ -894,22 +900,34 @@ function RequestOptionControls({
       {request.eligibleZones === undefined ||
       request.eligibleZones.length === 0 ? null : (
         <div className="flex flex-wrap gap-2">
-          {request.eligibleZones.map((zone) => (
-            <Button
-              key={zone.zoneId}
-              type="button"
-              variant={
-                selection.zoneIds.includes(zone.zoneId) ? 'default' : 'outline'
-              }
-              onClick={() =>
-                onSelectionChange(
-                  toggleZoneSelectionById(selection, request, zone.zoneId),
-                )
-              }
-            >
-              {zone.zoneId}
-            </Button>
-          ))}
+          {request.eligibleZones
+            .flatMap((zone) =>
+              zone.availableSlotIds === undefined ||
+              zone.availableSlotIds.length === 0
+                ? [{ value: zone.zoneId, label: zone.zoneId }]
+                : zone.availableSlotIds.map((slotId) => ({
+                    value: encodeZoneSlotSelection(zone.zoneId, slotId),
+                    label: formatSlotLabel(slotId),
+                  })),
+            )
+            .map((choice) => (
+              <Button
+                key={choice.value}
+                type="button"
+                variant={
+                  selection.zoneIds.includes(choice.value)
+                    ? 'default'
+                    : 'outline'
+                }
+                onClick={() =>
+                  onSelectionChange(
+                    toggleZoneSelectionById(selection, request, choice.value),
+                  )
+                }
+              >
+                {choice.label}
+              </Button>
+            ))}
         </div>
       )}
       {playerTargets.length === 0 ? null : (
@@ -1177,9 +1195,7 @@ function createChoiceSubmission(
       })
     }
     case 'choose.zone': {
-      const selectedLocations = selection.zoneIds.map((zoneId) => ({
-        zoneId: zoneId as ZoneId,
-      }))
+      const selectedLocations = selection.zoneIds.map(decodeZoneSlotSelection)
       const countCheck = validateSelectionCount(selectedLocations.length, range)
 
       if (countCheck !== null) {
@@ -1351,6 +1367,32 @@ function toggleZoneSelection(
   }
 
   return toggleZoneSelectionById(current, request, zone.zoneId)
+}
+
+const ZONE_SLOT_SEPARATOR = '#slot:'
+
+/** Zone choices that name a circle carry the slot in the selection value. */
+function encodeZoneSlotSelection(zoneId: string, slotId: string): string {
+  return `${zoneId}${ZONE_SLOT_SEPARATOR}${slotId}`
+}
+
+function decodeZoneSlotSelection(value: string): {
+  readonly zoneId: ZoneId
+  readonly slotId?: ZoneSlotId
+} {
+  const index = value.indexOf(ZONE_SLOT_SEPARATOR)
+
+  return index < 0
+    ? { zoneId: value as ZoneId }
+    : {
+        zoneId: value.slice(0, index) as ZoneId,
+        slotId: value.slice(index + ZONE_SLOT_SEPARATOR.length) as ZoneSlotId,
+      }
+}
+
+function formatSlotLabel(slotId: string): string {
+  const parts = slotId.split(/[-_:.]/).filter((part) => part.length > 0)
+  return formatStatusLabel(parts.slice(-2).join(' ') || slotId)
 }
 
 function toggleZoneSelectionById(

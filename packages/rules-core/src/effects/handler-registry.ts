@@ -1,7 +1,8 @@
 import type { TransitionId } from '../contracts'
 import { assertRulesInvariant } from '../errors'
 import type { GameEvent } from '../events'
-import type { GameState } from '../state'
+import type { GameChoiceRequest, GameChoiceResponse } from '../requests'
+import type { EffectContinuationState, GameState } from '../state'
 import type { TransitionTimingWindow } from '../transitions'
 
 import type { EffectDefinition, EffectHandlerKey } from './effect'
@@ -28,9 +29,33 @@ export interface EffectHandlerInput {
   readonly startingTimingWindowSequence: number
 }
 
+export interface EffectHandlerResumeInput {
+  readonly currentState: GameState
+  readonly continuation: EffectContinuationState
+  readonly request: GameChoiceRequest
+  readonly response: GameChoiceResponse
+  readonly transitionId: TransitionId
+  readonly startingSequence: number
+  readonly startingTimingWindowSequence: number
+}
+
+export type EffectHandlerResumeResult =
+  | EffectHandlerResult
+  | {
+      readonly ok: false
+      readonly code: 'invalid_response'
+      readonly message: string
+    }
+
 export interface EffectHandler {
   readonly key: EffectHandlerKey
   resolve(input: EffectHandlerInput): EffectHandlerResult
+  /**
+   * Optional: continue an effect this handler paused with a choice request.
+   * Handlers that pause store an `EffectContinuationState` whose
+   * `script.handlerKey` names them.
+   */
+  resume?(input: EffectHandlerResumeInput): EffectHandlerResumeResult
 }
 
 export class EffectHandlerRegistry {

@@ -15,6 +15,7 @@ import {
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { getCurrentAuthState } from '@/features/auth/server/auth-session'
+import { matchEngineAdapters } from '@/features/matches/engine/match-engine'
 import { getSupabaseServiceRoleEnv } from '@/lib/supabase/config'
 import { createSupabaseRouteHandlerClient } from '@/lib/supabase/route-handler'
 
@@ -281,7 +282,10 @@ async function resolveRealtimeRouteContext(
     context: {
       roomId: roomIdResult.roomId,
       participantId: participant.participantId,
-      transport: createServerRouteRealtimeTransport({ sessions }),
+      transport: createServerRouteRealtimeTransport({
+        sessions,
+        engineAdapters: matchEngineAdapters,
+      }),
       applyResponseCookies,
     },
   }

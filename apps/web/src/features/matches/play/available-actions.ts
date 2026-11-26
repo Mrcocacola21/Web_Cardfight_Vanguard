@@ -6,6 +6,8 @@ import type {
   MatchRoomWithEngineState,
 } from '@web-vg/match-session'
 
+import { matchEngineAdapters } from '@/features/matches/engine/match-engine'
+
 import {
   LOCAL_MATCH_PLAYER_ONE_ID,
   LOCAL_MATCH_PLAYER_TWO_ID,
@@ -280,6 +282,7 @@ function projectCandidate(
     room,
     probeSubmission,
     {
+      engineAdapters: matchEngineAdapters,
       submittedAt: AVAILABILITY_PROBE_SUBMITTED_AT,
     },
   )
