@@ -19,6 +19,7 @@ import {
 } from '@/features/matches/play/projected-client-state'
 import { getSupabaseServiceRoleEnv } from '@/lib/supabase/config'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { matchEngineAdapters } from '@/features/matches/engine/match-engine'
 
 export type ProjectedPersistedMatchRoomPageState =
   | {
@@ -144,6 +145,7 @@ export async function getProjectedPersistedMatchRoomPageState(input: {
     {
       events: extractAcceptedEngineEvents(loaded.data.document.history),
       serverNow: new Date().toISOString(),
+      engineAdapters: matchEngineAdapters,
     },
   )
 

@@ -1,4 +1,5 @@
 import type {
+  ParticipantLegalAction,
   ProjectedMatchRoomForParticipant,
   RealtimeProjectedStatePush,
 } from '@web-vg/match-session'
@@ -25,6 +26,7 @@ export type MatchClientActionGroup =
   | 'setup'
   | 'turn_flow'
   | 'board'
+  | 'battle'
   | 'match'
 
 export type MatchClientActionStatus = 'available' | 'blocked' | 'unavailable'
@@ -98,6 +100,8 @@ export interface ProjectedMatchRoomClientState {
   readonly pendingRequests: readonly VisibleGameChoiceRequest[]
   readonly eventLogEntries: readonly ProjectedMatchEventLogEntry[]
   readonly acceptedHistoryEntryIds: readonly string[]
+  /** Server-checked actions for the viewer (ride, call, attack, guard…). */
+  readonly legalActions: readonly ParticipantLegalAction[]
 }
 
 export type ProjectedMatchRoomClientStateIssueCode =
@@ -199,6 +203,7 @@ export function buildProjectedMatchRoomClientState(input: {
           resolveProjectedPlayerLabel(projection, playerId),
       }),
       acceptedHistoryEntryIds: input.acceptedHistoryEntryIds ?? [],
+      legalActions: projection.legalActions ?? [],
     },
   }
 }
@@ -274,10 +279,15 @@ export function buildProjectedMatchBrowserCommandActions(
     )
   }
 
+  for (const legal of state.legalActions) {
+    actions.push(createLegalCommandAction(state, legal))
+  }
+
   if (
     pendingRequest === undefined &&
     state.gameStatus === 'in_progress' &&
-    state.turn.turnPlayerId === viewerPlayerId
+    state.turn.turnPlayerId === viewerPlayerId &&
+    state.battle === undefined
   ) {
     actions.push(
       createAvailableCommandAction({
@@ -518,6 +528,63 @@ function createUnavailableAction(input: {
       eventTypes: [],
       blockingRequestIds: [],
     },
+  }
+}
+
+const LEGAL_ACTION_GROUPS: Readonly<
+  Record<ParticipantLegalAction['kind'], MatchClientActionGroup>
+> = {
+  ride: 'board',
+  call: 'board',
+  play: 'board',
+  activate: 'board',
+  attack: 'battle',
+  boost: 'battle',
+  guard_step: 'battle',
+  end_phase: 'turn_flow',
+}
+
+const LEGAL_ACTION_DESCRIPTIONS: Readonly<
+  Record<ParticipantLegalAction['kind'], string>
+> = {
+  ride: 'Ride this card onto your vanguard circle.',
+  call: 'Call this card to the named rear-guard circle.',
+  play: 'Play this order card.',
+  activate: "Use this card's [ACT] ability.",
+  attack: 'Declare this attack.',
+  boost: 'Boost the attacking unit.',
+  guard_step: 'Choose guardians for this attack, or pass.',
+  end_phase: 'Move to the next phase of your turn.',
+}
+
+const LEGAL_ACTION_ZONES: Readonly<
+  Record<ParticipantLegalAction['kind'], readonly string[]>
+> = {
+  ride: ['ride_deck', 'hand', 'vanguard_circle'],
+  call: ['hand', 'rear_guard_circle'],
+  play: ['hand', 'order_zone'],
+  activate: [],
+  attack: ['vanguard_circle', 'rear_guard_circle'],
+  boost: ['rear_guard_circle'],
+  guard_step: ['hand', 'guardian_circle'],
+  end_phase: [],
+}
+
+/** The engine already accepted this command on the server; submit it as-is. */
+function createLegalCommandAction(
+  state: ProjectedMatchRoomClientState,
+  legal: ParticipantLegalAction,
+): MatchClientActionView {
+  return {
+    id: `legal.${legal.id}`,
+    label: legal.label,
+    description: LEGAL_ACTION_DESCRIPTIONS[legal.kind],
+    group: LEGAL_ACTION_GROUPS[legal.kind],
+    relatedPlayerId: state.viewer.playerId,
+    relatedZoneKinds: LEGAL_ACTION_ZONES[legal.kind],
+    status: 'available',
+    preview: createAvailablePreview(),
+    command: { payload: legal.command },
   }
 }
 

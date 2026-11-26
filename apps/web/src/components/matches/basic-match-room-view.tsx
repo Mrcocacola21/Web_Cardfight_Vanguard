@@ -69,6 +69,7 @@ function BasicMatchRoomSession({ roomId }: BasicMatchRoomViewProps) {
     const projection = matchSession.projectMatchRoomForParticipant(
       room,
       LOCAL_MATCH_PARTICIPANT_ONE_ID,
+      { engineAdapters: matchEngineAdapters },
     )
 
     if (!projection.ok) {

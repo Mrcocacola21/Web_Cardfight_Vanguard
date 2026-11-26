@@ -248,6 +248,18 @@ Search the deck, then shuffle:
   `retiredPieceIds`). The retire goes through zone transfers, so REPLACE
   abilities apply, and CONT power counts in the combat comparison.
 
+### Player actions in multiplayer rooms
+
+Every participant projection carries `legalActions`
+(`listParticipantLegalActions`): ride, call, play, ACT abilities, attack,
+boost, opening the guard step and ending the phase. The server builds every
+plausible command from the canonical state, runs each through the same engine
+adapters as real commands, and keeps only the accepted ones, so the engine
+stays the only judge of legality and scripted ACT abilities appear
+automatically. Each entry includes the exact command; the client shows it as
+a button and submits it unchanged. Commands only name the viewer's own cards
+and public board cards. On a real six-deck board this takes ~20 ms per viewer.
+
 ## 6. Choices and safety
 
 - Answers are checked twice: by the reducer (request type, eligible ids) and by
@@ -271,7 +283,5 @@ Search the deck, then shuffle:
   deck-out loss.
 - A paused script resumes by program counter. A match must keep the same
   script version from start to finish; scripts should be versioned per match.
-- The multiplayer match UI still offers no ride / call / attack / boost /
-  ACT buttons (only ready, end turn, concede and answering requests), so a
-  battle cannot be started from the browser yet. The engine and server
-  support these actions; the client controls are missing.
+- Player actions are offered as a list of buttons (Board / Battle / Turn
+  Flow groups), not yet as drag-and-drop or clicks on the playmat circles.

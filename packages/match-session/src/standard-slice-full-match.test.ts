@@ -43,6 +43,8 @@ import {
 } from '@web-vg/rules-core'
 
 import { createDeckBackedGameState } from './deck-bootstrap'
+import { listParticipantLegalActions } from './legal-actions'
+import { defaultMatchRoomEngineAdapters } from './match-room'
 import type {
   CreateDeckBackedGameStateInput,
   DeckBackedMatchPlayerInput,
@@ -81,6 +83,56 @@ const FIXTURES = {
 } satisfies Record<DeckKey, SliceDeckFixture>
 
 describe('Standard vertical-slice full-match integration', () => {
+  it('lists legal player actions on a real six-deck board quickly', () => {
+    const state = startFullMatchOnPlayerOneTurn('reguregnus', 'prison')
+    const adapter = defaultMatchRoomEngineAdapters.find(
+      (candidate) => candidate.formatId === state.formatId,
+    )!
+    const startedAt = performance.now()
+    const actions = listParticipantLegalActions(state, PLAYER_1, adapter)
+    const elapsedMs = performance.now() - startedAt
+    const kinds = new Set(actions.map((action) => action.kind))
+
+    expect(kinds.has('call')).toBe(true)
+    expect(kinds.has('end_phase')).toBe(true)
+    // Main phase: no attacks yet, and the waiting player gets nothing.
+    expect(kinds.has('attack')).toBe(false)
+    expect(listParticipantLegalActions(state, PLAYER_2, adapter)).toEqual([])
+    // Runs for every participant on every push; keep it well under a second.
+    expect(elapsedMs).toBeLessThan(1500)
+    console.info(
+      `legal actions: ${actions.length} in ${elapsedMs.toFixed(0)}ms`,
+    )
+  })
+
+  it('reaches the battle phase and an attack using only listed actions', () => {
+    let state = startFullMatchOnPlayerOneTurn('reguregnus', 'prison')
+    const adapter = defaultMatchRoomEngineAdapters.find(
+      (candidate) => candidate.formatId === state.formatId,
+    )!
+    const endPhase = listParticipantLegalActions(state, PLAYER_1, adapter).find(
+      (action) => action.kind === 'end_phase',
+    )!
+    const ended = adapter.dispatch(state, endPhase.command)
+
+    expect(ended.status).toBe('accepted')
+    state = ended.state
+    expect(state.turn.phase).toBe('battle')
+
+    const attack = listParticipantLegalActions(state, PLAYER_1, adapter).find(
+      (action) => action.kind === 'attack',
+    )
+    expect(attack).toBeDefined()
+
+    const attacked = adapter.dispatch(state, attack!.command)
+    expect(attacked.status).toBe('accepted')
+    expect(
+      listParticipantLegalActions(attacked.state, PLAYER_2, adapter).map(
+        (action) => action.kind,
+      ),
+    ).toContain('guard_step')
+  })
+
   it('assembles all six target deck fixtures and binds effect ids onto runtime pieces', () => {
     for (const fixture of Object.values(FIXTURES)) {
       const result = createDeckBackedGameState(

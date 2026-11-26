@@ -84,6 +84,8 @@ export interface RealtimeClientCommandAcceptedResult {
   readonly participantId: MatchRoomParticipantId
   readonly document: SerializableMatchSessionDocument
   readonly roomResult: AcceptedMatchRoomCommandResult
+  /** Automatic battle steps the server ran after roomResult, in order. */
+  readonly followUpResults: readonly AcceptedMatchRoomCommandResult[]
   readonly acceptedHistory: readonly MatchRoomHistoryEntry[]
   readonly pushes: readonly RealtimeProjectedStatePush[]
 }
@@ -246,6 +248,9 @@ export function submitRealtimeClientCommand(input: {
         roomResult,
         followUpResults: flow.results,
         receivedAt,
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
       })
     }
   }
@@ -257,6 +262,7 @@ export function createRealtimeProjectedStatePushes(input: {
   readonly events?: readonly GameEvent[]
   readonly acceptedHistory?: readonly MatchRoomHistoryEntry[]
   readonly serverNow?: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeProjectedStatePushesResult {
   const room = input.document.room
 
@@ -294,6 +300,9 @@ export function createRealtimeProjectedStatePushes(input: {
         ...(input.serverNow === undefined
           ? {}
           : { serverNow: input.serverNow }),
+        ...(input.engineAdapters === undefined
+          ? {}
+          : { engineAdapters: input.engineAdapters }),
       },
     )
 
@@ -327,6 +336,7 @@ export function createRealtimeParticipantSnapshot(input: {
   readonly document: SerializableMatchSessionDocument
   readonly participantId: MatchRoomParticipantId
   readonly serverNow?: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeParticipantSnapshotResult {
   const room = input.document.room
 
@@ -338,11 +348,12 @@ export function createRealtimeParticipantSnapshot(input: {
     }
   }
 
-  const projection = projectMatchRoomForParticipant(
-    room,
-    input.participantId,
-    input.serverNow === undefined ? {} : { serverNow: input.serverNow },
-  )
+  const projection = projectMatchRoomForParticipant(room, input.participantId, {
+    ...(input.serverNow === undefined ? {} : { serverNow: input.serverNow }),
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
+  })
 
   if (!projection.ok) {
     return {
@@ -429,6 +440,9 @@ export function resolveRealtimeMatchRoomTimeout(input: {
     events: timeoutResult.engineResult.events,
     acceptedHistory,
     serverNow: checkedAt,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   if (!pushResult.ok) {
@@ -457,6 +471,7 @@ function createRealtimeAcceptedCommandResult(input: {
   readonly roomResult: AcceptedMatchRoomCommandResult
   readonly followUpResults?: readonly AcceptedMatchRoomCommandResult[]
   readonly receivedAt: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): RealtimeClientCommandResult {
   let recorded = recordMatchRoomCommandResult({
     document: input.document,
@@ -502,6 +517,9 @@ function createRealtimeAcceptedCommandResult(input: {
     ],
     acceptedHistory,
     serverNow: input.receivedAt,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   if (!pushResult.ok) {
@@ -520,6 +538,7 @@ function createRealtimeAcceptedCommandResult(input: {
     participantId: input.command.participantId,
     document: recorded.document,
     roomResult: input.roomResult,
+    followUpResults: input.followUpResults ?? [],
     acceptedHistory,
     pushes: pushResult.pushes,
   }

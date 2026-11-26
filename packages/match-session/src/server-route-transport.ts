@@ -122,6 +122,10 @@ export function createServerRouteRealtimeTransport(input: {
   readonly clock?: MatchRoomClockSource
 }): ServerRouteRealtimeTransport {
   const now = () => input.clock?.now() ?? systemMatchRoomClock.now()
+  const adapterOption =
+    input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }
 
   return {
     async submitCommand(request) {
@@ -160,6 +164,7 @@ export function createServerRouteRealtimeTransport(input: {
             code: runtimeResult.code,
             message: runtimeResult.message,
             serverNow: receivedAt,
+            ...adapterOption,
           })
         case 'blocked':
           return createBlockedCommandResponse({
@@ -168,6 +173,7 @@ export function createServerRouteRealtimeTransport(input: {
             code: runtimeResult.code,
             message: runtimeResult.message,
             serverNow: receivedAt,
+            ...adapterOption,
           })
         case 'accepted': {
           const persisted = await input.sessions.persistAcceptedRoomTransition({
@@ -183,15 +189,38 @@ export function createServerRouteRealtimeTransport(input: {
               code: persisted.error.code,
               message: persisted.error.message,
               serverNow: receivedAt,
+              ...adapterOption,
             })
           }
 
+          // Persist the automatic battle steps too, each as its own transition.
+          let persistedDocument = persisted.data.document
+          const appendedHistory = [...persisted.data.appendedHistory]
+          const events = [...runtimeResult.roomResult.engineResult.events]
+
+          for (const followUp of runtimeResult.followUpResults) {
+            const next = await input.sessions.persistAcceptedRoomTransition({
+              currentDocument: persistedDocument,
+              result: followUp,
+              recordedAt: receivedAt,
+            })
+
+            if (!next.ok) {
+              break
+            }
+
+            persistedDocument = next.data.document
+            appendedHistory.push(...next.data.appendedHistory)
+            events.push(...followUp.engineResult.events)
+          }
+
           const projectedUpdate = createProjectedUpdateForParticipant({
-            document: persisted.data.document,
+            document: persistedDocument,
             participantId: request.command.participantId,
-            acceptedHistory: persisted.data.appendedHistory,
-            events: runtimeResult.roomResult.engineResult.events,
+            acceptedHistory: appendedHistory,
+            events,
             serverNow: receivedAt,
+            ...adapterOption,
           })
 
           if (!projectedUpdate.ok) {
@@ -241,6 +270,7 @@ export function createServerRouteRealtimeTransport(input: {
         document: loaded.data.document,
         participantId: request.participantId,
         serverNow: requestedAt,
+        ...adapterOption,
       })
 
       if (!snapshot.ok) {
@@ -273,11 +303,15 @@ function createInvalidCommandResponse(input: {
   readonly code: ServerRouteRealtimeTransportIssueCode
   readonly message: string
   readonly serverNow: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): ServerRouteRealtimeInvalidCommandResponse {
   const snapshot = createRealtimeParticipantSnapshot({
     document: input.document,
     participantId: input.command.participantId,
     serverNow: input.serverNow,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   return {
@@ -298,11 +332,15 @@ function createBlockedCommandResponse(input: {
   readonly code: BlockedEngineDispatchResult['code']
   readonly message: string
   readonly serverNow: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }): ServerRouteRealtimeBlockedCommandResponse {
   const snapshot = createRealtimeParticipantSnapshot({
     document: input.document,
     participantId: input.command.participantId,
     serverNow: input.serverNow,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   return {
@@ -323,6 +361,7 @@ function createProjectedUpdateForParticipant(input: {
   readonly acceptedHistory: readonly MatchRoomHistoryEntry[]
   readonly events: readonly GameEvent[]
   readonly serverNow: string
+  readonly engineAdapters?: readonly MatchRoomEngineAdapter[]
 }):
   | {
       readonly ok: true
@@ -339,6 +378,9 @@ function createProjectedUpdateForParticipant(input: {
     events: input.events ?? [],
     acceptedHistory: input.acceptedHistory,
     serverNow: input.serverNow,
+    ...(input.engineAdapters === undefined
+      ? {}
+      : { engineAdapters: input.engineAdapters }),
   })
 
   if (!projectedUpdates.ok) {

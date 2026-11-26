@@ -1007,7 +1007,7 @@ function validateParticipantPlayerReference(
   return { ok: true }
 }
 
-function resolveMatchRoomEngineAdapter(
+export function resolveMatchRoomEngineAdapter(
   room: MatchRoom,
   adapters: readonly MatchRoomEngineAdapter[],
 ): MatchRoomEngineAdapter | undefined {

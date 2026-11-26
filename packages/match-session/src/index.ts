@@ -144,6 +144,7 @@ export {
   getMatchRoomEngineRevision,
   hasMatchRoomEngineState,
   initializeMatchRoom,
+  resolveMatchRoomEngineAdapter,
   resolveMatchRoomTimeout,
   resolveDefaultMatchRoomEngineAdapterId,
   submitMatchRoomCommand,
@@ -186,3 +187,8 @@ export type {
   MatchRoomTimeoutResult,
   NotDueMatchRoomTimeoutResult,
 } from './match-room'
+export { listParticipantLegalActions } from './legal-actions'
+export type {
+  ParticipantLegalAction,
+  ParticipantLegalActionKind,
+} from './legal-actions'

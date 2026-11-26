@@ -28,10 +28,16 @@ import type {
   MatchRoomId,
   MatchRoomParticipantId,
 } from './match-room'
+import { projectMatchRoomForParticipant } from './projection'
+import {
+  createInMemoryPersistedMatchSessionStorage,
+  createPersistedMatchSessionAdapter,
+} from './persisted-session-adapter'
 import {
   submitRealtimeClientCommand,
   type RealtimeClientCommand,
 } from './realtime-runtime'
+import { createServerRouteRealtimeTransport } from './server-route-transport'
 import {
   createSerializableMatchSessionDocument,
   type SerializableMatchSessionDocument,
@@ -190,6 +196,139 @@ describe('server-driven battle flow', () => {
     expect(zoneOf(finalState, DECK_TOP)).toBe(zone(P1, 'hand'))
   })
 })
+
+describe('legal actions in the participant projection', () => {
+  it('lists only engine-accepted main phase actions for the turn player', () => {
+    const room = makeRoom()
+    const own = projectMatchRoomForParticipant(room, PARTICIPANT_1, {
+      engineAdapters: scriptedAdapters,
+    })
+    const other = projectMatchRoomForParticipant(room, PARTICIPANT_2, {
+      engineAdapters: scriptedAdapters,
+    })
+
+    if (!own.ok || !other.ok) {
+      throw new Error('projection failed')
+    }
+
+    const calls = own.projection.legalActions.filter(
+      (action) => action.kind === 'call',
+    )
+    expect(calls.map((action) => action.slotId).sort()).toEqual(
+      [`${P1}-rc-front-left`, `${P1}-rc-front-right`].sort(),
+    )
+    expect(calls[0]?.label).toMatch(
+      /^Call test-ember-squire to front (left|right)$/,
+    )
+    // No attacks outside the battle phase; the opponent has nothing to do.
+    expect(
+      own.projection.legalActions.some((action) => action.kind === 'attack'),
+    ).toBe(false)
+    expect(other.projection.legalActions).toEqual([])
+  })
+})
+
+describe('legal actions through the server transport', () => {
+  it('lets players attack, guard and finish a battle using only listed actions, and persists every step', async () => {
+    const document = makeDocument(makeRoom({ phase: 'battle' }))
+    const sessions = createPersistedMatchSessionAdapter({
+      storage: createInMemoryPersistedMatchSessionStorage([document]),
+    })
+    const transport = createServerRouteRealtimeTransport({
+      sessions,
+      engineAdapters: scriptedAdapters,
+    })
+    const roomId = document.room.roomId
+    let commandCounter = 0
+
+    async function snapshot(participantId: MatchRoomParticipantId) {
+      const response = await transport.loadParticipantSnapshot({
+        roomId,
+        participantId,
+        requestedAt: NOW,
+      })
+
+      if (response.status !== 'ok') {
+        throw new Error(JSON.stringify(response))
+      }
+
+      return response.projectedUpdate.projection
+    }
+
+    async function send(
+      participantId: MatchRoomParticipantId,
+      payload: RealtimeClientCommand['payload'],
+    ) {
+      commandCounter += 1
+      const response = await transport.submitCommand({
+        command: {
+          commandId:
+            `transport-${commandCounter}` as RealtimeClientCommand['commandId'],
+          roomId,
+          participantId,
+          payload,
+        },
+        receivedAt: NOW,
+      })
+
+      if (response.status !== 'accepted') {
+        throw new Error(JSON.stringify(response))
+      }
+
+      return response.projectedUpdate.projection
+    }
+
+    // The attacker sees attack options; the defender sees none yet.
+    const attackerView = await snapshot(PARTICIPANT_1)
+    const attack = attackerView.legalActions.find(
+      (action) =>
+        action.kind === 'attack' &&
+        action.targetPieceId === ('p2-rear' as PieceId),
+    )
+    expect(attack).toBeDefined()
+    expect(attackerView.legalActions.map((action) => action.kind)).toContain(
+      'end_phase',
+    )
+    expect((await snapshot(PARTICIPANT_2)).legalActions).toEqual([])
+
+    await send(PARTICIPANT_1, attack!.command)
+
+    const defenderView = await snapshot(PARTICIPANT_2)
+    const guardStep = defenderView.legalActions.find(
+      (action) => action.kind === 'guard_step',
+    )
+    expect(guardStep).toBeDefined()
+
+    const guarding = await send(PARTICIPANT_2, guardStep!.command)
+    const guardRequest = guarding.visibleState.pendingRequests[0]!
+
+    await send(PARTICIPANT_2, {
+      kind: 'choice_response',
+      submission: {
+        expectedRevision: guarding.visibleState.revision,
+        response: {
+          requestId: guardRequest.requestId,
+          responderPlayerId: P2,
+          type: 'answer.pass',
+          reason: 'pass',
+        },
+      },
+    })
+
+    // Reload from storage: the automatic steps were persisted, not just computed.
+    const loaded = await sessions.loadRoomSession(roomId)
+
+    if (!loaded.ok) {
+      throw new Error(loaded.error.message)
+    }
+
+    const finalState = roomState(loaded.data.document)
+    expect(finalState.battle).toBeUndefined()
+    expect(zoneOf(finalState, 'p2-rear' as PieceId)).toBe(zone(P2, 'drop'))
+  })
+})
+
+const NOW = '2026-11-26T09:03:00.000Z'
 
 function makeDocument(room: MatchRoom): SerializableMatchSessionDocument {
   const created = createSerializableMatchSessionDocument({ room })

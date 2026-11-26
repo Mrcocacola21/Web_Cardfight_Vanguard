@@ -3,6 +3,7 @@ import {
   CircleAlert,
   CircleSlash,
   Flag,
+  Layers,
   ListChecks,
   Route,
   Swords,
@@ -197,6 +198,7 @@ function groupAvailableActions(
   const groups: MatchClientActionGroup[] = [
     'decision',
     'setup',
+    'battle',
     'turn_flow',
     'board',
     'match',
@@ -225,6 +227,8 @@ function ActionGroupIcon({
     case 'turn_flow':
       return <Route className={className} />
     case 'board':
+      return <Layers className={className} />
+    case 'battle':
       return <Swords className={className} />
     case 'match':
       return <Flag className={className} />
@@ -255,6 +259,8 @@ function formatGroupLabel(group: MatchClientActionGroup) {
       return 'Turn Flow'
     case 'board':
       return 'Board'
+    case 'battle':
+      return 'Battle'
     case 'match':
       return 'Match'
   }
